@@ -12,7 +12,7 @@ from Source.Primals.Scalar import scalarField
 
 
 class ht(physics):
-    ConstRel = 'lap(k,T) + Q == 0'
+    ConstRel = '∇.(k * ∇T) + Q == 0'
 
     # Set material properties.
 
