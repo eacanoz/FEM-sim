@@ -62,7 +62,7 @@ class Mesh:
 
     def setElementShapeFunction(self, shapeFunction):
         for element in self.EL:
-            element.sF = basisFunctions().get_basisFunctions(self, shapeFunction)
+            element.sF = basisFunctions(self, shapeFunction)
 
 class Node:
 

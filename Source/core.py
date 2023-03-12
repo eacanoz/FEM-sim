@@ -41,7 +41,7 @@ class Model(object):
         self._PD = dim  # Model dimension
         self.name = name  # Name of the model
         self.mtype = mtype  # Type of model
-        self.w = basisFunctions().get_basisFunctions(self._mesh, 'Linear') # Test Function
+        self.w = basisFunctions(self._mesh, 'Linear')# Test Function
         # self.bF = basisFunctions().get_basisFunctions(self._mesh, 'Linear')
         self.mat = mat  # Material domain
         self.physics = psc(self)  # Model physics

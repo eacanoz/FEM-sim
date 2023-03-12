@@ -44,6 +44,9 @@ class physics:
 
         self.Pe = 0  # Peclet number
 
+
+        
+
     def getElementMatrix(self, element):
         pass
 
@@ -67,21 +70,14 @@ class physics:
         :return: Matrix of laplacian term
         """
 
-        if self.Stab == 'PG':
-            self.mBF = self.w + self.stabilization(element)
+            # diff_A = (self.mbF.jacobian(sp.Matrix(list(self.mbF.free_symbols))) * self.Jacobian(
+            #     element).inv()) * const * \
+            #          (var.bfGrad() * self.Jacobian(element).inv()).transpose() * \
+            #          self.Jacobian(element).det()
 
-            diff_A = (self.mbF.jacobian(sp.Matrix(list(self.mbF.free_symbols))) * self.Jacobian(
-                element).inv()) * const * \
-                     (var.bf.jacobian(sp.Matrix(list(var.bf.free_symbols))) * self.Jacobian(
-                         element).inv()).transpose() * \
-                     self.Jacobian(element).det()
-
-        else:
-
-            diff_A = (self.w.jacobian(sp.Matrix(list(self.w.free_symbols))) * self.Jacobian(element).inv()) * const * \
-                     (var.bf.jacobian(sp.Matrix(list(var.bf.free_symbols))) * self.Jacobian(
-                         element).inv()).transpose() * \
-                     self.Jacobian(element).det()
+        diff_A = (self.w.bfGrad() * self.Jacobian(element).inv()) * const * \
+                (var.bfGrad() * self.Jacobian(element).inv()).transpose() * \
+                self.Jacobian(element).det()
 
         A = sp.integrate(diff_A, (e1, -1, 1)).tolist()
 
@@ -97,10 +93,13 @@ class physics:
 
         :param element: Element
         :return: Matrix form of the Gradient term
-        """
+        """        
+        if self.Stab == 'PG':
+            self.w.addStab(self.Stab, self.stabilization(element))
 
-        diff_Grad = (self.w) * \
-                    (var.bf.jacobian(sp.Matrix(list(var.bf.free_symbols))) * self.Jacobian(element).inv()).transpose() * \
+
+        diff_Grad = (self.w.N) * \
+                    (var.bfGrad() * self.Jacobian(element).inv()).transpose() * \
                     self.Jacobian(element).det()
 
         Grad = sp.integrate(diff_Grad, (e1, -1, 1)).tolist()
@@ -109,15 +108,11 @@ class physics:
 
     def div(self, var: scalarField, element, const, Vel):
 
-        if self.Stab is not None:
+        if self.Stab == 'PG':
+            self.w.addStab(self.Stab, self.stabilization(element))
 
-            self.mbF = self.w + self.stabilization(element)
-
-        else:
-            self.mbF = self.w
-
-        diff_Div = const * (self.mbF) * \
-                   (var.bf.jacobian(sp.Matrix(list(var.bf.free_symbols))) * self.Jacobian(element).inv()).transpose() * \
+        diff_Div = const * (self.w.N) * \
+                   (var.bfGrad() * self.Jacobian(element).inv()).transpose() * \
                    Vel * self.Jacobian(element).det()
 
         Div = sp.integrate(diff_Div, (e1, -1, 1)).tolist()
@@ -125,7 +120,7 @@ class physics:
         return np.array(Div).astype(np.float64)
 
     def Jacobian(self, element):
-        x_map = element.sF.transpose() * sp.Matrix(element.getCoor())
+        x_map = element.sF.N.transpose() * sp.Matrix(element.getCoor())
 
         # This definition applies to Gradients
         J = x_map.jacobian(sp.Matrix(list(x_map.free_symbols)))
@@ -133,7 +128,7 @@ class physics:
         return J
 
     def forceVector(self, element):
-        diff_F = self.w * self.source * self.Jacobian(element)
+        diff_F = self.w.N * self.source * self.Jacobian(element)
 
         F = sp.integrate(diff_F, (e1, -1, 1)).tolist()
 
@@ -143,11 +138,15 @@ class physics:
 
         Pe_h = self.Pe * element.getLength()
         alpha = (1 / math.tanh(Pe_h / 2)) - 2 / Pe_h
-
-        stab = alpha * element.getLength() / 2 * self.w.jacobian(sp.Matrix(list(self.w.free_symbols))) \
-               * self.Jacobian(element).inv()
+        
+        stab = alpha * element.getLength() / 2 * self.w.bfGrad() \
+            * self.Jacobian(element).inv()
 
         return stab
+
+
+    def addStabilization(self, element):
+        pass
 
     def setDirichletBC(self, **kwargs):
         pass
