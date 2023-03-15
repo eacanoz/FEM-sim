@@ -1,6 +1,7 @@
 # Class Mesh
 
 import numpy as np
+import sympy as sp
 
 from Source.Pre_processing.BasisFunctions import basisFunctions
 
@@ -103,3 +104,8 @@ class Element:
     def getNumberNodes(self):
 
         return len(self.nodes)
+    
+    def Jacobian(self):
+        
+        x_map = self.sF.N.transpose() * sp.Matrix(self.getCoor())
+        return x_map.jacobian(sp.Matrix(list(x_map.free_symbols)))

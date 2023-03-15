@@ -15,6 +15,7 @@ from Source.Pre_processing.Mesh import Mesh
 from Source.Physics.Physics import physics
 from Source.Material import material
 from Source.Pre_processing.BasisFunctions import basisFunctions
+import Source.Simulation.Solvers as Solution
 
 
 # Model
@@ -129,16 +130,19 @@ class Model(object):
 
         print('Simulation started')
 
-        self.constructProblem()
+        # self.constructProblem()
 
         # Initial values: Remove it
         # x0 = np.array([2, 8/3, 10/3, 4])
         x0 = np.array([2, 2, 2, 2])
 
-        x, exitCode = sc.sparse.linalg.bicgstab(self.A, self.b.todense(), x0=x0)
+        # x, exitCode = sc.sparse.linalg.bicgstab(self.A, self.b.todense(), x0=x0)
+
         # The problem is in the initial values of the field.
 
         # x = sc.sparse.linalg.inv(self.A) @ self.b.todense()
+
+        x, exitCode = Solution.solve(self, x0)
 
         print(x)
         self.sol = x
