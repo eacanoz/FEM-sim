@@ -15,16 +15,18 @@ def constructProblem(model):
 
     A, b = applyBC(model, A, b)
 
-    return A.tocsc(), b.todense()
+    return A.tocsc(), b
 
 def applyBC(model, A, b):
 
-    for idx, node in enumerate(model._mesh.NL):
-        if node.BC is not None and node.BC['type'] == "Dirichlet":
-            A[idx, :] = 0
-            A[idx, idx] = 1
+    print('Applying Boundary Conditions')
 
-            b[idx] = node.BC['value']
+    for node in model._mesh.NL:
+        if node.BC is not None and node.BC['type'] == 'Dirichlet':
+            A[node.id, :] = 0
+            A[node.id, node.id] = 1
+
+            b[node.id] = node.BC['value']
 
     return A, b
 

@@ -83,29 +83,29 @@ class ht(physics):
 
     def addBMatrix(self, element):
 
-        B = np.zeros((len(element.nodes), len(element.nodes)))
+        B = np.zeros((element.getNumberNodes(), element.getNumberNodes()))
 
-        for i in range(len(element.nodes)):
+        for i, node in enumerate(element.nodes):
 
-            if element.nodes[i].BC is not None and element.nodes[i].BC['type'] == 'Newton':
-                B[i, i] = element.nodes[i].BC['h_c']
+            if node.BC is not None and node.BC['type'] == 'Newton':
+                B[i, i] = node.BC['h_c']
 
         return B
 
     def addGVector(self, element):
 
-        G = np.zeros((len(element.nodes))).transpose()
+        G = np.zeros((element.getNumberNodes())).transpose()
 
-        for i in range(len(element.nodes)):
+        for i, node in enumerate(element.nodes):
 
-            if element.nodes[i].BC is not None:
+            if node.BC is not None:
 
-                if element.nodes[i].BC['type'] == 'Newton':
+                if node.BC['type'] == 'Newton':
 
-                    G[i] = - element.nodes[i].BC['h_c'] * element.nodes[i].BC['T_ext']
+                    G[i] = - node.BC['h_c'] * node.BC['T_ext']
 
-                elif element.nodes[i].BC['type'] == 'Neumann':
+                elif node.BC['type'] == 'Neumann':
 
-                    G[i] = element.nodes[i].BC['q_flux']
+                    G[i] = node.BC['q_flux']
 
         return G

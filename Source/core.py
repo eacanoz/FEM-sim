@@ -11,7 +11,7 @@ import sympy as sp
 import scipy as sc
 import matplotlib.pyplot as plt
 
-from Source.Pre_processing.Mesh import Mesh
+from Source.Pre_processing.Mesh import Mesh, Element, Node
 from Source.Physics.Physics import physics
 from Source.Material import material
 from Source.Pre_processing.BasisFunctions import basisFunctions
@@ -42,7 +42,7 @@ class Model(object):
         self._PD = dim  # Model dimension
         self.name = name  # Name of the model
         self.mtype = mtype  # Type of model
-        self.w = basisFunctions(self._mesh, 'Linear')# Test Function
+        self.w = basisFunctions(self._mesh, 'Linear') # Test Function
         # self.bF = basisFunctions().get_basisFunctions(self._mesh, 'Linear')
         self.mat = mat  # Material domain
         self.physics = psc(self)  # Model physics
@@ -95,11 +95,16 @@ class Model(object):
 
         print('Assembling Global matrix')
 
-        A = sc.sparse.lil_matrix((len(self._mesh.NL), len(self._mesh.NL)))
+        A = sc.sparse.lil_matrix((self._mesh.getNoN(), self._mesh.getNoN()))
 
-        for i in range(len(self._mesh.EL)):
-            A[i:i + self._mesh.EL[i].getNumberNodes(), i:i + self._mesh.EL[i].getNumberNodes()] += \
-                self.physics.getElementMatrix(self._mesh.EL[i])
+        for element in self._mesh.EL:
+
+            A_e = self.physics.getElementMatrix(element)
+
+            for idx, node_i in enumerate(element.nodes):
+                for jdx, node_j in enumerate(element.nodes):
+                    
+                    A[node_i.id, node_j.id] += A_e[idx, jdx]
 
         return A
 
@@ -107,10 +112,15 @@ class Model(object):
 
         print('Assembling Global vector')
 
-        b = sc.sparse.lil_array((len(self._mesh.NL), 1))
+        b = np.zeros(self._mesh.getNoN())
 
-        for i in range(len(self._mesh.EL)):
-            b[i:i + self._mesh.EL[i].getNumberNodes()] += self.physics.getElementVector(self._mesh.EL[i]).reshape(2, 1)
+        for element in self._mesh.EL:
+
+            b_e = self.physics.getElementVector(element)
+
+            for idx, node_i in enumerate(element.nodes):
+                                    
+                b[node_i.id] += b_e[idx]
 
         return b
 

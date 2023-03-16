@@ -135,7 +135,7 @@ class physics:
 
         F = sp.integrate(diff_F, (e1, -1, 1)).tolist()
 
-        return np.array(F).astype(np.float64).reshape((1, 2))[0]  ## To fix!!!
+        return np.array(F).astype(np.float64).reshape((element.getNumberNodes(), 1))[0]  ## To fix!!!
 
     def stabilization(self, element: Element):
 
