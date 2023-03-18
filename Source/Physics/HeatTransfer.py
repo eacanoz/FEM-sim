@@ -109,3 +109,6 @@ class ht(physics):
                     G[i] = node.BC['q_flux']
 
         return G
+
+    def addBC_Temperature(self, id: int, T: float):
+        pass

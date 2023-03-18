@@ -144,7 +144,7 @@ class Model(object):
 
         # Initial values: Remove it
         # x0 = np.array([2, 8/3, 10/3, 4])
-        x0 = np.array([2, 2, 2, 2])
+        x0 = np.ones(shape=self._mesh.getNoN())*200
 
         # x, exitCode = sc.sparse.linalg.bicgstab(self.A, self.b.todense(), x0=x0)
 
@@ -163,5 +163,5 @@ class Model(object):
 
         plt.plot(self.mesh.getXCoor(), self.sol, marker='o')
         plt.xlabel("x-axis [m]")
-        plt.ylabel("Temperature")
+        plt.ylabel("Temperature[°C]")
         plt.show()
