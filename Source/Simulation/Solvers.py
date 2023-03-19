@@ -4,68 +4,138 @@ import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 import scipy.linalg as scla
 
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+
+from Source.Simulation.DirectSolver import DirectSolver
+from Source.Simulation.IterativeSolver import IterativeSolver
+
+import time
+
 # from Source.core import Model
 
 Nfeval = 1
 xi_1 = []
 
-def constructProblem(model):
-    A = model.assembleGlobalMatrix()
-    b = model.assembleGlobalVector()
+def tictoc(method):
+        def wrapper(ref):
+            t1 = time.time()
+            method(ref)
+            t2 = time.time() - t1
+            print(f'Simulation finished on {t2} seconds')
+        
+        return wrapper
 
-    A, b = applyBC(model, A, b)
+class modelSolver():
 
-    return A.tocsc(), b
+    def __init__(self, model):
 
-def applyBC(model, A, b):
+        self.nIter=1
+        self.error = []
+        self.iter_list = []
 
-    print('Applying Boundary Conditions')
+        self.model = model
 
-    for node in model._mesh.NL:
-        if node.BC is not None and node.BC['type'] == 'Dirichlet':
-            A[node.id, :] = 0
-            A[node.id, node.id] = 1
+        self.A = None
+        self.b = None
 
-            b[node.id] = node.BC['value']
-
-    return A, b
+        self.x0 = {}
+        self.sol = None
 
 
-def solve(model, x0):
+    def construcProblem(self):
+        self.A = self.model.assembleGlobalMatrix()
+        self.b = self.model.assembleGlobalVector()
 
-    global xi_1
+        self.applyBC()
 
-    xi_1.append(x0)
+        self.A = self.A.tocsc()
 
-    #model.constructProblem()
 
-    A, b = constructProblem(model)
+    def applyBC(self):
+        for node in self.model._mesh.NL:
+            if node.BC is not None and node.BC['type'] == 'Dirichlet':
+                self.A[node.id, :] = 0
+                self.A[node.id, node.id] = 1
 
-    #x0 = np.ones(model.mesh.getNoN())*298 ## Change!!!
-    #
-    print('')
+                self.b[node.id] = node.BC['value']
 
-    print('{0:4s}   {1:9s}'.format('Iter', 'error'))
-    x, exitCode = spla.bicgstab(A, b, x0=x0, callback=callbackF)
+    def convRes(self):
+        self.nIter=1
+        self.error = []
+        self.iter_list = []
 
-    print('{0:4d}   {1:3.14f}'.format(Nfeval, scla.norm((x-xi_1[Nfeval-1]))))
-    print('')
+    @tictoc
+    def solve(self):
+
+        self.getFieldVariables()
+
+        self.convRes()
+
+        self.construcProblem()
+        self.getInitialField()
+
+        x0 = self.x0['T'] # Fix when adding a physics with multiple variables
+
+
+        options = {'Method': 'Direct', 'Solver':'PARDISO'}
+        # options = {'Method': 'Iterative', 'Solver':'BicgStab'}
+
+        if options['Method'] == 'Direct':
+            solutionMethod = DirectSolver(self.A, self.b, x0, options)
+
+            self.sol = solutionMethod.solve()
+
+
+        elif options['Method'] == 'Iterative':
+            solutionMethod = IterativeSolver(self.A, self.b, x0, options)
+
+            self.sol = solutionMethod.solve()
+
+
+        #print('{0:4s}   {1:9s}'.format('Iter', 'error'))
+        #self.sol, exitCode = spla.bicgstab(self.A, self.b, x0=x0, callback=self.callBackFunc)
+        #print('\n')
+
+        # self.updConvergencePlot()
+
+        self.model.sol = self.sol
+
+
+    def callBackFunc(self, xk):
+        error = np.linalg.norm(self.A.dot(xk)-self.b)
+        self.error.append(error)
+        self.iter_list.append(self.nIter)
+
+        print('{0:4d}   {1:3.14f}'.format(self.nIter, error))
+
+        self.nIter += 1
+
+
+    def updConvergencePlot(self):
+        plt.clf() # Limpiar la figura actual
+        plt.plot(self.iter_list, self.error) # Graficar los datos
+        plt.yscale('log')
+        plt.grid(True)
+        # plt.title('Convergencia') # Añadir título
+        plt.xlabel('Iteration') # Etiqueta del eje x
+        plt.ylabel('Error') # Etiqueta del eje y
+        plt.show() # Mostrar la figura
+        
+
+    def getFieldVariables(self):
+        self.fieldVariables = self.model.physics.var.keys()
+
+    def getInitialField(self):
+
+        print('\nCollecting Initial field\n')
+
+        for fieldVar in self.fieldVariables:
+
+            self.x0[fieldVar] = self.model.physics.var[fieldVar].values
+#------------------------------------------------------------------------------
+
     
-
-    return x, exitCode
-
-
-def callbackF(xi):
-
-    global Nfeval
-    global xi_1
-
-    itError = scla.norm((xi-xi_1[Nfeval-1]))
-
-    print('{0:4d}   {1:3.14f}'.format(Nfeval, itError))
-    xi_1.append(xi.copy()) 
-    Nfeval += 1
-
 
 
 # def pyPARDISO(model:Model):

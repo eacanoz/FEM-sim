@@ -32,6 +32,8 @@ Model1.setBC(id = 3, type='Newton',  h_c=1, T_ext = 10)
 Model1.physics.Convection = True
 Model1.physics.Stab = None
 
+Model1.physics.initField('T', 2)
+
 Model1.solve()
 
 Model1.postProcess()

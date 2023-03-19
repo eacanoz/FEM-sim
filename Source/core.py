@@ -144,7 +144,7 @@ class Model(object):
 
         # Initial values: Remove it
         # x0 = np.array([2, 8/3, 10/3, 4])
-        x0 = np.ones(shape=self._mesh.getNoN())*200
+        # x0 = np.ones(shape=self._mesh.getNoN())*200
 
         # x, exitCode = sc.sparse.linalg.bicgstab(self.A, self.b.todense(), x0=x0)
 
@@ -152,12 +152,17 @@ class Model(object):
 
         # x = sc.sparse.linalg.inv(self.A) @ self.b.todense()
 
-        x, exitCode = Solution.solve(self, x0)
+        # x, exitCode = Solution.solve(self, x0)
 
-        print(x)
-        self.sol = x
+        solver = Solution.modelSolver(self)
 
-        print('Simulation finished')
+        solver.solve()
+
+        # print(x)
+        # self.sol = x
+
+        # print(self.sol)
+        #print('Simulation finished')
 
     def postProcess(self):
 

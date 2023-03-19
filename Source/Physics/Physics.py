@@ -45,6 +45,9 @@ class physics:
         self.Pe = 0  # Peclet number
 
 
+
+    def initField(self, variable, value):
+        self.var[variable].initField(value)
         
 
     def getElementMatrix(self, element):

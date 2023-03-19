@@ -56,6 +56,9 @@ Model1.physics.Stab = None
 Model1.setBC(id = 0, type='Dirichlet', T0=200)
 Model1.setBC(id = 2, type='Neumann',  q_flux = 0)
 
+# Initialize field
+Model1.physics.initField('T', 200)
+
 # Solving PDE
 Model1.solve()
 
