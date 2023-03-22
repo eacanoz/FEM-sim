@@ -39,13 +39,14 @@ class modelSolver():
         self.A = None
         self.b = None
 
-        self.x0 = {}
+        #self.x0 = {}
+        self.x0 = np.array([])
         self.sol = None
 
 
     def construcProblem(self):
-        self.A = self.model.assembleGlobalMatrix()
-        self.b = self.model.assembleGlobalVector()
+ 
+        self.A, self.b = self.model.assembleGlobalSystem()
 
         self.applyBC()
 
@@ -68,39 +69,61 @@ class modelSolver():
     @tictoc
     def solve(self):
 
+        self.convRes()
+
         self.getFieldVariables()
 
-        self.convRes()
+        if self.model.solverOptions['Type'] == 'Linear':
+            self.linearSolver()
+        elif self.model.solverOptions['Type'] == 'Nonlinear':
+            self.nonlinearSolver()
+
+    def linearSolver(self):
+
 
         self.construcProblem()
         self.getInitialField()
 
-        x0 = self.x0['T'] # Fix when adding a physics with multiple variables
-
-
-        options = {'Method': 'Direct', 'Solver':'PARDISO'}
-        # options = {'Method': 'Iterative', 'Solver':'BicgStab'}
-
-        if options['Method'] == 'Direct':
-            solutionMethod = DirectSolver(self.A, self.b, x0, options)
+        if self.model.solverOptions['Method'] == 'Direct':
+            solutionMethod = DirectSolver(self.A, self.b, self.x0, self.model.solverOptions)
 
             self.sol = solutionMethod.solve()
 
 
-        elif options['Method'] == 'Iterative':
-            solutionMethod = IterativeSolver(self.A, self.b, x0, options)
+        elif self.model.solverOptions['Method'] == 'Iterative':
+            solutionMethod = IterativeSolver(self.A, self.b, self.x0, self.model.solverOptions)
 
             self.sol = solutionMethod.solve()
-
-
-        #print('{0:4s}   {1:9s}'.format('Iter', 'error'))
-        #self.sol, exitCode = spla.bicgstab(self.A, self.b, x0=x0, callback=self.callBackFunc)
-        #print('\n')
 
         # self.updConvergencePlot()
 
         self.model.sol = self.sol
 
+
+    def nonlinearSolver(self):
+
+        print('---------- Nonlinear Solver ----------')
+
+        self.tolerance = 1
+        self.numbIterations = 0
+
+        while (self.tolerance > 1e-4 or self.numbIterations < 200):
+
+            self.numbIterations += 1
+
+            print(f'----- Iteration number: {self.numbIterations} -----')
+
+            self.linearSolver()
+
+            self.tolerance = np.linalg.norm(self.sol - self.x0) 
+
+            print(f'Tolerance for iteration number {self.numbIterations}: {self.tolerance}')
+
+            if self.tolerance < 1e-4 or self.numbIterations > 200:
+                break
+            else:
+                self.model.physics.var['T'].updateField(self.sol) # Fix -- Hardcoded
+                # x0 = self.sol
 
     def callBackFunc(self, xk):
         error = np.linalg.norm(self.A.dot(xk)-self.b)
@@ -128,30 +151,13 @@ class modelSolver():
 
     def getInitialField(self):
 
-        print('\nCollecting Initial field\n')
+        # print('\nCollecting Initial field\n')
+
+        self.x0 = np.array([])
 
         for fieldVar in self.fieldVariables:
 
-            self.x0[fieldVar] = self.model.physics.var[fieldVar].values
+            self.x0 = np.append(self.x0, self.model.physics.var[fieldVar].values)
 #------------------------------------------------------------------------------
-
-    
-
-
-# def pyPARDISO(model:Model):
-    
-#     # A = model.A
-#     b = model.b.todense()
-
-#     A = sp.csr_matrix([[4, 0, 0, 0], [0, 2, 0, 1], [0, 0, 3, 0], [0, 1, 0, 2]])
-
-#     lu = spla.splu(A)
-
-#     y = lu.solve(b)
-#     x = lu.solve(y)
-    
-#     spla.spsolve(A, b, use_umfpack = False)
-    
-#     pass
-
+# Converting self.x0 to np.array that append different values from self.model.physics.var[fieldVar].values
 

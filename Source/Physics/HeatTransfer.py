@@ -88,7 +88,12 @@ class ht(physics):
         for i, node in enumerate(element.nodes):
 
             if node.BC is not None and node.BC['type'] == 'Newton':
-                B[i, i] = node.BC['h_c']
+
+                if callable(node.BC['h_c']):
+                    B[i, i] = node.BC['h_c'](i)
+                    # print('Radiaction BC used')
+                else:
+                    B[i, i] = node.BC['h_c']
 
         return B
 
@@ -102,7 +107,11 @@ class ht(physics):
 
                 if node.BC['type'] == 'Newton':
 
-                    G[i] = - node.BC['h_c'] * node.BC['T_ext']
+                    if callable(node.BC['h_c']):
+                        G[i] = - node.BC['h_c'](i) * node.BC['T_ext']
+                        # print('Radiaction BC used')
+                    else:
+                        G[i] = - node.BC['h_c'] * node.BC['T_ext']
 
                 elif node.BC['type'] == 'Neumann':
 
@@ -111,4 +120,24 @@ class ht(physics):
         return G
 
     def addBC_Temperature(self, id: int, T: float):
-        pass
+
+        self.modelRef._mesh.NL[id].BC = self.setDirichletBC(T0=T)
+
+    def addBC_Convection(self, id: int, h_c: float, T_ext: float):
+
+        self.modelRef._mesh.NL[id].BC = self.setNewtonBC(h_c, T_ext)
+
+    def addBC_HeatFlux(self, id: int, q_flux: float):
+
+        self.modelRef._mesh.NL[id].BC = self.setNeumannBC(q_flux)
+
+    def addBC_Radiation(self, id: int, epsilon: float, T_ext: float):
+
+        sigma = 5.6704e-8
+
+        h_c = lambda n: sigma*epsilon*((self.var['T'].values[n])**3 + T_ext*(self.var['T'].values[n])**2 
+                             + (self.var['T'].values[n])*T_ext**2 + T_ext**3)
+        
+        self.modelRef._mesh.NL[id].BC = self.setNewtonBC(h_c, T_ext)
+
+        # print('Radiaction BC added')

@@ -26,6 +26,8 @@ e1, e2, e3 = sp.symbols('e1 e2 e3')
 class physics:
 
     def __init__(self, model):
+
+        self.modelRef = model
         self.w = model.w
         self.mat = model.mat
 
@@ -132,6 +134,13 @@ class physics:
 
         return np.array(Div).astype(np.float64)
 
+    def mass(self, var: scalarField, element: Element, constM):
+
+        diff_M = constM * (self.w.N) * (var.bf.N) * element.Jacobian().det()
+
+        Mass_Matrix = sp.integrate(diff_M, (e1, -1, 1)).tolist()
+
+        return np.array(Mass_Matrix).astype(np.float64)
 
     def forceVector(self, element: Element):
         diff_F = self.w.N * self.source * element.Jacobian()

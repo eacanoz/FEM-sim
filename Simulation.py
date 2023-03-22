@@ -26,8 +26,9 @@ Mat1 = material('Aluminio', k = 1, miu=1, rho=1, Cp= 1)
 
 Model1 = Model(name='1D_Conductivity', mtype=None, dim=PD, mesh=Mesh1, mat=Mat1, psc=ht)
 
-Model1.setBC(id = 0, type='Dirichlet', T0=2)
-Model1.setBC(id = 3, type='Newton',  h_c=1, T_ext = 10)
+Model1.physics.addBC_Temperature(id=0, T=50)
+#Model1.physics.addBC_Convection(3, 1, 10)
+Model1.physics.addBC_Radiation(3, 0.7, 26)
 
 Model1.physics.Convection = True
 Model1.physics.Stab = None

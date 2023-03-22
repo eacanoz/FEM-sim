@@ -53,11 +53,16 @@ Model1.physics.Convection = False
 Model1.physics.Stab = None
 
 # Adding boundary conditions
-Model1.setBC(id = 0, type='Dirichlet', T0=200)
-Model1.setBC(id = 2, type='Neumann',  q_flux = 0)
+Model1.physics.addBC_Temperature(id=0, T=200)
+Model1.physics.addBC_HeatFlux(id=20, q_flux = 0)
+
 
 # Initialize field
 Model1.physics.initField('T', 200)
+
+# Setting solver options
+
+Model1.solverOptions = {'Type': 'Linear', 'Method': 'Direct', 'Solver':'PARDISO'}
 
 # Solving PDE
 Model1.solve()

@@ -21,6 +21,8 @@ class DirectSolver:
 
         if self.options['Solver'] == 'PARDISO':
             return self.PARDISO()
+        elif self.options['Solver'] == 'SuperLU':
+            return self.SuperLU()
 
     def PARDISO(self):
         print('Solver: PARDISO (Parallel Direct Sparse Solver)')
@@ -30,6 +32,7 @@ class DirectSolver:
         return x
     
     def SuperLU(self):
-        print('Solver: Super LU')
+        print('Solver: SuperLU (Supernodal LU)')
 
         x = spla.spsolve(self.A, self.b)
+        return x

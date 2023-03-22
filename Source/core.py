@@ -50,6 +50,11 @@ class Model(object):
         self.A = None
         self.b = None
 
+        self.solverOptions = {'Type': 'Nonlinear', 'Method': 'Direct', 'Solver':'PARDISO'}
+        # self.solverOptions = {'Type': 'Linear', 'Method': 'Direct', 'Solver':'PARDISO'}
+        # self.solverOptions = {'Type': 'Linear', 'Method': 'Iterative', 'Solver':'BicgStab', 'Preconditioner': 'iLU Factorization'}
+        # self.solverOptions = {'Type': 'Linear', 'Method': 'Iterative', 'Solver':'BicgStab', 'Preconditioner': None}
+
         self.sol = None
 
     @property
@@ -72,17 +77,6 @@ class Model(object):
 
         return custom_str
 
-    def setBC(self, id: int, type=None, **kwargs):
-
-        if type == 'Dirichlet':
-            self._mesh.NL[id].BC = self.physics.setDirichletBC(**kwargs)
-
-        elif type == 'Neumann':
-            self._mesh.NL[id].BC = self.physics.setNeumannBC(**kwargs)
-
-        elif type == 'Newton':
-            self._mesh.NL[id].BC = self.physics.setNewtonBC(**kwargs)
-
     def constructProblem(self):
 
         self.A = self.assembleGlobalMatrix()
@@ -91,38 +85,25 @@ class Model(object):
         self.A = self.A.tocsc()
         self.b = self.b.tocsc()
 
-    def assembleGlobalMatrix(self):
-
-        print('Assembling Global matrix')
+    def assembleGlobalSystem(self):
 
         A = sc.sparse.lil_matrix((self._mesh.getNoN(), self._mesh.getNoN()))
-
-        for element in self._mesh.EL:
-
-            A_e = self.physics.getElementMatrix(element)
-
-            for idx, node_i in enumerate(element.nodes):
-                for jdx, node_j in enumerate(element.nodes):
-                    
-                    A[node_i.id, node_j.id] += A_e[idx, jdx]
-
-        return A
-
-    def assembleGlobalVector(self):
-
-        print('Assembling Global vector')
-
         b = np.zeros(self._mesh.getNoN())
 
         for element in self._mesh.EL:
 
+            A_e = self.physics.getElementMatrix(element)
             b_e = self.physics.getElementVector(element)
 
             for idx, node_i in enumerate(element.nodes):
-                                    
+
                 b[node_i.id] += b_e[idx]
 
-        return b
+                for jdx, node_j in enumerate(element.nodes):
+                    
+                    A[node_i.id, node_j.id] += A_e[idx, jdx]
+
+        return A, b
 
     def applyDirichletBC(self):
 
@@ -140,28 +121,10 @@ class Model(object):
 
         print('Simulation started')
 
-        # self.constructProblem()
-
-        # Initial values: Remove it
-        # x0 = np.array([2, 8/3, 10/3, 4])
-        # x0 = np.ones(shape=self._mesh.getNoN())*200
-
-        # x, exitCode = sc.sparse.linalg.bicgstab(self.A, self.b.todense(), x0=x0)
-
-        # The problem is in the initial values of the field.
-
-        # x = sc.sparse.linalg.inv(self.A) @ self.b.todense()
-
-        # x, exitCode = Solution.solve(self, x0)
-
         solver = Solution.modelSolver(self)
 
         solver.solve()
 
-        # print(x)
-        # self.sol = x
-
-        # print(self.sol)
         #print('Simulation finished')
 
     def postProcess(self):

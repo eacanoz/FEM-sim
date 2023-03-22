@@ -18,3 +18,6 @@ class scalarField:
     
     def initField(self, value):
         self.values *= value
+
+    def updateField(self, values):
+        self.values = values
