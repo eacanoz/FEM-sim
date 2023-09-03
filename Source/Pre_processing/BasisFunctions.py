@@ -5,6 +5,7 @@ import sympy as sp
 
 e1, e2, e3 = sp.symbols('e1 e2 e3')
 
+map_dim = [e1, e2, e3]
 
 class basisFunctions:
 
@@ -20,9 +21,26 @@ class basisFunctions:
 
 
     def set_basisFunctions(self, mesh, shape:str):
-        if mesh.meshType == "1DROD2P" and shape == 'Linear':
-            self.N = sp.Matrix([(1 - e1) / 2, (1 + e1) / 2])
 
+        if shape == 'Linear':
+            mapping = [n for n in range(-1, 2, 2)]
+
+            self.constructBFVector(mesh, mapping)
+
+
+    def constructBFVector(self, mesh, mapping):
+
+        Nj = []
+
+        for i in range(len(mapping)):
+                j = 1
+                for dim in range(mesh.PD):
+
+                    j *= self.lagrangePoly(map_dim[dim], i, mapping)
+
+                Nj.append(j)
+
+        self.N = sp.Matrix(Nj)
 
     def bfGrad(self):
         return self.N.jacobian(sp.Matrix(list(self.N.free_symbols)))
@@ -36,6 +54,14 @@ class basisFunctions:
             if type == 'PG':
                 self.N += stab
                 self.stabilized = True
+
+    def lagrangePoly(self, var: sp.core.symbol.Symbol, node: int, nodes: list):
+        L = 1
+        for i in range(len(nodes)):
+            if i != node:
+                L *= (var - nodes[i])/(nodes[node] - nodes[i])
+
+        return L
 
 
     @staticmethod

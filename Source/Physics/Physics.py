@@ -40,23 +40,49 @@ class physics:
 
         self.C = 0
         self.K = None
-        self.B = None
+        self.B = 0
         self.F = None
         self.G = None
 
         self.Pe = 0  # Peclet number
 
+    def getVariables(self):
+        return self.var.keys()
 
+
+    def getNumOfVar(self):
+        return len(self.var.keys())
 
     def initField(self, variable, value):
         self.var[variable].initField(value)
         
 
-    def getElementMatrix(self, element):
-        pass
+    def getElementMatrix(self, element, Variable, solverOptions=None):
 
-    def getElementVector(self, element):
-        pass
+        self.initializeMatrices(element, Variable)
+        
+        return self.C + self.K + self.B
+
+    def getElementVector(self, element, Variable, solverOptions=None):
+
+        self.initializeVectors(element, Variable)
+        
+        return self.F - self.G   
+    
+    def getElementMassMatrix(self, element, solverOptions=None):
+        
+        self.initializeMassMatrix(element)
+
+        return self.M
+    
+    def getResidualVector(self, element, Variable, solverOptions=None):
+
+        A_e = self.getElementMatrix(element, Variable, solverOptions)
+        b_e = self.getElementVector(element, Variable, solverOptions)
+
+        x_e = self.var[Variable].getElementValues(element)
+
+        return A_e.dot(x_e) - b_e
 
     def laplacian(self, const: float, var: scalarField, element: Element):
         """
@@ -136,18 +162,66 @@ class physics:
 
     def mass(self, var: scalarField, element: Element, constM):
 
-        diff_M = constM * (self.w.N) * (var.bf.N) * element.Jacobian().det()
+        diff_M = constM * (self.w.N) * (var.bf.N).transpose() * element.Jacobian().det()
 
         Mass_Matrix = sp.integrate(diff_M, (e1, -1, 1)).tolist()
 
         return np.array(Mass_Matrix).astype(np.float64)
 
-    def forceVector(self, element: Element):
-        diff_F = self.w.N * self.source * element.Jacobian()
+    def forceVector(self, element: Element, Variable):
+
+        if callable(self.source):
+
+            f = self.source(element, Variable)
+        else:
+
+            f = self.source
+
+
+        diff_F = self.w.N * f * element.Jacobian()
 
         F = sp.integrate(diff_F, (e1, -1, 1)).tolist()
 
         return np.array(F).astype(np.float64).reshape((element.getNumberNodes(), 1))[0]  ## To fix!!!
+
+
+    def addBMatrix(self, element, Variable):
+
+        B = np.zeros((element.getNumberNodes(), element.getNumberNodes()))
+
+        for i, node in enumerate(element.nodes):
+
+            if node.BC and node.BC[Variable]['type'] == 'Newton':
+
+                if callable(node.BC[Variable]['h']):
+                    B[i, i] = node.BC[Variable]['h'](i)
+                    # print('Radiaction BC used')
+                else:
+                    B[i, i] = node.BC[Variable]['h']
+
+        return B
+
+    def addGVector(self, element, Variable):
+
+        G = np.zeros((element.getNumberNodes())).transpose()
+
+        for i, node in enumerate(element.nodes):
+
+            if node.BC:
+
+                if node.BC[Variable]['type'] == 'Newton':
+
+                    if callable(node.BC[Variable]['h']):
+                        G[i] = - node.BC[Variable]['h'](i) * node.BC[Variable]['var_ext']
+                        # print('Radiaction BC used')
+                    else:
+                        G[i] = - node.BC[Variable]['h'] * node.BC[Variable]['var_ext']
+
+                elif node.BC[Variable]['type'] == 'Neumann':
+
+                    G[i] = node.BC[Variable]['flux']
+
+        return G
 
     def stabilization(self, element: Element):
 
@@ -158,25 +232,46 @@ class physics:
             * element.Jacobian().inv()
 
         return stab
+    
+    def setDirichletBC(self, val):
 
+        """
+        Define a Dirichlet Boundary Condition for the node
+
+        :param T0: Temperature at the boundary
+        :return: Dictionary with boundary information for the physics
+        """
+
+        return {'type': 'Dirichlet', 'value': val}
+
+    def setNeumannBC(self, flux):
+
+        """
+        Define a Neumann Boundary Condition for the node
+
+        :param q_flux: Heat flux at the boundary
+        :return: Dictionary with boundary information for the physics
+        """
+
+        return {'type': 'Neumann', 'flux': flux}
+
+    def setNewtonBC(self, h, var_ext):
+
+        """
+        Define a Newton Boundary Condition for the node
+
+        :param h_c: Heat transfer coefficient
+        :param T_ext: External temperature
+        :return: Dictionary with boundary information for the physics
+        """
+
+        return {'type': 'Newton', 'h': h, 'var_ext': var_ext}
+
+    def initializeMatrices(self, element, Variable):
+        pass
 
     def addStabilization(self, element):
         pass
 
-    def setDirichletBC(self, **kwargs):
-        pass
-
-    def setNeumannBC(self, **kwargs):
-        pass
-
-    def setNewtonBC(self, **kwargs):
-        pass
-
     def setVariables(self):
-        pass
-
-    def addBMatrix(self, element):
-        pass
-
-    def addGVector(self, element):
         pass

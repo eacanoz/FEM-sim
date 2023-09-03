@@ -13,6 +13,8 @@ class scalarField:
         self.bf = basisFunctions(mesh, basisFunction)
         self.values = np.ones(mesh.getNoN())
 
+        self.timeValues = None
+
     def bfGrad(self):
         return self.bf.bfGrad()
     
@@ -21,3 +23,17 @@ class scalarField:
 
     def updateField(self, values):
         self.values = values
+
+    def getElementValues(self, element):
+
+        return np.array([self.values[i] for i in element.getNodesId()])
+    
+    def updateTimeValues(self, values=None):
+        
+        self.timeValues = values
+
+    def getFieldValues(self, study):
+        if study == 'Steady state':
+            return self.values
+        elif study == 'Transient':
+            return self.timeValues

@@ -32,13 +32,13 @@ class IterativeSolver:
             return self.GMres()
 
     def BicgStab(self):
-        print('Solver: BicgStab (Biconjugate gradient stabilized method)')
+        # print('Solver: BicgStab (Biconjugate gradient stabilized method)')
 
         M = self.Preconditioner()
 
         x, info = spla.bicgstab(self.A, self.b, x0=self.x0, M=M, callback=self.callBackFunc)
         
-        self.updConvergencePlot()
+        #self.updConvergencePlot()
 
         return x
     
@@ -49,7 +49,7 @@ class IterativeSolver:
 
         x, info = spla.gmres(self.A, self.b, x0=self.x0, M=M, callback=self.callBackFunc)
 
-        self.updConvergencePlot()
+        #self.updConvergencePlot()
 
         return x
     
@@ -63,7 +63,7 @@ class IterativeSolver:
   
     def iLUFactorization(self):
 
-        print('Preconditioner: iLU Factorization')
+        # print('Preconditioner: iLU Factorization')
 
         sA_iLU = spla.spilu(self.A)
 

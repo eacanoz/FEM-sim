@@ -31,13 +31,15 @@ PD = 1
 # Create mesh from linear element
 
 L = 0.04  # Length size of the domain [m]
-NoE = 20  # Number of Elements
+NoE = 40  # Number of Elements
 MeshType = "1DROD2P"  # Type of element
 shapeFunction = 'Linear' # Shape function for spatial discretization
 
 Mesh1 = Mesh()
 Mesh1.Generate_Mesh(PD, L, NoE, MeshType)
 Mesh1.setElementShapeFunction(shapeFunction)
+
+Mesh1.checkBoundaries()
 
 # Defining material properties
 Mat1 = material('Polymer', k = 0.2, miu=1, rho=1, Cp= 1)
@@ -54,7 +56,7 @@ Model1.physics.Stab = None
 
 # Adding boundary conditions
 Model1.physics.addBC_Temperature(id=0, T=200)
-Model1.physics.addBC_HeatFlux(id=20, q_flux = 0)
+Model1.physics.addBC_HeatFlux(id=5, q_flux = 0)
 
 
 # Initialize field
@@ -62,7 +64,9 @@ Model1.physics.initField('T', 200)
 
 # Setting solver options
 
-Model1.solverOptions = {'Type': 'Linear', 'Method': 'Direct', 'Solver':'PARDISO'}
+solverOptions = {'Study': 'Steady state', 'Type': 'Linear', 'Method': 'Direct', 'Solver':'PARDISO'}
+
+Model1.solverConfiguration(**solverOptions)
 
 # Solving PDE
 Model1.solve()
@@ -84,7 +88,7 @@ T_x = Tm + (n/(2*k))*(u0/h)**2 * (2*h*x_axis-x_axis**2)
 
 
 plt.plot(x_axis, T_x)
-plt.plot(Model1.mesh.getXCoor(), Model1.sol, 'or')
+plt.plot(Model1.mesh.getXCoor(), Model1.sol['T'], 'or')
 
 plt.legend(['Analytical', 'FEM'])
 

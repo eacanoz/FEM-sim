@@ -43,19 +43,22 @@ class Model(object):
         self.name = name  # Name of the model
         self.mtype = mtype  # Type of model
         self.w = basisFunctions(self._mesh, 'Linear') # Test Function
-        # self.bF = basisFunctions().get_basisFunctions(self._mesh, 'Linear')
         self.mat = mat  # Material domain
         self.physics = psc(self)  # Model physics
 
         self.A = None
         self.b = None
 
-        self.solverOptions = {'Type': 'Nonlinear', 'Method': 'Direct', 'Solver':'PARDISO'}
+        self.solverOptions = None
+
+        #self.solverOptions = {'Study': 'Steady state', 'Type': 'Nonlinear', 'Method': 'Direct', 'Solver':'PARDISO'}
         # self.solverOptions = {'Type': 'Linear', 'Method': 'Direct', 'Solver':'PARDISO'}
         # self.solverOptions = {'Type': 'Linear', 'Method': 'Iterative', 'Solver':'BicgStab', 'Preconditioner': 'iLU Factorization'}
         # self.solverOptions = {'Type': 'Linear', 'Method': 'Iterative', 'Solver':'BicgStab', 'Preconditioner': None}
 
         self.sol = None
+
+        self.timeVector = None
 
     @property
     def mesh(self):
@@ -77,59 +80,106 @@ class Model(object):
 
         return custom_str
 
-    def constructProblem(self):
+    def assembleGlobalSystem(self, solverOptions = None):
 
-        self.A = self.assembleGlobalMatrix()
-        self.b = self.assembleGlobalVector()
-        self.applyDirichletBC()
-        self.A = self.A.tocsc()
-        self.b = self.b.tocsc()
+        Var = self.physics.getVariables()
+        nVar = self.physics.getNumOfVar()
 
-    def assembleGlobalSystem(self):
+        A = sc.sparse.lil_matrix((self._mesh.getNoN()*nVar, self._mesh.getNoN()*nVar))
+        b = np.zeros(self._mesh.getNoN()*nVar)
 
-        A = sc.sparse.lil_matrix((self._mesh.getNoN(), self._mesh.getNoN()))
-        b = np.zeros(self._mesh.getNoN())
+        for idxVar, Variable in enumerate(Var):
+
+            for element in self._mesh.EL:
+                A_e = self.physics.getElementMatrix(element, Variable, solverOptions)
+                b_e = self.physics.getElementVector(element, Variable, solverOptions)
+
+                for idx, node_i in enumerate(element.nodes):
+
+                    if node_i.BC and node_i.BC[Variable]['type'] == 'Dirichlet':
+
+                        b[idxVar + nVar*node_i.id] += node_i.BC[Variable]['value']
+                        A[idxVar + nVar*node_i.id, :] = 0
+                        A[idxVar + nVar*node_i.id, idxVar + nVar*node_i.id] = 1
+                    else:
+
+                        b[idxVar + nVar*node_i.id] += b_e[idx]
+
+                        for jdx, node_j in enumerate(element.nodes):
+                        
+                            A[idxVar + nVar*node_i.id, idxVar + nVar*node_j.id] += A_e[idx, jdx]
+         
+        return A, b
+
+    def assembleResidualVector(self, solverOptions = None):
+        
+        Var = self.physics.getVariables()
+        nVar = self.physics.getNumOfVar()
+
+        F = np.zeros(self._mesh.getNoN()*nVar)
+
+        for idxVar, Variable in enumerate(Var):
+
+            for element in self._mesh.EL:
+                
+                F_e = self.physics.getResidualVector(element, Variable, solverOptions)
+
+                for idx, node_i in enumerate(element.nodes):
+
+                    if node_i.BC and node_i.BC[Variable]['type'] == 'Dirichlet':
+                        F[idxVar + nVar*node_i.id] = 0
+                    else:
+                        F[idxVar + nVar*node_i.id] += F_e[idx]
+
+        return F
+
+    def assembleMassMatrix(self, solverOptions = None):
+
+        M = sc.sparse.lil_matrix((self._mesh.getNoN(), self._mesh.getNoN()))
 
         for element in self._mesh.EL:
 
-            A_e = self.physics.getElementMatrix(element)
-            b_e = self.physics.getElementVector(element)
+            M_e = self.physics.getElementMassMatrix(element, solverOptions)
 
             for idx, node_i in enumerate(element.nodes):
-
-                b[node_i.id] += b_e[idx]
-
                 for jdx, node_j in enumerate(element.nodes):
-                    
-                    A[node_i.id, node_j.id] += A_e[idx, jdx]
 
-        return A, b
+                    M[node_i.id, node_j.id] += M_e[idx, jdx]
 
-    def applyDirichletBC(self):
+        return M
 
-        print('Applying Boundary Conditions')
+    def solverConfiguration(self, Study='Steady state', Type='Linear', Method = 'Direct', Solver = 'PARDISO', timeDisc = 1, timeStep=0.05, totalTime = 3, prec = 'iLU Factorization'):
 
-        for j in range(self._mesh.getNoN()):
+        self.solverOptions = {
+            'Study': Study,
+            'Type': Type,
+            'Method': Method,
+            'Solver': Solver,
+            'Preconditioner': prec,
+            'Time Discretization': timeDisc,
+            'Time Step': timeStep,
+            'Time': totalTime
+        }
 
-            if self._mesh.NL[j].BC is not None and self._mesh.NL[j].BC['type'] == 'Dirichlet':
-                self.A[j, :] = 0
-                self.A[j, j] = 1
-
-                self.b[j] = self._mesh.NL[j].BC['value']
 
     def solve(self):
 
         print('Simulation started')
 
+        if self.solverOptions is None:
+            self.solverConfiguration()
+
         solver = Solution.modelSolver(self)
 
         solver.solve()
 
-        #print('Simulation finished')
+        self.timeVector = solver.timeVector
+
+        print('Simulation finished')
 
     def postProcess(self):
 
-        plt.plot(self.mesh.getXCoor(), self.sol, marker='o')
+        plt.plot(self.mesh.getXCoor(), self.sol['T'], marker='o')
         plt.xlabel("x-axis [m]")
         plt.ylabel("Temperature[°C]")
         plt.show()

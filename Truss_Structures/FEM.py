@@ -1,7 +1,7 @@
 ## Trust Element using Finite Element Method (FEM)
 
 import numpy as np
-from functions import *
+from Truss_Structures.functions import *
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable

@@ -13,14 +13,17 @@ class Mesh:
         self.NL = None
         self.EL = None
 
+        self.boundaries = {}
+
     def Generate_Mesh(self, PD, L, NoE, MeshType):
 
         self.NoE = NoE
         self.meshType = MeshType
+        self.PD = PD
 
         if PD == 1:
             if self.meshType == '1DROD2P':
-                self.PpE = 2
+                self.EpP = 2
 
         self.NL = []
 
@@ -33,6 +36,59 @@ class Mesh:
 
         for i in range(0, self.NoE):
             self.EL.append(Element(id=i, nodes=[self.NL[i], self.NL[i + 1]]))
+
+    def generate1DMesh():
+        pass
+
+    def generate2DMesh(self, dim: tuple, div: tuple, element_type):
+
+        # Only for rectangular geometries
+
+        PD = 2
+        q = np.array([[0, 0], [dim[0], 0], [0, dim[1]], [dim[0], dim[1]]]) # corners
+
+        self.NoN = (div[0] + 1)*(div[1] + 1)
+
+        self.NoE = (div[0])*(div[1])
+
+        NPE = 4
+
+        self.NL = np.zeros([self.NoN, PD])
+
+        a = (q[1,0] - q[0,0])/ div[0]  # Increment in the horizontal direction
+        b = (q[2,1] - q[0,1])/ div[1]  # Increment in the vertical direction
+
+        n = 0 # Through rows in NL
+
+        for i in range(1, div[1]+2):
+
+            for j in range(1, div[0] + 2):
+
+                self.NL[n, 0] = q[0, 0] + (j-1)*a
+                self.NL[n, 1] = q[0, 1] + (i-1)*b
+
+                n +=1
+
+        ### Elements ###
+
+        self.EL = np.zeros([self.NoE, NPE])
+
+        for i in range(1, div[1]+1):
+
+            for j in range(1, div[0] +1):
+
+                if j ==1:
+
+                    self.EL[(i-1)*div[0]+j-1, 0] = (i-1)*(div[0]+1) + j
+                    self.EL[(i-1)*div[0]+j-1, 1] = self.EL[(i-1)*div[0]+j-1, 0] + 1
+                    self.EL[(i-1)*div[0]+j-1, 2] = self.EL[(i-1)*div[0]+j-1, 0] + (div[0]+2)
+                    self.EL[(i-1)*div[0]+j-1, 3] = self.EL[(i-1)*div[0]+j-1, 0] + (div[0]+1)
+                else:
+
+                    self.EL[(i-1)*div[0]+j-1, 0] = self.EL[(i-1)*div[0]+j-2, 1]
+                    self.EL[(i-1)*div[0]+j-1, 3] = self.EL[(i-1)*div[0]+j-2, 2]
+                    self.EL[(i-1)*div[0]+j-1, 1] = self.EL[(i-1)*div[0]+j-2, 1] + 1
+                    self.EL[(i-1)*div[0]+j-1, 2] = self.EL[(i-1)*div[0]+j-2, 2] + 1
 
     def getNoN(self):
 
@@ -65,6 +121,33 @@ class Mesh:
         for element in self.EL:
             element.sF = basisFunctions(self, shapeFunction)
 
+    def defineBoundary(self, name, nodes_id):
+
+        self.boundaries[name] = nodes_id
+
+    def checkBoundaries(self):
+
+        boundaries = []
+
+        for node in self.NL:
+
+            nodeOccurrences = 0
+
+            for element in self.EL:
+
+                nodeOccurrences += element.nodes.count(node)
+
+            if nodeOccurrences < self.EpP:
+                    
+                boundaries.append(node.id)
+
+
+        print(boundaries)
+
+        return boundaries
+
+    
+
 class Node:
 
     def __init__(self, id=None, coor: tuple = None):
@@ -72,7 +155,7 @@ class Node:
         self.coor = coor
         self.type = 'DoF'
         self.variable = {}
-        self.BC = None
+        self.BC = {}
 
 
     def getVariable(self, psc):
@@ -100,6 +183,11 @@ class Element:
             coordinates.append(node.coor[0])
 
         return coordinates
+    
+    def getNodesId(self):
+
+        N = [node.id for node in self.nodes]
+        return N
 
     def getNumberNodes(self):
 
