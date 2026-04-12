@@ -8,6 +8,7 @@ from scipy.integrate import solve_ivp
 from scipy.optimize import fsolve
 from numdifftools import Jacobian
 
+from numba import jit, njit, prange, guvectorize, vectorize, float64
 
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
@@ -16,6 +17,7 @@ from Source.Simulation.DirectSolver import DirectSolver
 from Source.Simulation.IterativeSolver import IterativeSolver
 
 import time
+from progress.bar import Bar
 
 # from Source.core import Model
 
@@ -27,13 +29,19 @@ def tictoc(method):
             t1 = time.time()
             method(*args, **kwargs)
             t2 = time.time() - t1
-            print(f'method finished on {t2} seconds')
+            print(f'method finished on {round(t2, 3)} seconds')
         
         return wrapper
 
 class modelSolver():
 
+    """Class responsible for solving the model based on the physics and mesh. 
+    It includes methods for assembling the global system, solving linear and nonlinear problems, and handling transient simulations.
+    """
+
     def __init__(self, model):
+
+        """Initializes the model solver with a reference to the model and sets up necessary attributes."""
 
         self.nIter=1
         self.error = []
@@ -57,6 +65,8 @@ class modelSolver():
 
 
     def construcProblem(self):
+
+        """Assembles the global system of equations for the model based on the physics and mesh."""
  
         self.A, self.b = self.model.assembleGlobalSystem(self.solverOptions)
 
@@ -74,6 +84,8 @@ class modelSolver():
 
     @tictoc
     def solve(self):
+
+        """Solves the model based on the configured solver options and updates the solution in the model."""
 
         solDict = {}
 
@@ -94,16 +106,20 @@ class modelSolver():
 
     def steadyStateSolver(self):
 
+        """Solves the steady-state problem for the model based on the configured solver options."""
+
         if self.model.solverOptions['Type'] == 'Linear':
             self.linearSolver()
         elif self.model.solverOptions['Type'] == 'Nonlinear':
             self.nonlinearSolver()
 
-        nls = self.nonlinearSolver
+        #nls = self.nonlinearSolver
 
         
 
     def transientSolver(self):
+
+        """Solves the transient problem for the model based on the configured solver options using an ODE solver."""
 
         self.getInitialField()
 
@@ -118,6 +134,8 @@ class modelSolver():
 
     def transientRHS(self, t, y):
 
+        """Defines the right-hand side of the transient problem for the ODE solver."""
+
         self.updateSolution(y)
 
         self.construcProblem()
@@ -129,6 +147,10 @@ class modelSolver():
         return dy_dt
 
     def linearSolver(self):
+
+        """Solves the linear problem for the model based on the configured solver options.
+        It constructs the global system and uses either a direct or iterative solver to find the solution.
+        """
 
         self.construcProblem()
         self.getInitialField()
@@ -150,19 +172,25 @@ class modelSolver():
 
     def nonlinearSolver(self):
 
+        """Solves the nonlinear problem for the model based on the configured solver options.
+        It constructs the global system, computes the Jacobian, and uses a Newton solver to find the solution iteratively until convergence."""
+
         # print('---------- Nonlinear Solver ----------')
 
         self.getInitialField()
 
-        sol = fsolve(self.createNonlinearSystem, self.x0)
+        # sol = fsolve(self.createNonlinearSystem, self.x0)
         # sol = self.fixPointSolver()
 
-        # sol = self.newtonSolver()
+        sol = self.newtonSolver()
 
         self.updateSolution(sol)
 
-
+    #@guvectorize()
     def createNonlinearSystem(self, x):
+
+        """Creates the nonlinear system of equations for the model based on the current solution vector x.
+        It updates the solution in the model, constructs the global system, and returns the residual vector for the nonlinear problem."""
 
         self.updateSolution(x)
         # F = self.model.assembleResidualVector(self.solverOptions)
@@ -174,6 +202,10 @@ class modelSolver():
         return F_a
 
     def callBackFunc(self, xk):
+
+        """Callback function for monitoring the convergence of the nonlinear solver.
+        It computes the error at each iteration and updates the convergence plot."""
+
         error = np.linalg.norm(self.A.dot(xk)-self.b)
         self.error.append(error)
         self.iter_list.append(self.nIter)
@@ -183,6 +215,9 @@ class modelSolver():
         self.nIter += 1
 
     def fixPointSolver(self):
+
+        """Implements a fixed-point iteration solver for the nonlinear problem.
+        It iteratively updates the solution vector until convergence based on a relaxation parameter alpha."""
         print('---------- Nonlinear Solver ----------')
 
         self.tolerance = 1
@@ -214,42 +249,49 @@ class modelSolver():
 
 
     def newtonSolver(self):
+
+        """Implements a Newton-Raphson solver for the nonlinear problem.
+        It iteratively computes the Jacobian matrix, solves the linearized system, and updates the solution vector until convergence based on a relaxation parameter lambda."""
+
         self.tolerance = 1
         self.numbIterations = 0
 
-        nLS = self.createNonlinearSystem
+        # nLS = self.createNonlinearSystem
 
-        self.jac = Jacobian(nLS)
+        # self.jac = Jacobian(nLS)
 
         while (self.tolerance > 1e-4 or self.numbIterations < 200):
 
             lamb = 0.8
 
             self.numbIterations += 1
-            print(self.numbIterations)
 
-            #print(f'----- Iteration number: {self.numbIterations} -----')
-            # self.construcProblem()
-            # self.getInitialField()
 
-            #J = self.Jacobian()
+            print(f'----- Iteration number: {self.numbIterations} -----')
+            self.construcProblem()
+            self.getInitialField()
 
-            # Fi_1 = self.A.dot(self.x0) - self.b
+            J = self.Jacobian()
+
+            Fi_1 = self.A.dot(self.x0) - self.b
 
             if self.model.solverOptions['Method'] == 'Direct':
-                solutionMethod = DirectSolver(self.spJacobian(self.x0), (-nLS(self.x0)), self.x0, self.model.solverOptions)
+                # solutionMethod = DirectSolver(self.spJacobian(self.x0), (-nLS(self.x0)), self.x0, self.model.solverOptions)
 
-                dX = solutionMethod.solve()
+                # dX = solutionMethod.solve()
 
+                dX = DirectSolver(J, -Fi_1, self.x0, self.model.solverOptions).solve()
 
             elif self.model.solverOptions['Method'] == 'Iterative':
-                solutionMethod = IterativeSolver(self.spJacobian(self.x0), (-nLS(self.x0)), self.x0, self.model.solverOptions)
+                # solutionMethod = IterativeSolver(self.spJacobian(self.x0), (-nLS(self.x0)), self.x0, self.model.solverOptions)
 
-                dX = solutionMethod.solve()            
+                # dX = solutionMethod.solve()   
+
+                dX = IterativeSolver(J, -Fi_1, self.x0, self.model.solverOptions).solve()         
 
             # self.linearSolver()
 
-            Ui = self.x0 + lamb * dX
+            xi = self.x0 + lamb * dX
 
             # estimating error for new iteration.
 
@@ -258,18 +300,22 @@ class modelSolver():
 
             # self.construcProblem()
 
-            # Fi = self.A.dot(Ui) - self.b
+            Fi = self.createNonlinearSystem(xi)
 
             if self.model.solverOptions['Method'] == 'Direct':
-                solutionMethod = DirectSolver(self.spJacobian(self.x0), (-nLS(Ui)), dX, self.model.solverOptions)
+                # solutionMethod = DirectSolver(self.spJacobian(self.x0), (-nLS(Ui)), dX, self.model.solverOptions)
 
-                error = solutionMethod.solve()
+                # error = solutionMethod.solve()
+
+                error = DirectSolver(J, Fi, self.x0, self.model.solverOptions).solve()      
 
 
             elif self.model.solverOptions['Method'] == 'Iterative':
-                solutionMethod = IterativeSolver(self.spJacobian(self.x0), (-nLS(Ui)), dX, self.model.solverOptions)
+                # solutionMethod = IterativeSolver(self.spJacobian(self.x0), (-nLS(Ui)), dX, self.model.solverOptions)
 
-                error = solutionMethod.solve()         
+                # error = solutionMethod.solve()
+
+                error = IterativeSolver(J, Fi, self.x0, self.model.solverOptions).solve()           
 
             #self.tolerance = np.linalg.norm(self.sol - self.x0)
             self.tolerance = np.linalg.norm(error) 
@@ -282,15 +328,18 @@ class modelSolver():
                 #alpha = 0.7
                 #xi = self.x0 + alpha *(self.sol - self.x0)
 
-                self.x0 = Ui
+
 
                 #self.model.physics.var['T'].updateField(xi) # Fix -- Hardcoded
-                #self.updateSolution(xi)
+                self.updateSolution(xi)
                 # x0 = self.sol
 
-        return Ui
+        return xi
 
     def updateSolution(self, x):
+
+        """Updates the solution in the model based on the current solution vector x.
+        It extracts the values for each field variable from the solution vector and updates the corresponding fields in"""
 
         # nVar = self.model.physics.getNumOfVar()
 
@@ -313,11 +362,16 @@ class modelSolver():
         
 
     def getFieldVariables(self):
+
+        """Retrieves the field variables from the model's physics and stores them in an attribute for later use."""
+
         self.fieldVariables = self.model.physics.var.keys()
 
         self.nVar = len(self.fieldVariables)
 
     def getInitialField(self):
+
+        """Collects the initial field values for each variable from the model's physics and stores them in a single solution vector x0 for use in the solvers."""
 
         # print('\nCollecting Initial field\n')
 
@@ -342,34 +396,93 @@ class modelSolver():
     #     bi_1 = self.b
 
     #     x0 = self.x0.copy()
+    #     xi = self.x0.copy()
 
     #     Fi_1 = Ai_1.dot(x0) - bi_1
 
-    #     J = sc.sparse.lil_matrix((self.model._mesh.getNoN(), self.model._mesh.getNoN()))
+    #     J = sc.sparse.lil_matrix((self.model._mesh.getNoN()*self.nVar, self.model._mesh.getNoN()*self.nVar))
 
-    #     for i in range(self.x0.size):
-            
-    #         x0[i] += eps
-    #         self.model.physics.var['T'].updateField(x0)
+    #     with Bar('Assembling Jacobian Matrix', max=self.x0.size) as bar:
+           
+    #         for i in range(self.x0.size):
+                
+    #             xi[i] += eps
+    #             # self.updateSolution(x0)
 
-    #         self.construcProblem()
+    #             # self.construcProblem()
 
-    #         Ai = self.A
-    #         bi = self.b
+    #             # Ai = self.A
+    #             # bi = self.b
 
-    #         Fi = Ai.dot(x0)-bi
+    #             # Fi = Ai.dot(x0)-bi
 
-    #         J[:, i] = (Fi - Fi_1)
+    #             Fi = self.createNonlinearSystem(xi)
 
-    #         J *= (1/eps)
+    #             J[:, i] = (Fi - Fi_1)
 
-    #         x0 = self.x0.copy()
 
-            
+    #             xi = x0.copy()
+
+    #             bar.next()
+
+    #     J *= (1/eps)
     #     self.A = Ai_1
     #     self.b = bi_1
 
     #     return J.tocsr()
+
+
+
+
+    def Jacobian(self, eps=1e-6):
+        """
+        Compute the Jacobian matrix in a vectorized way. This method perturbs all variables simultaneously and computes the resulting changes in the residual 
+        vector to construct the Jacobian matrix efficiently.
+
+        Parameters:
+        eps (float): Perturbation size for finite differences.
+
+        Returns:
+        scipy.sparse.csr_matrix: The Jacobian matrix.
+        """
+        Ai_1 = self.A
+        bi_1 = self.b
+
+        x0 = self.x0.copy()
+
+        # Compute the initial residual
+        Fi_1 = Ai_1.dot(x0) - bi_1
+
+        # Create a perturbation matrix
+        perturbation = np.eye(len(x0)) * eps
+
+        # Perturb all variables simultaneously
+        perturbed_x = x0[:, None] + perturbation
+
+        ta = time.time()
+        vfunc = np.vectorize(self.createNonlinearSystem, signature='(n)->(m)') 
+        tb = time.time() - ta
+        print(f'np.vectorize finished on {round(tb, 3)} seconds')
+        #vfunc = self.createNonlinearSystem
+        #vfunc = np.frompyfunc(self.createNonlinearSystem, 1, 1) # Alternative approach using frompyfunc
+
+        # Compute the perturbed residuals in a vectorized way
+        ta = time.time()
+        Fi = vfunc(perturbed_x)
+        tb = time.time() - ta
+        print(f'apply_along_axis finished on {round(tb, 3)} seconds')
+
+
+        # Compute the Jacobian matrix using finite differences
+        J = (Fi - Fi_1[:, None]) / eps
+
+        # Convert to sparse format
+        J_sparse = sc.sparse.csr_matrix(J)
+
+        self.A = Ai_1
+        self.b = bi_1
+
+        return J_sparse
 
     @tictoc
     def spJacobian(self, x):

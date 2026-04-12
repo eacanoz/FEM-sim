@@ -10,6 +10,8 @@ import numpy as np
 from Source.Physics.Physics import physics
 from Source.Primals.Scalar import scalarField
 
+u = 1  # Velocity for convection term, hardcoded for now
+
 
 class ht(physics):
     ConstRel = '∇.(k * ∇T) + Q == 0'
@@ -21,12 +23,12 @@ class ht(physics):
 
         self.var = {'T': scalarField('T', 'Temperature', 'K', 'Linear', model.mesh)}
 
-        self.Pe = self.mat.rho * self.mat.Cp * 1 / self.mat.k
+        self.Pe = self.mat.rho * self.mat.Cp * u / self.mat.k
 
     def initializeMatrices(self, element, Variable):
 
         if self.Convection:
-            self.C = self.div(self.var[Variable], element, self.mat.rho * self.mat.Cp, 1)  # 1 stands for velocity (u = 1)
+            self.C = self.div(self.var[Variable], element, self.mat.rho * self.mat.Cp, u)  # 1 stands for velocity (u = 1)
 
         self.K = self.laplacian(self.mat.k, self.var[Variable], element)
 
@@ -48,6 +50,15 @@ class ht(physics):
         self.modelRef._mesh.NL[id].BC['T'] = self.setDirichletBC(T)
 
     def addBC_Convection(self, id: int, h_c: float, T_ext: float):
+
+        """
+        Add convection boundary condition to the node with the given id.
+        Parameters:
+        -----------
+        id (int): Node id to which the boundary condition will be applied
+        h_c (float): Convection coefficient
+        T_ext (float): External temperature
+        """
 
         self.modelRef._mesh.NL[id].BC['T'] = self.setNewtonBC(h_c, T_ext)
 

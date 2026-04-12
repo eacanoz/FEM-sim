@@ -1,9 +1,10 @@
 # Class Mesh
 
 import numpy as np
-import sympy as sp
 
 from Source.Pre_processing.BasisFunctions import basisFunctions
+
+from numba.experimental import jitclass
 
 
 class Mesh:
@@ -22,8 +23,11 @@ class Mesh:
         self.PD = PD
 
         if PD == 1:
-            if self.meshType == '1DROD2P':
+            if self.meshType == '1DROD2P':  # Cambiar luego
                 self.EpP = 2
+
+            elif self.meshType == '1DROD3P':
+                self.EpP = 3
 
         self.NL = []
 
@@ -36,6 +40,8 @@ class Mesh:
 
         for i in range(0, self.NoE):
             self.EL.append(Element(id=i, nodes=[self.NL[i], self.NL[i + 1]]))
+
+        flag = 0
 
     def generate1DMesh():
         pass
@@ -118,8 +124,11 @@ class Mesh:
         pass
 
     def setElementShapeFunction(self, shapeFunction):
+
+        meshBF = basisFunctions(self, shapeFunction)
+
         for element in self.EL:
-            element.sF = basisFunctions(self, shapeFunction)
+            element.setBasisFunction(meshBF)
 
     def defineBoundary(self, name, nodes_id):
 
@@ -168,13 +177,21 @@ class Node:
         return self.coor[0]
 
 class Element:
-
-    def __init__(self, id=None, nodes: list = None):
+    def __init__(self, id: int =None, nodes: list = None):
         self.id = id
         self.nodes = nodes
         self.sF = None
     def getLength(self):
-        return self.nodes[1].coor[0] - self.nodes[0].coor[0]
+        if len(self.nodes) != 2:
+            raise ValueError("Element must have exactly two nodes to compute length.")
+        coor0 = self.nodes[0].coor
+        coor1 = self.nodes[1].coor
+        if len(coor0) != len(coor1):
+            raise ValueError("Node coordinates must have the same dimension.")
+        # Handle 1D and higher dimensions
+        return float(np.linalg.norm(np.array(coor1) - np.array(coor0)))
+        
+        #return self.nodes[1].coor[0] - self.nodes[0].coor[0]
 
     def getCoor(self):
         coordinates = []
@@ -193,7 +210,22 @@ class Element:
 
         return len(self.nodes)
     
-    def Jacobian(self):
+    def setBasisFunction(self, basisFunction):
+        self.sF = basisFunction
+        self.setMapping()
+        self.setJacobian()
+    
+    def setMapping(self):
+
+        self.xmap_func = lambda x: np.dot(self.sF.N_func(x), np.array(self.getCoor()))
+
+    def setJacobian(self):
+
+        self.J_func = lambda x: np.dot(self.sF.gradN_func(x), np.array(self.getCoor()))
+
+        self.Jdet_func = lambda x: self.J_func(x) if self.J_func(x).shape == (1,) else np.linalg.det(self.J_func(x)) 
+    
+        self.Jinv_func = lambda x: np.array([1.0 / self.Jdet_func(x)]) if self.J_func(x).shape == (1,) else np.linalg.det(self.J_func(x)) 
+
         
-        x_map = self.sF.N.transpose() * sp.Matrix(self.getCoor())
-        return x_map.jacobian(sp.Matrix(list(x_map.free_symbols)))
+    

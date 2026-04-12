@@ -11,8 +11,12 @@ import scipy as sc
 import sympy as sp
 import math
 
+from scipy import integrate
+
 from Source.Physics.Physics import physics
 from Source.Primals.Scalar import scalarField
+
+from Source.Pre_processing.Mesh import Mesh, Element, Node
 
 class mt(physics):
 
@@ -68,16 +72,43 @@ class mt(physics):
         self.stoich = stoich
         # self.reaction = lambda elem, chemSpec:  self.stoich[chemSpec] * self.rRate(elem)
 
-        def reaction(element, chemSpec):
+        def reaction(element):
 
             rates = [self.rRate(n.id) for n in element.nodes]
 
             rateVector = element.sF.N.transpose() * sp.Matrix(rates)
 
-            return self.stoich[chemSpec] * rateVector
+            rateVectorfunc = sp.lambdify(list(element.sF.N.free_symbols), rateVector, 'numpy')
+
+            return  rateVectorfunc
 
 
         self.source = reaction
+
+    # Overwrite forceVector method
+
+    def forceVector(self, element: Element, Variable):
+
+        if callable(self.source):
+
+            f = lambda *args: self.stoich[Variable] * self.source(element)(*args)
+        else:
+
+            f = self.source
+
+
+        # diff_F = self.w.N * f * element.Jacobian()
+
+        # F = sp.integrate(diff_F, (e1, -1, 1)).tolist()
+
+        # return np.array(F).astype(np.float64).reshape((element.getNumberNodes(), 1))[0]  ## To fix!!!
+
+        diffF = lambda *args: self.w.N_func(*args) * f(*args) * element.J_func(*args)
+
+        y, err = integrate.quad_vec(diffF, -1, 1)
+
+        return y[0]
+
 
 ## ---------- Boundary conditions ---------- ##
 

@@ -25,14 +25,14 @@ class DirectSolver:
             return self.SuperLU()
 
     def PARDISO(self):
-        print('Solver: PARDISO (Parallel Direct Sparse Solver)')
+        # print('Solver: PARDISO (Parallel Direct Sparse Solver)')
 
         x = pypardiso.spsolve(self.A, self.b)
         
         return x
     
     def SuperLU(self):
-        print('Solver: SuperLU (Supernodal LU)')
+        # print('Solver: SuperLU (Supernodal LU)')
 
         x = spla.spsolve(self.A, self.b)
         return x

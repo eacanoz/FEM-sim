@@ -9,6 +9,7 @@
 
 import numpy as np
 import sympy as sp
+from scipy import integrate
 import math
 
 from Source.Pre_processing.BasisFunctions import basisFunctions
@@ -28,7 +29,7 @@ class physics:
     def __init__(self, model):
 
         self.modelRef = model
-        self.w = model.w
+        self.w: basisFunctions = model.w
         self.mat = model.mat
 
         self.var = {}
@@ -101,18 +102,14 @@ class physics:
         :return: Matrix of laplacian term
         """
 
-            # diff_A = (self.mbF.jacobian(sp.Matrix(list(self.mbF.free_symbols))) * self.Jacobian(
-            #     element).inv()) * const * \
-            #          (var.bfGrad() * element.Jacobian().inv()).transpose() * \
-            #          element.Jacobian().det()
+        diffA1 = lambda *args: self.w.gradN_func(*args)*element.Jinv_func(*args)*\
+                               const*(var.gradN_func(*args)*element.Jinv_func(*args)).T * element.Jdet_func(*args)
 
-        diff_A = (self.w.bfGrad() * element.Jacobian().inv()) * const * \
-                (var.bfGrad() * element.Jacobian().inv()).transpose() * \
-                element.Jacobian().det()
+        #diffA2 = lambda *args: const*np.dot((self.w.gradN_func(*args)*element.Jinv_func(*args)).T, (var.gradN_func(*args)*element.Jinv_func(*args)))*element.Jdet_func(*args)
+        
+        y, err = integrate.quad_vec(diffA1, -1, 1)
 
-        A = sp.integrate(diff_A, (e1, -1, 1)).tolist()
-
-        return np.array(A).astype(np.float64)
+        return y
 
     def Grad(self, var: scalarField, element: Element):
 
@@ -130,7 +127,7 @@ class physics:
 
 
         diff_Grad = (self.w.N) * \
-                    (var.bfGrad() * element.Jacobian().inv()).transpose() * \
+                    (var.gradN * element.Jinv).transpose() * \
                     element.Jacobian().det()
 
         Grad = sp.integrate(diff_Grad, (e1, -1, 1)).tolist()
@@ -152,13 +149,14 @@ class physics:
         if self.Stab == 'PG':
             self.w.addStab(self.Stab, self.stabilization(element))
 
-        diff_Div = const * (self.w.N) * \
-                   (var.bfGrad() * element.Jacobian().inv()).transpose() * \
-                   Vel * element.Jacobian().det()
 
-        Div = sp.integrate(diff_Div, (e1, -1, 1)).tolist()
+        diff_Div = lambda *args: const * self.w.N_func(*args)* \
+                  (var.gradN_func(*args)*element.Jinv_func(*args)).T * Vel * element.Jdet_func(*args)
 
-        return np.array(Div).astype(np.float64)
+
+        y, err = integrate.quad_vec(diff_Div, -1, 1)
+
+        return y
 
     def mass(self, var: scalarField, element: Element, constM):
 
@@ -178,12 +176,17 @@ class physics:
             f = self.source
 
 
-        diff_F = self.w.N * f * element.Jacobian()
+        # diff_F = self.w.N * f * element.Jacobian()
 
-        F = sp.integrate(diff_F, (e1, -1, 1)).tolist()
+        # F = sp.integrate(diff_F, (e1, -1, 1)).tolist()
 
-        return np.array(F).astype(np.float64).reshape((element.getNumberNodes(), 1))[0]  ## To fix!!!
+        # return np.array(F).astype(np.float64).reshape((element.getNumberNodes(), 1))[0]  ## To fix!!!
 
+        diffF = lambda *args: self.w.N_func(*args) * np.array(f).astype(np.float64) * element.J_func(*args)
+
+        y, err = integrate.quad_vec(diffF, -1, 1)
+
+        return y[0]
 
     def addBMatrix(self, element, Variable):
 
@@ -228,8 +231,10 @@ class physics:
         Pe_h = self.Pe * element.getLength()
         alpha = (1 / math.tanh(Pe_h / 2)) - 2 / Pe_h
         
-        stab = alpha * element.getLength() / 2 * self.w.bfGrad() \
-            * element.Jacobian().inv()
+        #stab = alpha * element.getLength() / 2 * self.w.gradN \
+        #    * element.Jinv
+
+        stab= lambda *args: alpha * element.getLength() / 2 * self.w.gradN_func(*args) * element.Jinv_func(*args)
 
         return stab
     

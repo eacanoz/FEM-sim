@@ -11,12 +11,14 @@ class scalarField:
         self.desc = desc
         self.unit = unit
         self.bf = basisFunctions(mesh, basisFunction)
+        self.gradN = self.bf.gradN
+        self.gradN_func = self.bf.gradN_func
         self.values = np.ones(mesh.getNoN())
 
         self.timeValues = None
 
     def bfGrad(self):
-        return self.bf.bfGrad()
+        return self.bf.gradN
     
     def initField(self, value):
         self.values *= value
