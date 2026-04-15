@@ -26,6 +26,10 @@ class scalarField:
     def updateField(self, values):
         self.values = values
 
+    def setElementValues(self, element, values):
+        for i, node_id in enumerate(element.getNodesId()):
+            self.values[node_id] = values[i]
+
     def getElementValues(self, element):
 
         return np.array([self.values[i] for i in element.getNodesId()])

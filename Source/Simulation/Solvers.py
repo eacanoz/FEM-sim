@@ -53,6 +53,10 @@ class modelSolver():
         self.b = None
         self.M = None
 
+
+        self.K = None
+        self.f = None
+
         #self.x0 = {}
         self.x0 = np.array([])
         self.sol = None
@@ -248,6 +252,14 @@ class modelSolver():
         return self.sol
 
 
+    def assembleNonlinearSystem(self):
+
+        """Assembles the nonlinear system of equations for the model based on the current solution vector.
+        It constructs the global system and returns the residual vector for the nonlinear problem."""
+
+        self.K, self.f = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
+
+
     def newtonSolver(self):
 
         """Implements a Newton-Raphson solver for the nonlinear problem.
@@ -268,12 +280,17 @@ class modelSolver():
 
 
             print(f'----- Iteration number: {self.numbIterations} -----')
-            self.construcProblem()
-            self.getInitialField()
+            #self.construcProblem()
+            #self.getInitialField()
 
-            J = self.Jacobian()
+            self.assembleNonlinearSystem()
 
-            Fi_1 = self.A.dot(self.x0) - self.b
+            J = self.K
+            Fi_1 = self.f
+
+            #J = self.Jacobian()
+
+            #Fi_1 = self.A.dot(self.x0) - self.b
 
             if self.model.solverOptions['Method'] == 'Direct':
                 # solutionMethod = DirectSolver(self.spJacobian(self.x0), (-nLS(self.x0)), self.x0, self.model.solverOptions)
@@ -387,51 +404,6 @@ class modelSolver():
 #------------------------------------------------------------------------------
 # Converting self.x0 to np.array that append different values from self.model.physics.var[fieldVar].values
 # Fix Jacobian matrix
-
-    # def Jacobian(self, eps=1e-6):
-
-    #     """Jacobian matrix is taking to long to assemble"""
-
-    #     Ai_1 = self.A
-    #     bi_1 = self.b
-
-    #     x0 = self.x0.copy()
-    #     xi = self.x0.copy()
-
-    #     Fi_1 = Ai_1.dot(x0) - bi_1
-
-    #     J = sc.sparse.lil_matrix((self.model._mesh.getNoN()*self.nVar, self.model._mesh.getNoN()*self.nVar))
-
-    #     with Bar('Assembling Jacobian Matrix', max=self.x0.size) as bar:
-           
-    #         for i in range(self.x0.size):
-                
-    #             xi[i] += eps
-    #             # self.updateSolution(x0)
-
-    #             # self.construcProblem()
-
-    #             # Ai = self.A
-    #             # bi = self.b
-
-    #             # Fi = Ai.dot(x0)-bi
-
-    #             Fi = self.createNonlinearSystem(xi)
-
-    #             J[:, i] = (Fi - Fi_1)
-
-
-    #             xi = x0.copy()
-
-    #             bar.next()
-
-    #     J *= (1/eps)
-    #     self.A = Ai_1
-    #     self.b = bi_1
-
-    #     return J.tocsr()
-
-
 
 
     def Jacobian(self, eps=1e-6):

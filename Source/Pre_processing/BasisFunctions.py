@@ -2,6 +2,7 @@
 
 import sympy as sp
 import numpy as np
+import jax.jnp as jnp
 
 from numba import jit, prange, int64, float64
 # from Source.Pre_processing.Mesh import Mesh

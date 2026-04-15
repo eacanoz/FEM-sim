@@ -12,6 +12,8 @@ import sympy as sp
 from scipy import integrate
 import math
 
+from numdifftools import Jacobian
+
 from Source.Pre_processing.BasisFunctions import basisFunctions
 from Source.Pre_processing.Mesh import Mesh, Element, Node
 from Source.Material import material
@@ -84,6 +86,32 @@ class physics:
         x_e = self.var[Variable].getElementValues(element)
 
         return A_e.dot(x_e) - b_e
+    
+    def aux_getTangentMatrix(self, element, Variable, x_values, solverOptions=None):
+
+        x_e_orig = self.var[Variable].getElementValues(element)
+
+        self.var[Variable].setElementValues(element, x_values)
+
+        A_e = self.getElementMatrix(element, Variable, solverOptions)
+        b_e = self.getElementVector(element, Variable, solverOptions)
+
+        F_e = A_e.dot(x_values) - b_e
+
+        self.var[Variable].setElementValues(element, x_e_orig)
+
+        return F_e
+
+
+    def getElementTangentMatrix(self, element, Variable, solverOptions=None):
+        
+        func1 = lambda x: self.aux_getTangentMatrix(element, Variable, x, solverOptions)
+
+        x_e = self.var[Variable].getElementValues(element)
+
+        return Jacobian(func1)(x_e)
+
+
 
     def laplacian(self, const: float, var: scalarField, element: Element):
         """

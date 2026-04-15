@@ -150,7 +150,6 @@ class Model(object):
         -----------
         :param solverOptions: Dictionary containing solver configuration options.
        
-        
         """
 
         Var = self.physics.getVariables()
@@ -186,21 +185,61 @@ class Model(object):
             return local_contributions
 
         for idxVar, Variable in enumerate(Var):
-            # dummy = []
-            # dummy.extend(process_element(element, idxVar, Variable) for element in self._mesh.EL)
 
             results.extend(sum([process_element(element, idxVar, Variable) for element in self._mesh.EL], []))
 
 
         for local_contributions in results:
-            # for global_idx_i, global_idx_j, value in local_contributions:
             global_idx_i, value = local_contributions
             F[global_idx_i] += value
-        # for idxVar, Variable in enumerate(Var):
-
-
 
         return F
+    
+    def assembleGlobalSystemNonLinear(self, solverOptions = None):
+
+        """Assembles the global system of equations for a nonlinear problem, based on the physics and mesh.
+        
+        Parameters
+        -----------
+        :param solverOptions: Dictionary containing solver configuration options.
+       
+        """
+
+        Var = self.physics.getVariables()
+        nVar = self.physics.getNumOfVar()
+        nNodes = self._mesh.getNoN()
+        nDOF = nNodes*nVar
+        results_K = []
+        results_F = []      
+
+
+        K = sc.sparse.dok_matrix((nDOF, nDOF))
+        F = np.zeros(nDOF)
+
+        def process_element_parallel(element: Element, idxVar: int, Variable: str):
+            K_e = self.physics.getElementTangentMatrix(element, Variable, solverOptions)
+            f_e = self.physics.getResidualVector(element, Variable, solverOptions)
+            nodes_id = [node.id for node in element.nodes]
+            nodes_bc = [node.BC for node in element.nodes]
+
+            return contributions_determination_nonlinear(K_e, f_e, nVar, nodes_id, nodes_bc, idxVar, Variable)   
+        
+        for idxVar, Variable in enumerate(Var):
+            #results.extend(sum([process_element(element, idxVar, Variable) for element in self._mesh.EL], []))
+            results_K.extend(sum([process_element_parallel(element, idxVar, Variable)[0] for element in self._mesh.EL], []))
+            results_F.extend(sum([process_element_parallel(element, idxVar, Variable)[1] for element in self._mesh.EL], []))
+
+        # Combine local contributions into the global system
+        for local_contributions in results_K:
+           
+            global_idx_i, global_idx_j, value = local_contributions
+            K[global_idx_i, global_idx_j] += value
+
+        for force_contributions in results_F:
+            global_idx_i, value = force_contributions
+            F[global_idx_i] += value
+
+        return K.tocsr(), F
 
     def assembleMassMatrix(self, solverOptions = None):
 
@@ -303,5 +342,41 @@ def contributions_determination(A_e: np.ndarray, b_e: np.ndarray, nVar: int, nod
             for jdx, node_j in enumerate(nodes_id):
                 global_idx_j = idxVar + nVar * node_j
                 local_contributions.append((global_idx_i, global_idx_j, A_e[idx, jdx]))
+
+    return local_contributions, force_contributions
+
+
+def contributions_determination_nonlinear(K_e: np.ndarray, f_e: np.ndarray, nVar: int, nodes_id: list[int], nodes_bc: list[dict],
+                                idxVar: int, Variable: str) -> tuple[list[tuple[int, int, float]], list[tuple[int, float]]]:
+
+    """Determines the contributions of an element to the global system, taking into account boundary conditions.
+    
+    Parameters
+    -----------
+    :param K_e: Element tangent matrix for the variable being processed.
+    :param f_e: Element residual vector for the variable being processed.
+    :param nVar: Total number of variables in the system.
+    :param nodes_id: List of node IDs for the current element.
+    :param nodes_bc: List of boundary condition dictionaries for each node.
+    :param idxVar: Index of the variable in the global system.
+    :param Variable: Name of the variable being assembled.
+
+    """
+
+    local_contributions = []
+
+    force_contributions = []
+
+    for idx, node_i in enumerate(nodes_id):
+        global_idx_i = idxVar + nVar * node_i
+        
+        if nodes_bc[idx] and nodes_bc[idx].get(Variable, {}).get('type') == 'Dirichlet':
+            local_contributions.append((global_idx_i, global_idx_i, 1))
+            force_contributions.append((global_idx_i, 0))
+        else:
+            force_contributions.append((global_idx_i, f_e[idx]))
+            for jdx, node_j in enumerate(nodes_id):
+                global_idx_j = idxVar + nVar * node_j
+                local_contributions.append((global_idx_i, global_idx_j, K_e[idx, jdx]))
 
     return local_contributions, force_contributions

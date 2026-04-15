@@ -37,7 +37,7 @@ Model1.physics.setDiffusivity('B', 0.5)
 Model1.physics.setDiffusivity('C', 2)
 
 # Neglecting convection term
-Model1.physics.Convection = False
+Model1.physics.Convection = True
 Model1.physics.Stab = None
 
 # Add Boundary condition
