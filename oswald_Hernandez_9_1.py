@@ -25,6 +25,8 @@ from Source.core import Model
 from Source.Material import material
 from Source.Physics.HeatTransfer import ht
 
+from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType
+
 # Defining problem dimension: 1D
 PD = 1 
 
@@ -32,8 +34,8 @@ PD = 1
 
 L = 0.04  # Length size of the domain [m]
 NoE = 40  # Number of Elements
-MeshType = "1DROD2P"  # Type of element
-shapeFunction = 'Linear' # Shape function for spatial discretization
+MeshType = ElementType.line  # Type of element
+shapeFunction = ShapeFunctionType.linear  # Shape function for spatial discretization
 
 Mesh1 = Mesh()
 Mesh1.Generate_Mesh(PD, L, NoE, MeshType)
@@ -64,7 +66,7 @@ Model1.physics.initField('T', 200)
 
 # Setting solver options
 
-solverOptions = {'Study': 'Steady state', 'Type': 'Linear', 'Method': 'Direct', 'Solver':'PARDISO'}
+solverOptions = {'Study': StudyType.steady_state, 'Type': ProblemType.linear, 'Method': SolverType.direct, 'Solver':'PARDISO'}
 
 Model1.solverConfiguration(**solverOptions)
 

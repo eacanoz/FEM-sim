@@ -4,6 +4,8 @@ import sympy as sp
 import numpy as np
 #import jax.jnp as jnp
 
+from Source.enums import ShapeFunctionType
+
 from numba import jit, prange, int64, float64
 # from Source.Pre_processing.Mesh import Mesh
 
@@ -11,16 +13,16 @@ e1, e2, e3 = sp.symbols('e1 e2 e3')
 
 map_dim = [e1, e2, e3]
 
-shape_mappings = {'Linear': [-1, 1],
-                  'Quadratic': [-1, 0, 1]}
+shape_mappings = {ShapeFunctionType.linear: [-1, 1],
+                  ShapeFunctionType.quadratic: [-1, 0, 1]}
 
-class BasisFunctions:
+class basisFunctions:
 
     def __init__(self, mesh, shape:str | None):
 
         if mesh != None and shape != None:
             self.dim = mesh.PD
-            self.set_basis_functions(shape)
+            self.set_basisFunctions(mesh, shape)
 
         else:
             self.N = sp.Matrix([])
@@ -28,7 +30,7 @@ class BasisFunctions:
         self.stabilized = False
 
 
-    def set_basis_functions(self, shape:str):
+    def set_basisFunctions(self, mesh, shape:str):
 
         """
         Set basis functions for the given mesh and shape.
@@ -50,11 +52,11 @@ class BasisFunctions:
         """
         
         if shape in shape_mappings:
-            self.construct_BF_vector(shape_mappings[shape])
-            self.calculate_BF_gradient(shape_mappings[shape])
+            self.constructBFVector(shape_mappings[shape])
+            self.bfGrad(shape_mappings[shape])
 
 
-    def construct_BF_vector(self, mapping):
+    def constructBFVector(self, mapping):
 
         Nj = []
 
@@ -79,7 +81,7 @@ class BasisFunctions:
         #self.N_func = sp.lambdify(map_dim[:self.dim], self.N, 'numpy')
         self.N_func = lambda x: shape_functions_1d(mapping, x)
 
-    def calculate_BF_gradient(self, mapping):
+    def bfGrad(self, mapping):
 
         self.gradN = self.N.jacobian(sp.Matrix(list(self.N.free_symbols)))
         #self.gradN_func = sp.lambdify(map_dim[:self.dim], self.gradN, 'numpy')
@@ -90,7 +92,7 @@ class BasisFunctions:
 
     # Add stabilization function
 
-    def add_stabilization(self, type:str, stab):
+    def addStab(self, type:str, stab):
 
         if not self.stabilized:
             if type == 'PG':

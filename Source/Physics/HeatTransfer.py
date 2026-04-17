@@ -8,7 +8,8 @@
 
 import numpy as np
 from Source.Physics.Physics import physics
-from Source.Primals.Scalar import ScalarField
+from Source.Primals.Scalar import scalarField
+from Source.enums import ElementType, ShapeFunctionType
 
 u = 1  # Velocity for convection term, hardcoded for now
 
@@ -21,7 +22,7 @@ class ht(physics):
     def __init__(self, model):
         super().__init__(model)
 
-        self.var = {'T': ScalarField('T', 'Temperature', 'K', 'Linear', model.mesh)}
+        self.var = {'T': scalarField('T', 'Temperature', 'K', ShapeFunctionType.linear, model.mesh)}
 
         self.Pe = self.mat.rho * self.mat.Cp * u / self.mat.k
 

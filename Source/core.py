@@ -15,8 +15,9 @@ from itertools import product
 from Source.Pre_processing.Mesh import Mesh, Element, Node
 from Source.Physics.Physics import physics
 from Source.Material import material
-from Source.Pre_processing.BasisFunctions import BasisFunctions
+from Source.Pre_processing.BasisFunctions import basisFunctions
 import Source.Simulation.Solvers as Solution
+from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType
 
 from progress.bar import Bar
 from joblib import Parallel, delayed
@@ -50,7 +51,7 @@ class Model(object):
         self._PD = dim  # Model dimension
         self.name = name  # Name of the model
         self.mtype = mtype  # Type of model
-        self.w = BasisFunctions(self._mesh, 'Linear') # Test Function
+        self.w = basisFunctions(self._mesh, ShapeFunctionType.linear) # Test Function
         self.mat = mat  # Material domain
         self.physics = psc(self)  # Model physics
 
@@ -124,34 +125,34 @@ class Model(object):
                 K_e = self.physics.getElementMatrix(element, Variable, solverOptions)
                 f_e = self.physics.getElementVector(element, Variable, solverOptions)
 
-                r, c, v, rhs = self._element_contributions(element, idxVar, Variable, K_e, f_e)
+                #r, c, v, rhs = self._element_contributions(element, idxVar, Variable, K_e, f_e)
 
-                rows_A.extend(r)
-                cols_A.extend(c)
-                values_A.extend(v)
+                #rows_A.extend(r)
+                #cols_A.extend(c)
+                #values_A.extend(v)
 
-                for gi, value in rhs:
-                    b[gi] = value  # Dirichlet sobrescribe
+                #for gi, value in rhs:
+                #    b[gi] = value  # Dirichlet sobrescribe
 
-                # g_indices = [idxVar + nVar * node.id for node in element.nodes]
+                g_indices = [idxVar + nVar * node.id for node in element.nodes]
 
-                # for i, g_i in enumerate(g_indices):
+                for i, g_i in enumerate(g_indices):
 
-                #     node_i = element.nodes[i]
-                #     bc = node_i.BC.get(Variable, {}) if node_i.BC else {}
+                    node_i = element.nodes[i]
+                    bc = node_i.BC.get(Variable, {}) if node_i.BC else {}
 
-                #     if bc.get('type') == 'Dirichlet':
-                #         rows_A.append(g_i)
-                #         cols_A.append(g_i)
-                #         values_A.append(1.0)
-                #         b[g_i] = bc.get('value', 0.0)
-                #     else:
-                #         b[g_i] += f_e[i]
+                    if bc.get('type') == 'Dirichlet':
+                        rows_A.append(g_i)
+                        cols_A.append(g_i)
+                        values_A.append(1.0)
+                        b[g_i] = bc.get('value', 0.0)
+                    else:
+                        b[g_i] += f_e[i]
 
-                #         for j, g_j in enumerate(g_indices):
-                #             rows_A.append(g_i)
-                #             cols_A.append(g_j)
-                #             values_A.append(K_e[i, j])
+                        for j, g_j in enumerate(g_indices):
+                            rows_A.append(g_i)
+                            cols_A.append(g_j)
+                            values_A.append(K_e[i, j])
 
 
         A = sc.sparse.coo_matrix((values_A, (rows_A, cols_A)), shape=(nDOF, nDOF)).tocsr()
@@ -359,7 +360,7 @@ class Model(object):
         return rows, cols, vals, rhs
 
 
-    def solverConfiguration(self, Study='Steady state', Type='Linear', Method = 'Direct', Solver = 'PARDISO', 
+    def solverConfiguration(self, Study=StudyType.steady_state, Type=ProblemType.linear, Method=SolverType.direct, Solver = 'PARDISO', 
                             timeDisc = 1, timeStep=0.05, totalTime = 3, prec = 'iLU Factorization'):
         
         """Configures the solver for the model based on the provided options."""

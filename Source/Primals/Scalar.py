@@ -2,15 +2,16 @@ import numpy as np
 import sympy as sp
 
 from Source.Pre_processing.Mesh import Mesh
-from Source.Pre_processing.BasisFunctions import BasisFunctions
+from Source.Pre_processing.BasisFunctions import basisFunctions
+from Source.enums import StudyType
 
-class ScalarField:
+class scalarField:
 
     def __init__(self, name:str=None, desc:str=None, unit:str=None, basisFunction:str=None, mesh:Mesh = None):
         self.name = name
         self.desc = desc
         self.unit = unit
-        self.bf = BasisFunctions(mesh, basisFunction)
+        self.bf = basisFunctions(mesh, basisFunction)
         self.gradN = self.bf.gradN
         self.gradN_func = self.bf.gradN_func
         self.values = np.ones(mesh.getNoN())
@@ -39,7 +40,7 @@ class ScalarField:
         self.timeValues = values
 
     def getFieldValues(self, study):
-        if study == 'Steady state':
+        if study == StudyType.steady_state:
             return self.values
-        elif study == 'Transient':
+        elif study == StudyType.transient:
             return self.timeValues

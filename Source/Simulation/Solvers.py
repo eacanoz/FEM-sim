@@ -15,6 +15,7 @@ from matplotlib.animation import FuncAnimation
 
 from Source.Simulation.DirectSolver import DirectSolver
 from Source.Simulation.IterativeSolver import IterativeSolver
+from Source.enums import SolverType, StudyType, ProblemType
 
 import time
 from progress.bar import Bar
@@ -74,7 +75,7 @@ class modelSolver():
  
         self.A, self.b = self.model.assembleGlobalSystem(self.solverOptions)
 
-        if self.model.solverOptions['Study'] == 'Transient':
+        if self.model.solverOptions['Study'] == StudyType.transient:
             self.M = self.model.assembleMassMatrix(self.solverOptions)
             
             self.M = self.M.tocsc()
@@ -97,9 +98,9 @@ class modelSolver():
 
         self.getFieldVariables()
 
-        if self.model.solverOptions['Study'] == 'Steady state':
+        if self.model.solverOptions['Study'] == StudyType.steady_state:
             self.steadyStateSolver()
-        elif self.model.solverOptions['Study'] == 'Transient':
+        elif self.model.solverOptions['Study'] == StudyType.transient:
             self.transientSolver()
 
         for fieldVar in self.fieldVariables:
@@ -112,9 +113,9 @@ class modelSolver():
 
         """Solves the steady-state problem for the model based on the configured solver options."""
 
-        if self.model.solverOptions['Type'] == 'Linear':
+        if self.model.solverOptions['Type'] == ProblemType.linear:
             self.linearSolver()
-        elif self.model.solverOptions['Type'] == 'Nonlinear':
+        elif self.model.solverOptions['Type'] == ProblemType.nonlinear:
             self.nonlinearSolver()
 
         #nls = self.nonlinearSolver
@@ -159,13 +160,13 @@ class modelSolver():
         self.construcProblem()
         self.getInitialField()
 
-        if self.model.solverOptions['Method'] == 'Direct':
+        if self.model.solverOptions['Method'] == SolverType.direct:
             solutionMethod = DirectSolver(self.A, self.b, self.x0, self.model.solverOptions)
 
             self.sol = solutionMethod.solve()
 
 
-        elif self.model.solverOptions['Method'] == 'Iterative':
+        elif self.model.solverOptions['Method'] == SolverType.iterative:
             solutionMethod = IterativeSolver(self.A, self.b, self.x0, self.model.solverOptions)
 
             self.sol = solutionMethod.solve()
@@ -306,11 +307,11 @@ class modelSolver():
 
             #Fi_1 = self.A.dot(self.x0) - self.b
 
-            if self.model.solverOptions['Method'] == 'Direct':
+            if self.model.solverOptions['Method'] == SolverType.direct:
 
                 dX = DirectSolver(J, -Fi_1, self.x0, self.model.solverOptions).solve()
 
-            elif self.model.solverOptions['Method'] == 'Iterative':
+            elif self.model.solverOptions['Method'] == SolverType.iterative:
 
                 dX = IterativeSolver(J, -Fi_1, self.x0, self.model.solverOptions).solve()         
 
@@ -326,12 +327,12 @@ class modelSolver():
             # estimating error for new iteration.
 
 
-                if self.model.solverOptions['Method'] == 'Direct':
+                if self.model.solverOptions['Method'] == SolverType.direct:
 
                     error = DirectSolver(J, Fi, dX, self.model.solverOptions).solve()      
 
 
-                elif self.model.solverOptions['Method'] == 'Iterative':
+                elif self.model.solverOptions['Method'] == SolverType.iterative:
 
                     error = IterativeSolver(J, Fi, dX, self.model.solverOptions).solve()
 

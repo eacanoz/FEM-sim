@@ -2,9 +2,11 @@
 
 import numpy as np
 
-from Source.Pre_processing.BasisFunctions import BasisFunctions
+from Source.Pre_processing.BasisFunctions import basisFunctions
 
 from numba.experimental import jitclass
+
+from Source.enums import ElementType
 
 
 class Mesh:
@@ -23,10 +25,10 @@ class Mesh:
         self.PD = PD
 
         if PD == 1:
-            if self.meshType == '1DROD2P':  # Cambiar luego
+            if self.meshType == ElementType.line:
                 self.EpP = 2
 
-            elif self.meshType == '1DROD3P':
+            elif self.meshType == ElementType.triangle:
                 self.EpP = 3
 
         self.NL = []
@@ -125,7 +127,7 @@ class Mesh:
 
     def setElementShapeFunction(self, shapeFunction):
 
-        meshBF = BasisFunctions(self, shapeFunction)
+        meshBF = basisFunctions(self, shapeFunction)
 
         for element in self.EL:
             element.setBasisFunction(meshBF)

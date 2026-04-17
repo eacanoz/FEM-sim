@@ -14,7 +14,7 @@ import math
 from scipy import integrate
 
 from Source.Physics.Physics import physics
-from Source.Primals.Scalar import ScalarField
+from Source.Primals.Scalar import scalarField
 
 from Source.Pre_processing.Mesh import Mesh, Element, Node
 
@@ -41,7 +41,7 @@ class mt(physics):
 
     def setChemSpecies(self, chemSpecies, name):
 
-        self.var[chemSpecies] = ScalarField(chemSpecies, name, 'mol/m3', 'Linear', self.modelRef.mesh)
+        self.var[chemSpecies] = scalarField(chemSpecies, name, 'mol/m3', 'Linear', self.modelRef.mesh)
 
     def initializeMatrices(self, element, Variable):
 
