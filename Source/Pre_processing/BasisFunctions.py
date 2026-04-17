@@ -2,7 +2,7 @@
 
 import sympy as sp
 import numpy as np
-import jax.jnp as jnp
+#import jax.jnp as jnp
 
 from numba import jit, prange, int64, float64
 # from Source.Pre_processing.Mesh import Mesh
@@ -14,13 +14,13 @@ map_dim = [e1, e2, e3]
 shape_mappings = {'Linear': [-1, 1],
                   'Quadratic': [-1, 0, 1]}
 
-class basisFunctions:
+class BasisFunctions:
 
     def __init__(self, mesh, shape:str | None):
 
         if mesh != None and shape != None:
             self.dim = mesh.PD
-            self.set_basisFunctions(mesh, shape)
+            self.set_basis_functions(shape)
 
         else:
             self.N = sp.Matrix([])
@@ -28,7 +28,7 @@ class basisFunctions:
         self.stabilized = False
 
 
-    def set_basisFunctions(self, mesh, shape:str):
+    def set_basis_functions(self, shape:str):
 
         """
         Set basis functions for the given mesh and shape.
@@ -50,11 +50,11 @@ class basisFunctions:
         """
         
         if shape in shape_mappings:
-            self.constructBFVector(shape_mappings[shape])
-            self.bfGrad(shape_mappings[shape])
+            self.construct_BF_vector(shape_mappings[shape])
+            self.calculate_BF_gradient(shape_mappings[shape])
 
 
-    def constructBFVector(self, mapping):
+    def construct_BF_vector(self, mapping):
 
         Nj = []
 
@@ -79,7 +79,7 @@ class basisFunctions:
         #self.N_func = sp.lambdify(map_dim[:self.dim], self.N, 'numpy')
         self.N_func = lambda x: shape_functions_1d(mapping, x)
 
-    def bfGrad(self, mapping):
+    def calculate_BF_gradient(self, mapping):
 
         self.gradN = self.N.jacobian(sp.Matrix(list(self.N.free_symbols)))
         #self.gradN_func = sp.lambdify(map_dim[:self.dim], self.gradN, 'numpy')
@@ -90,7 +90,7 @@ class basisFunctions:
 
     # Add stabilization function
 
-    def addStab(self, type:str, stab):
+    def add_stabilization(self, type:str, stab):
 
         if not self.stabilized:
             if type == 'PG':

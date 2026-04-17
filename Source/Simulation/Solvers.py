@@ -268,88 +268,102 @@ class modelSolver():
         self.tolerance = 1
         self.numbIterations = 0
 
+        lamb_min = 0.05
+        lamb_max = 0.9
+
+        error_1 = 100
+
+        lamb = 0.8
+
         # nLS = self.createNonlinearSystem
 
         # self.jac = Jacobian(nLS)
 
-        while (self.tolerance > 1e-4 or self.numbIterations < 200):
-
-            lamb = 0.8
+        while (self.tolerance > 1e-4 and self.numbIterations < 200):
 
             self.numbIterations += 1
 
+            if lamb == lamb_min:
+                lamb = 0.8
 
             print(f'----- Iteration number: {self.numbIterations} -----')
             #self.construcProblem()
             #self.getInitialField()
 
-            self.assembleNonlinearSystem()
 
+            #if self.numbIterations == 1 or self.numbIterations % 3 == 0:
+            #    self.assembleNonlinearSystem()
+            #    J = self.K
+            #    Fi_1 = self.f
+
+            self.assembleNonlinearSystem()
             J = self.K
             Fi_1 = self.f
+
+            #J = self.jac(self.x0)
 
             #J = self.Jacobian()
 
             #Fi_1 = self.A.dot(self.x0) - self.b
 
             if self.model.solverOptions['Method'] == 'Direct':
-                # solutionMethod = DirectSolver(self.spJacobian(self.x0), (-nLS(self.x0)), self.x0, self.model.solverOptions)
-
-                # dX = solutionMethod.solve()
 
                 dX = DirectSolver(J, -Fi_1, self.x0, self.model.solverOptions).solve()
 
             elif self.model.solverOptions['Method'] == 'Iterative':
-                # solutionMethod = IterativeSolver(self.spJacobian(self.x0), (-nLS(self.x0)), self.x0, self.model.solverOptions)
-
-                # dX = solutionMethod.solve()   
 
                 dX = IterativeSolver(J, -Fi_1, self.x0, self.model.solverOptions).solve()         
 
             # self.linearSolver()
 
-            xi = self.x0 + lamb * dX
+            
+            while (True):
+
+                xi = self.x0 + lamb * dX
+
+                Fi = self.createNonlinearSystem(xi)
 
             # estimating error for new iteration.
 
-            #self.model.physics.var['T'].updateField(Ui)
-            # self.updateSolution(Ui)
 
-            # self.construcProblem()
+                if self.model.solverOptions['Method'] == 'Direct':
 
-            Fi = self.createNonlinearSystem(xi)
-
-            if self.model.solverOptions['Method'] == 'Direct':
-                # solutionMethod = DirectSolver(self.spJacobian(self.x0), (-nLS(Ui)), dX, self.model.solverOptions)
-
-                # error = solutionMethod.solve()
-
-                error = DirectSolver(J, Fi, self.x0, self.model.solverOptions).solve()      
+                    error = DirectSolver(J, Fi, dX, self.model.solverOptions).solve()      
 
 
-            elif self.model.solverOptions['Method'] == 'Iterative':
-                # solutionMethod = IterativeSolver(self.spJacobian(self.x0), (-nLS(Ui)), dX, self.model.solverOptions)
+                elif self.model.solverOptions['Method'] == 'Iterative':
 
-                # error = solutionMethod.solve()
+                    error = IterativeSolver(J, Fi, dX, self.model.solverOptions).solve()
 
-                error = IterativeSolver(J, Fi, self.x0, self.model.solverOptions).solve()           
+                
+                if np.linalg.norm(error) < error_1:
+
+                    lamb = min(lamb * 1.2, lamb_max)
+
+                    error_1 = np.linalg.norm(error)
+
+                    break
+
+                else:
+                    lamb = max(lamb * 0.5, lamb_min)
+
+                    error_1 = np.linalg.norm(error)
+
+                    if lamb == lamb_min:
+                        break
 
             #self.tolerance = np.linalg.norm(self.sol - self.x0)
-            self.tolerance = np.linalg.norm(error) 
+            #self.tolerance = np.linalg.norm(Fi) 
+
+            self.tolerance = np.linalg.norm(Fi) / np.linalg.norm(Fi_1)
+
+            self.updateSolution(xi)
+
+            self.x0 = xi
 
             print(f'\nTolerance for iteration number {self.numbIterations}: {self.tolerance}\n')
 
-            if self.tolerance < 1e-4 or self.numbIterations > 100:
-                break
-            else:
-                #alpha = 0.7
-                #xi = self.x0 + alpha *(self.sol - self.x0)
-
-
-
-                #self.model.physics.var['T'].updateField(xi) # Fix -- Hardcoded
-                self.updateSolution(xi)
-                # x0 = self.sol
+           
 
         return xi
 

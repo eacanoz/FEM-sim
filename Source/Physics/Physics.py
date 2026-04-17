@@ -14,10 +14,10 @@ import math
 
 from numdifftools import Jacobian
 
-from Source.Pre_processing.BasisFunctions import basisFunctions
+from Source.Pre_processing.BasisFunctions import BasisFunctions
 from Source.Pre_processing.Mesh import Mesh, Element, Node
 from Source.Material import material
-from Source.Primals.Scalar import scalarField
+from Source.Primals.Scalar import ScalarField
 from Source.Primals.Vector import vectorField
 
 # from Source.core import Model
@@ -31,7 +31,7 @@ class physics:
     def __init__(self, model):
 
         self.modelRef = model
-        self.w: basisFunctions = model.w
+        self.w: BasisFunctions = model.w
         self.mat = model.mat
 
         self.var = {}
@@ -105,15 +105,30 @@ class physics:
 
     def getElementTangentMatrix(self, element, Variable, solverOptions=None):
         
-        func1 = lambda x: self.aux_getTangentMatrix(element, Variable, x, solverOptions)
+        #func1 = lambda x: self.aux_getTangentMatrix(element, Variable, x, solverOptions)
 
         x_e = self.var[Variable].getElementValues(element)
+        n = x_e.size
+        K_e = np.zeros((n, n))
+        f0 = self.aux_getTangentMatrix(element, Variable, x_e, solverOptions)
 
-        return Jacobian(func1)(x_e)
+        eps = 1e-8
+
+        for i in range(n):
+            x_e_perturbed = np.copy(x_e)
+            x_e_perturbed[i] += eps
+
+            f1 = self.aux_getTangentMatrix(element, Variable, x_e_perturbed, solverOptions)
+
+            K_e[:, i] = (f1 - f0) / eps
+
+        #return Jacobian(func1)(x_e)
+
+        return K_e
 
 
 
-    def laplacian(self, const: float, var: scalarField, element: Element):
+    def laplacian(self, const: float, var: ScalarField, element: Element):
         """
         Define the element matrix from the weak form for the Laplacian term.
 
@@ -139,7 +154,7 @@ class physics:
 
         return y
 
-    def Grad(self, var: scalarField, element: Element):
+    def Grad(self, var: ScalarField, element: Element):
 
         """
         Define de element matrix from the weak form for the Gradient term.
@@ -151,7 +166,7 @@ class physics:
         :return: Matrix form of the Gradient term
         """        
         if self.Stab == 'PG':
-            self.w.addStab(self.Stab, self.stabilization(element))
+            self.w.add_stabilization(self.Stab, self.stabilization(element))
 
 
         diff_Grad = (self.w.N) * \
@@ -162,7 +177,7 @@ class physics:
 
         return np.array(Grad).astype(np.float64)
 
-    def div(self, var: scalarField, element: Element, const, Vel):
+    def div(self, var: ScalarField, element: Element, const, Vel):
 
         """
         Define de element matrix from the weak form for the Divergence term.
@@ -175,7 +190,7 @@ class physics:
         """
 
         if self.Stab == 'PG':
-            self.w.addStab(self.Stab, self.stabilization(element))
+            self.w.add_stabilization(self.Stab, self.stabilization(element))
 
 
         diff_Div = lambda *args: const * self.w.N_func(*args)* \
@@ -186,7 +201,7 @@ class physics:
 
         return y
 
-    def mass(self, var: scalarField, element: Element, constM):
+    def mass(self, var: ScalarField, element: Element, constM):
 
         diff_M = constM * (self.w.N) * (var.bf.N).transpose() * element.Jacobian().det()
 

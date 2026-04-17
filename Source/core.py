@@ -15,7 +15,7 @@ from itertools import product
 from Source.Pre_processing.Mesh import Mesh, Element, Node
 from Source.Physics.Physics import physics
 from Source.Material import material
-from Source.Pre_processing.BasisFunctions import basisFunctions
+from Source.Pre_processing.BasisFunctions import BasisFunctions
 import Source.Simulation.Solvers as Solution
 
 from progress.bar import Bar
@@ -50,7 +50,7 @@ class Model(object):
         self._PD = dim  # Model dimension
         self.name = name  # Name of the model
         self.mtype = mtype  # Type of model
-        self.w = basisFunctions(self._mesh, 'Linear') # Test Function
+        self.w = BasisFunctions(self._mesh, 'Linear') # Test Function
         self.mat = mat  # Material domain
         self.physics = psc(self)  # Model physics
 
@@ -110,37 +110,53 @@ class Model(object):
         nVar = self.physics.getNumOfVar()
         nNodes = self._mesh.getNoN()
         nDOF = nNodes*nVar
-        results_A = []
-        results_b = []
 
-        A = sc.sparse.dok_matrix((nDOF, nDOF))
+        # Preallocate lists for local contributions
+        rows_A = []
+        cols_A = []
+        values_A = []
+
+
         b = np.zeros(nDOF)
 
-        def process_element_parallel(element: Element, idxVar: int, Variable: str):
-            A_e = self.physics.getElementMatrix(element, Variable, solverOptions)
-            b_e = self.physics.getElementVector(element, Variable, solverOptions)
-            nodes_id = [node.id for node in element.nodes]
-            nodes_bc = [node.BC for node in element.nodes]
-
-            return contributions_determination(A_e, b_e, nVar, nodes_id, nodes_bc, idxVar, Variable)
-
-
         for idxVar, Variable in enumerate(Var):
-            #results.extend(sum([process_element(element, idxVar, Variable) for element in self._mesh.EL], []))
-            results_A.extend(sum([process_element_parallel(element, idxVar, Variable)[0] for element in self._mesh.EL], []))
-            results_b.extend(sum([process_element_parallel(element, idxVar, Variable)[1] for element in self._mesh.EL], []))
+            for element in self._mesh.EL:
+                K_e = self.physics.getElementMatrix(element, Variable, solverOptions)
+                f_e = self.physics.getElementVector(element, Variable, solverOptions)
 
-        # Combine local contributions into the global system
-        for local_contributions in results_A:
-           
-            global_idx_i, global_idx_j, value = local_contributions
-            A[global_idx_i, global_idx_j] += value
+                r, c, v, rhs = self._element_contributions(element, idxVar, Variable, K_e, f_e)
 
-        for force_contributions in results_b:
-            global_idx_i, value = force_contributions
-            b[global_idx_i] += value
+                rows_A.extend(r)
+                cols_A.extend(c)
+                values_A.extend(v)
 
-        return A.tocsr(), b
+                for gi, value in rhs:
+                    b[gi] = value  # Dirichlet sobrescribe
+
+                # g_indices = [idxVar + nVar * node.id for node in element.nodes]
+
+                # for i, g_i in enumerate(g_indices):
+
+                #     node_i = element.nodes[i]
+                #     bc = node_i.BC.get(Variable, {}) if node_i.BC else {}
+
+                #     if bc.get('type') == 'Dirichlet':
+                #         rows_A.append(g_i)
+                #         cols_A.append(g_i)
+                #         values_A.append(1.0)
+                #         b[g_i] = bc.get('value', 0.0)
+                #     else:
+                #         b[g_i] += f_e[i]
+
+                #         for j, g_j in enumerate(g_indices):
+                #             rows_A.append(g_i)
+                #             cols_A.append(g_j)
+                #             values_A.append(K_e[i, j])
+
+
+        A = sc.sparse.coo_matrix((values_A, (rows_A, cols_A)), shape=(nDOF, nDOF)).tocsr()
+
+        return A, b
 
     def assembleResidualVector(self, solverOptions = None):
 
@@ -155,11 +171,9 @@ class Model(object):
         Var = self.physics.getVariables()
         nVar = self.physics.getNumOfVar()
         nNodes = self._mesh.getNoN()
-        # nElements = self._mesh.getNoE()
+   
         nDOF = nNodes*nVar
         results = []
-        # idxBC = []
-        # bCB = []
         
 
         F = np.zeros(nDOF)
@@ -209,11 +223,16 @@ class Model(object):
         nVar = self.physics.getNumOfVar()
         nNodes = self._mesh.getNoN()
         nDOF = nNodes*nVar
-        results_K = []
-        results_F = []      
+        #results_K = []
+        #results_F = []      
 
 
-        K = sc.sparse.dok_matrix((nDOF, nDOF))
+        #K = sc.sparse.dok_matrix((nDOF, nDOF))
+
+        rows_K = []
+        cols_K = []
+        values_K = []
+
         F = np.zeros(nDOF)
 
         def process_element_parallel(element: Element, idxVar: int, Variable: str):
@@ -226,20 +245,59 @@ class Model(object):
         
         for idxVar, Variable in enumerate(Var):
             #results.extend(sum([process_element(element, idxVar, Variable) for element in self._mesh.EL], []))
-            results_K.extend(sum([process_element_parallel(element, idxVar, Variable)[0] for element in self._mesh.EL], []))
-            results_F.extend(sum([process_element_parallel(element, idxVar, Variable)[1] for element in self._mesh.EL], []))
+            #results_K.extend(sum([process_element_parallel(element, idxVar, Variable)[0] for element in self._mesh.EL], []))
+            #results_F.extend(sum([process_element_parallel(element, idxVar, Variable)[1] for element in self._mesh.EL], []))
 
-        # Combine local contributions into the global system
-        for local_contributions in results_K:
+            for element in self._mesh.EL:
+                K_e = self.physics.getElementTangentMatrix(element, Variable, solverOptions)
+                f_e = self.physics.getResidualVector(element, Variable, solverOptions)
+
+                #r, c, v, rhs = self._element_contributions(element, idxVar, Variable, K_e, f_e)
+
+                #rows_K.extend(r)
+                #cols_K.extend(c)
+                #values_K.extend(v)
+
+                #for gi, value in rhs:
+                #    if self._get_dirichlet_value(element.nodes[gi], Variable) is None:
+                #        F[gi] += value
+
+                # Indices globales para ensamblaje
+                g_indices = [idxVar + nVar * node.id for node in element.nodes]
+
+                for i, g_i in enumerate(g_indices):
+
+                    node_i = element.nodes[i]
+                    bc = node_i.BC.get(Variable, {}) if node_i.BC else {}
+
+                    if bc.get('type') == 'Dirichlet':
+
+            
+                        rows_K.append(g_i)
+                        cols_K.append(g_i)
+                        values_K.append(1.0)
+                        #F[g_i] = bc.get('value', 0.0)
+                    else:
+                        F[g_i] += f_e[i]
+
+                        for j, g_j in enumerate(g_indices):
+                            rows_K.append(g_i)
+                            cols_K.append(g_j)
+                            values_K.append(K_e[i, j])
+
+        # # Combine local contributions into the global system
+        # for local_contributions in results_K:
            
-            global_idx_i, global_idx_j, value = local_contributions
-            K[global_idx_i, global_idx_j] += value
+        #     global_idx_i, global_idx_j, value = local_contributions
+        #     K[global_idx_i, global_idx_j] += value
 
-        for force_contributions in results_F:
-            global_idx_i, value = force_contributions
-            F[global_idx_i] += value
+        # for force_contributions in results_F:
+        #     global_idx_i, value = force_contributions
+        #     F[global_idx_i] += value
 
-        return K.tocsr(), F
+        K = sc.sparse.coo_matrix((values_K, (rows_K, cols_K)), shape=(nDOF, nDOF)).tocsr()
+
+        return K, F
 
     def assembleMassMatrix(self, solverOptions = None):
 
@@ -265,6 +323,41 @@ class Model(object):
                     M[node_i.id, node_j.id] += M_e[idx, jdx]
 
         return M
+    
+    def _element_global_dof_indices(self, element: Element, idxVar: int, nVar: int) -> list[int]:
+        return [idxVar + nVar * node.id for node in element.nodes]
+    
+    def _get_dirichlet_value(self, node: Node, variable: str):
+        if not node.BC:
+            return None
+        bc = node.BC.get(variable)
+        if bc and bc.get('type') == 'Dirichlet':
+            return bc.get('value', 0.0)
+        return None
+
+    def _element_contributions(self, element, idxVar, Variable, K_e, f_e):
+        rows = []
+        cols = []
+        vals = []
+        rhs = []
+        g_indices = self._element_global_dof_indices(element, idxVar, self.physics.getNumOfVar())
+
+        for i, g_i in enumerate(g_indices):
+            value_dirichlet = self._get_dirichlet_value(element.nodes[i], Variable)
+            if value_dirichlet is not None:
+                rows.append(g_i)
+                cols.append(g_i)
+                vals.append(1.0)
+                rhs.append((g_i, value_dirichlet))
+            else:
+                rhs.append((g_i, f_e[i]))
+                for j, g_j in enumerate(g_indices):
+                    rows.append(g_i)
+                    cols.append(g_j)
+                    vals.append(K_e[i, j])
+
+        return rows, cols, vals, rhs
+
 
     def solverConfiguration(self, Study='Steady state', Type='Linear', Method = 'Direct', Solver = 'PARDISO', 
                             timeDisc = 1, timeStep=0.05, totalTime = 3, prec = 'iLU Factorization'):

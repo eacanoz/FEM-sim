@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from Source.Pre_processing.BasisFunctions import basisFunctions
+from Source.Pre_processing.BasisFunctions import BasisFunctions
 
 from numba.experimental import jitclass
 
@@ -125,7 +125,7 @@ class Mesh:
 
     def setElementShapeFunction(self, shapeFunction):
 
-        meshBF = basisFunctions(self, shapeFunction)
+        meshBF = BasisFunctions(self, shapeFunction)
 
         for element in self.EL:
             element.setBasisFunction(meshBF)
