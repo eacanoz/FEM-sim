@@ -41,28 +41,32 @@ Mesh1 = Mesh()
 Mesh1.Generate_Mesh(PD, L, NoE, MeshType)
 Mesh1.setElementShapeFunction(shapeFunction)
 
+Mesh1.defineBoundary('inlet', 0)
+Mesh1.defineBoundary('outlet', NoE) # Hardcoded
+
 Mesh1.checkBoundaries()
 
+
 # Defining material properties
-Mat1 = material('Polymer', k = 0.2, miu=1, rho=1, Cp= 1)
+Mat1 = material('Polymer', k = 0.2, miu=1.0, rho=1.0, Cp= 1.0)
 
 # Defining main model
 Model1 = Model(name='Couette_device', mtype=None, dim=PD, mesh=Mesh1, mat=Mat1, psc=ht)
 
 # Adding source term (Q_viscous_heating)
-Model1.physics.source = 25000
+Model1.physics.source = 25000.0
 
 # Neglecting convection term
 Model1.physics.Convection = False
 Model1.physics.Stab = None
 
 # Adding boundary conditions
-Model1.physics.addBC_Temperature(id=0, T=200)
-Model1.physics.addBC_HeatFlux(id=5, q_flux = 0)
+Model1.physics.addBC_Temperature(id=0, T=200.0)
+Model1.physics.addBC_HeatFlux(id=Mesh1.boundaries['outlet'], q_flux = 0.0)
 
 
 # Initialize field
-Model1.physics.initField('T', 200)
+Model1.physics.initField('T', 200.0)
 
 # Setting solver options
 

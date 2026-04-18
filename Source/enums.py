@@ -22,3 +22,14 @@ class ProblemType(Enum):
     linear = 'Linear'
     nonlinear = 'Nonlinear'
 
+
+class DirectSolvers(Enum):
+    PARDISO = 'PARDISO'
+    UMFPACK = 'UMFPACK'
+    MUMPS = 'MUMPS'
+    SuperLU = 'SuperLU'
+
+class IterativeSolvers(Enum):
+    CG = 'Conjugate Gradient'
+    BiCGSTAB = 'Bi-Conjugate Gradient Stabilized'
+    GMRES = 'Generalized Minimal Residual'

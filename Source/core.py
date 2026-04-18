@@ -52,6 +52,7 @@ class Model(object):
         self.name = name  # Name of the model
         self.mtype = mtype  # Type of model
         self.w = basisFunctions(self._mesh, ShapeFunctionType.linear) # Test Function
+        self.w_shape = ShapeFunctionType.linear # Test Function
         self.mat = mat  # Material domain
         self.physics = psc(self)  # Model physics
 
@@ -286,15 +287,6 @@ class Model(object):
                             cols_K.append(g_j)
                             values_K.append(K_e[i, j])
 
-        # # Combine local contributions into the global system
-        # for local_contributions in results_K:
-           
-        #     global_idx_i, global_idx_j, value = local_contributions
-        #     K[global_idx_i, global_idx_j] += value
-
-        # for force_contributions in results_F:
-        #     global_idx_i, value = force_contributions
-        #     F[global_idx_i] += value
 
         K = sc.sparse.coo_matrix((values_K, (rows_K, cols_K)), shape=(nDOF, nDOF)).tocsr()
 

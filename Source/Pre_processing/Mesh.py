@@ -8,6 +8,9 @@ from numba.experimental import jitclass
 
 from Source.enums import ElementType
 
+import jax
+import jax.numpy as jnp
+
 
 class Mesh:
 
@@ -131,6 +134,7 @@ class Mesh:
 
         for element in self.EL:
             element.setBasisFunction(meshBF)
+            element.set_basis_function_type(shapeFunction)
 
     def defineBoundary(self, name, nodes_id):
 
@@ -157,7 +161,6 @@ class Mesh:
 
         return boundaries
 
-    
 
 class Node:
 
@@ -214,20 +217,7 @@ class Element:
     
     def setBasisFunction(self, basisFunction):
         self.sF = basisFunction
-        self.setMapping()
-        self.setJacobian()
-    
-    def setMapping(self):
 
-        self.xmap_func = lambda x: np.dot(self.sF.N_func(x), np.array(self.getCoor()))
 
-    def setJacobian(self):
-
-        self.J_func = lambda x: np.dot(self.sF.gradN_func(x), np.array(self.getCoor()))
-
-        self.Jdet_func = lambda x: self.J_func(x) if self.J_func(x).shape == (1,) else np.linalg.det(self.J_func(x)) 
-    
-        self.Jinv_func = lambda x: np.array([1.0 / self.Jdet_func(x)]) if self.J_func(x).shape == (1,) else np.linalg.det(self.J_func(x)) 
-
-        
-    
+    def set_basis_function_type(self, basisFunction: str):
+        self.shape = basisFunction

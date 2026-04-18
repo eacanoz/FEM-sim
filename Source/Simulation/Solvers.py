@@ -6,7 +6,6 @@ import scipy.linalg as scla
 
 from scipy.integrate import solve_ivp
 from scipy.optimize import fsolve
-from numdifftools import Jacobian
 
 from numba import jit, njit, prange, guvectorize, vectorize, float64
 
