@@ -176,7 +176,12 @@ class Model(object):
    
         nDOF = nNodes*nVar
         results = []
+
+        penalty = 1e15
         
+        #rows_F = []
+        #values_F = []
+
 
         F = np.zeros(nDOF)
 
@@ -187,16 +192,23 @@ class Model(object):
             Process a single element to compute its contributions to the global system.
             """
             F_e = self.physics.getResidualVector(element, Variable, solverOptions)
+            x_e = self.physics.get_variable_element_values(element, Variable)
             local_contributions = []
 
             for idx, node_i in enumerate(element.nodes):
                 global_idx_i = idxVar + nVar * node_i.id
 
                 if node_i.BC and node_i.BC[Variable]['type'] == 'Dirichlet':
-                    local_contributions.append((global_idx_i, 0))
+
+                    #rows_F.append(global_idx_i)
+                    #values_F.append(penalty*(x_e[idx] - node_i.BC.get('value', 0.0)))
+
+                    local_contributions.append((global_idx_i, penalty*(x_e[idx] - node_i.BC.get('value', 0.0))))
                     
                 else:
                     local_contributions.append((global_idx_i, F_e[idx]))
+                    #rows_F.append(global_idx_i)
+                    #values_F.append(F_e[idx])
                     
             return local_contributions
 
@@ -228,6 +240,7 @@ class Model(object):
         #results_K = []
         #results_F = []      
 
+        penalty = 1e15
 
         #K = sc.sparse.dok_matrix((nDOF, nDOF))
 
@@ -254,6 +267,7 @@ class Model(object):
                 K_e = self.physics.getElementTangentMatrix(element, Variable, solverOptions)
                 f_e = self.physics.getResidualVector(element, Variable, solverOptions)
 
+                x_e = self.physics.get_variable_element_values(element, Variable)
                 #r, c, v, rhs = self._element_contributions(element, idxVar, Variable, K_e, f_e)
 
                 #rows_K.extend(r)
@@ -277,7 +291,8 @@ class Model(object):
             
                         rows_K.append(g_i)
                         cols_K.append(g_i)
-                        values_K.append(1.0)
+                        values_K.append(K_e[i, i]+penalty)
+                        F[g_i] = penalty*(x_e[i] - bc.get('value', 0.0))
                         #F[g_i] = bc.get('value', 0.0)
                     else:
                         F[g_i] += f_e[i]

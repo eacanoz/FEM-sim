@@ -248,11 +248,11 @@ def _calc_stabilization_term(w_shape:str,
     
     return y
 
-@jit(static_argnums=(0,1,))
+@jit(static_argnums=(0,1,3))
 def _calc_b_matrix(w_shape:str, 
                    element_shape:str,
                    id: list[int],
-                   h_c: list[Callable[[jnp.ndarray], float]],
+                   h_c: Callable[[jnp.ndarray], float],
                    element_coors: list[float] | np.ndarray, # Ojala recibir un único lambda que ya tenga los otros valores y solo depende del valor de la variable en el nodo, para evitar tener que pasar muchos parámetros a esta función
                    var_values: float | np.ndarray):
     
@@ -271,7 +271,7 @@ def _calc_b_matrix(w_shape:str,
     if id.size > 0:
         for i in id:
 
-            h_c_calc = [h(var_values[i]) for h in h_c]
+            h_c_calc = h_c(var_values[i])
 
             y = y.at[i, i].set(h_c_calc)
     
@@ -300,7 +300,7 @@ def _calc_g_vector(w_shape:str,
     return y
                    
 
-@jit(static_argnums=(0,1,2,3,4,6,7,))
+@jit(static_argnums=(0,1,2,3,4,5,6,7,))
 def _calc_element_residual_vector(w_shape:str, 
                         var_shape:str, 
                         element_shape:str,
@@ -317,22 +317,22 @@ def _calc_element_residual_vector(w_shape:str,
     
 
     #M = _calc_mass_term(w_shape, var_shape, element_shape, const_C, element_coors, var_values) # To fix: This is currently not used, but it could be used in a transient problem. Next updates will show how to use it in a transient problem.
-    C = _calc_divergence_term(w_shape, var_shape, element_shape, element_coors, const=const_C, Vel=Vel)
-    K = _calc_laplacian_term(w_shape, var_shape, element_shape, element_coors, const=const_K)
+    C = _calc_divergence_term(w_shape, var_shape, element_shape, const_C, element_coors, var_values, Vel)
+    K = _calc_laplacian_term(w_shape, var_shape, element_shape, const_K, element_coors, var_values)
     B = _calc_b_matrix(w_shape, element_shape, ids_for_B, const_B, element_coors, var_values)  # To fix: This is currently only for a single node with Newton BC. Next updates will show the code for multiple nodes with Newton BC.
     
     F = _calc_force_vector(w_shape, element_shape, const_F, element_coors, var_values)
     G = _calc_g_vector(w_shape, element_shape, ids_for_G, const_G, element_coors, var_values) # To fix: This is currently only for a single node with Newton BC. Next updates will show the code for multiple nodes with Newton BC.
 
     A_e = C + K + B
-    b_e = F - G
+    b_e = (F - G).flatten()
     
     R = jnp.dot(A_e, var_values) - b_e  
 
     return R
 
 
-_calc_element_tangent_matrix = jax.jit(jax.jacfwd(_calc_element_residual_vector, argnums=11), static_argnums= (0,1,2,3,4,6,7,))
+_calc_element_tangent_matrix = jax.jit(jax.jacfwd(_calc_element_residual_vector, argnums=11), static_argnums= (0,1,2,3,4,5,6,7,))
                        
 #stab= lambda *args: alpha * element.getLength() / 2 * self.w.gradN_func(*args) * element.Jinv_func(*args)
 
@@ -433,6 +433,10 @@ class physics:
                         jax_coors, x_e, self.vel)
 
         return np.asarray(R_e)
+    
+    def get_variable_element_values(self, element, Variable):
+
+        return self.var[Variable].getElementValues(element)
     
     def aux_getTangentMatrix(self, element, Variable, x_values, solverOptions=None):
 
@@ -609,6 +613,8 @@ class physics:
         ids = []
         h_c_funcs = []
 
+        h_c = lambda n: 0.0
+
         var_values = self.var[Variable].getElementValues(element)
 
         for i, node in enumerate(element.nodes):
@@ -622,7 +628,7 @@ class physics:
                 ids.append(i)
                 h_c_funcs.append(h_c)
 
-        B += _calc_b_matrix(self.w_shape, element.shape, ids, h_c_funcs, jax_coors, var_values)
+        B += _calc_b_matrix(self.w_shape, element.shape, ids, h_c, jax_coors, var_values)
 
 
         return B
@@ -703,6 +709,9 @@ class physics:
         ids = []
         h_c_funcs = []
 
+        h_c = lambda n: 0.0  # Default value for h_c, can be overwritten if there are Newton BCs
+
+
         for i, node in enumerate(element.nodes):
 
             if node.BC and node.BC[Variable]['type'] == 'Newton':
@@ -712,7 +721,7 @@ class physics:
                 ids.append(i)
                 h_c_funcs.append(h_c)
 
-        return ids, h_c_funcs
+        return ids, h_c
     
     def check_boundary_conditions_G(self, element, Variable):
         ids = []

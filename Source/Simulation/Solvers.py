@@ -196,14 +196,13 @@ class modelSolver():
         """Creates the nonlinear system of equations for the model based on the current solution vector x.
         It updates the solution in the model, constructs the global system, and returns the residual vector for the nonlinear problem."""
 
+        x_init = self.x0.copy()
+
         self.updateSolution(x)
-        # F = self.model.assembleResidualVector(self.solverOptions)
+        F = self.model.assembleResidualVector(self.solverOptions)
 
-        self.construcProblem()
-
-        F_a = self.A.dot(x) - self.b
-
-        return F_a
+        self.updateSolution(x_init)
+        return F
 
     def callBackFunc(self, xk):
 
@@ -419,61 +418,6 @@ class modelSolver():
 # Converting self.x0 to np.array that append different values from self.model.physics.var[fieldVar].values
 # Fix Jacobian matrix
 
-
-    def Jacobian(self, eps=1e-6):
-        """
-        Compute the Jacobian matrix in a vectorized way. This method perturbs all variables simultaneously and computes the resulting changes in the residual 
-        vector to construct the Jacobian matrix efficiently.
-
-        Parameters:
-        eps (float): Perturbation size for finite differences.
-
-        Returns:
-        scipy.sparse.csr_matrix: The Jacobian matrix.
-        """
-        Ai_1 = self.A
-        bi_1 = self.b
-
-        x0 = self.x0.copy()
-
-        # Compute the initial residual
-        Fi_1 = Ai_1.dot(x0) - bi_1
-
-        # Create a perturbation matrix
-        perturbation = np.eye(len(x0)) * eps
-
-        # Perturb all variables simultaneously
-        perturbed_x = x0[:, None] + perturbation
-
-        ta = time.time()
-        vfunc = np.vectorize(self.createNonlinearSystem, signature='(n)->(m)') 
-        tb = time.time() - ta
-        print(f'np.vectorize finished on {round(tb, 3)} seconds')
-        #vfunc = self.createNonlinearSystem
-        #vfunc = np.frompyfunc(self.createNonlinearSystem, 1, 1) # Alternative approach using frompyfunc
-
-        # Compute the perturbed residuals in a vectorized way
-        ta = time.time()
-        Fi = vfunc(perturbed_x)
-        tb = time.time() - ta
-        print(f'apply_along_axis finished on {round(tb, 3)} seconds')
-
-
-        # Compute the Jacobian matrix using finite differences
-        J = (Fi - Fi_1[:, None]) / eps
-
-        # Convert to sparse format
-        J_sparse = sc.sparse.csr_matrix(J)
-
-        self.A = Ai_1
-        self.b = bi_1
-
-        return J_sparse
-
-    @tictoc
-    def spJacobian(self, x):
-
-        return sp.csr_matrix(self.jac(x))
 
         
 
