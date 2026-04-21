@@ -12,6 +12,7 @@ import sympy as sp
 from scipy import integrate
 import math
 
+from typing import Callable
 
 import jax
 jax.config.update("jax_enable_x64", True)
@@ -40,16 +41,37 @@ def get_gauss_points_weights(num_points: int) -> tuple[jnp.ndarray, jnp.ndarray]
 
     return jnp.array(xi), jnp.array(w)
 
-@jit(static_argnums=(0,1,2))
+@jit(static_argnums=(0,1,2,3))
 def _calc_laplacian_term(w_shape:str, 
                         var_shape:str, 
-                        element_shape:str, 
-                        element_coors: list[float] | np.ndarray, 
-                        const: float):
+                        element_shape:str,
+                        const: Callable[[jnp.ndarray], float], 
+                        element_coors: list[float] | np.ndarray,
+                        var_values: float | np.ndarray):
+        
+        """Calculate the Laplacian term for the given element and variable.
+        This function is JIT-compiled using JAX for improved performance.
+        
+        e. g.
+        ∇.(const * ∇T)  -> Integral(dNi/dx^Trans*const*dNj/dx*det(J^-1)de1, -1, 1)
+
+        Parameters:
+        w_shape (str): Shape of the basis functions for the test function
+        var_shape (str): Shape of the basis functions for the variable
+        element_shape (str): Shape of the basis functions for the element   
+        const (Callable[[jnp.ndarray], float]): A function that takes the variable values and returns the constant value for the Laplacian term
+        element_coors (list[float] | np.ndarray): Coordinates of the element nodes
+        var_values (float | np.ndarray): Values of the variable at the element nodes
+        
+        Returns:
+        jnp.ndarray: The Laplacian term matrix for the element
+        """
             
         puntos_gauss, pesos_gauss = get_gauss_points_weights(2)
 
         y = jnp.zeros((len(element_coors), len(element_coors)))  # Assuming square matrix for simplicity, adjust as needed
+
+        const_func = const(var_values)
 
         for p, w in zip(puntos_gauss, pesos_gauss):
 
@@ -57,7 +79,7 @@ def _calc_laplacian_term(w_shape:str,
             B_var = shape_functions_gradient_1d(var_shape, p) * jacobian_inverse(element_shape, element_coors, p)
             detJ = jacobian_determinant(element_shape, element_coors, p)
 
-            y += const * jnp.dot(B_w.T, B_var) * detJ * w
+            y += const_func * jnp.dot(B_w.T, B_var) * detJ * w
         
         return y
 
@@ -81,17 +103,39 @@ def _calc_gradient_term(w_shape:str,
         
         return y
 
-@jit(static_argnums=(0,1,2))
+@jit(static_argnums=(0,1,2,3))
 def _calc_divergence_term(w_shape:str, 
                         var_shape:str, 
                         element_shape:str, 
-                        element_coors: list[float] | np.ndarray, 
-                        const: float,
+                        const: Callable[[jnp.ndarray], float], 
+                        element_coors: list[float] | np.ndarray,
+                        var_values: float | np.ndarray,
                         Vel: float | np.ndarray):
+        
+        """
+        Calculate the Divergence term for the given element and variable.
+        This function is JIT-compiled using JAX for improved performance.
+
+        e. g.
+        const*_u∇T -> Integral(const*Ni*dNj/dx*vel*det(J^-1)de1, -1, 1)
+        Parameters:
+        w_shape (str): Shape of the basis functions for the test function
+        var_shape (str): Shape of the basis functions for the variable
+        element_shape (str): Shape of the basis functions for the element
+        const (Callable[[jnp.ndarray], float]): A function that takes the variable values and returns the constant value for the Divergence term
+        element_coors (list[float] | np.ndarray): Coordinates of the element nodes
+        var_values (float | np.ndarray): Values of the variable at the element nodes
+        Vel (float | np.ndarray): Velocity value for the convection term
+
+        Returns:
+        jnp.ndarray: The Divergence term matrix for the element
+        """        
     
         puntos_gauss, pesos_gauss = get_gauss_points_weights(2)
 
         y = jnp.zeros((len(element_coors), len(element_coors)))  # Assuming square matrix for simplicity, adjust as needed
+
+        const_func = const(var_values)
 
         for p, w in zip(puntos_gauss, pesos_gauss):
 
@@ -99,39 +143,87 @@ def _calc_divergence_term(w_shape:str,
             B_var = shape_functions_gradient_1d(var_shape, p) * jacobian_inverse(element_shape, element_coors, p)
             detJ = jacobian_determinant(element_shape, element_coors, p)
 
-            y += const * jnp.dot(N_w.T, B_var) * Vel * detJ * w 
+            y += const_func * jnp.dot(N_w.T, B_var) * Vel * detJ * w 
         
         return y
 
-@jit(static_argnums=(0,1,2))
+@jit(static_argnums=(0,1,2,3))
 def _calc_mass_term(w_shape:str, 
                     var_shape:str, 
-                    element_shape:str, 
-                    element_coors: list[float] | np.ndarray, 
-                    constM: float):
+                    element_shape:str,
+                    constM: Callable[[jnp.ndarray], float], 
+                    element_coors: list[float] | np.ndarray,
+                    var_values: float | np.ndarray):
+        
+        """ Calculate the Mass term for the given element and variable.
+        This function is JIT-compiled using JAX for improved performance.
+        
+        e. g.
+        
+        constM*Ni*N_j -> Integral(constM*Ni*N_j*det(J^-1)de1, -1, 1)
+        
+        Parameters:
+        w_shape (str): Shape of the basis functions for the test function
+        var_shape (str): Shape of the basis functions for the variable
+        element_shape (str): Shape of the basis functions for the element
+        constM (Callable[[jnp.ndarray], float]): A function that takes the variable values and returns the constant value for the Mass term
+        element_coors (list[float] | np.ndarray): Coordinates of the element nodes
+        var_values (float | np.ndarray): Values of the variable at the element nodes
+
+        Returns:
+        jnp.ndarray: The Mass term matrix for the element
+        
+        """
+
         puntos_gauss, pesos_gauss = get_gauss_points_weights(2)
+        
         y = jnp.zeros((len(element_coors), len(element_coors)))  # Assuming square matrix for simplicity, adjust as needed
+
+        constM_func = constM(var_values)
+
         for p, w in zip(puntos_gauss, pesos_gauss):
             N_w = shape_functions_1d(w_shape, p)
             B_var = shape_functions_gradient_1d(var_shape, p)   
             detJ = jacobian_determinant(element_shape, element_coors, p)
-            y += constM * jnp.dot(N_w.T, B_var) * detJ * w
+            y += constM_func * jnp.dot(N_w.T, B_var) * detJ * w
         return y
 
-@jit(static_argnums=(0,1))
+@jit(static_argnums=(0,1,2))
 def _calc_force_vector(w_shape:str, 
                        element_shape:str,
+                       f: Callable[[jnp.ndarray], float],
                        element_coors: list[float] | np.ndarray,
-                       f: float | np.ndarray):
+                       var_values: float | np.ndarray):
     
+    """Calculate the Force vector for the given element and variable.
+    This function is JIT-compiled using JAX for improved performance.
+    
+    e. g.
+    f*Ni -> Integral(f*Ni*det(J^-1)de1, -1, 1)
+    
+    Parameters:
+    w_shape (str): Shape of the basis functions for the test function
+    element_shape (str): Shape of the basis functions for the element
+    f (Callable[[jnp.ndarray], float]): A function that takes the variable values and returns the value of the source term
+    element_coors (list[float] | np.ndarray): Coordinates of the element nodes
+    var_values (float | np.ndarray): Values of the variable at the element nodes
+
+    Returns:
+    jnp.ndarray: The Force vector for the element
+    
+    """
+
     puntos_gauss, pesos_gauss = get_gauss_points_weights(2)
+
     y = jnp.zeros((len(element_coors),1))  # Assuming vector for simplicity, adjust as needed
+
+    const_func = f(var_values)
 
     for p, w in zip(puntos_gauss, pesos_gauss):
         N_w = shape_functions_1d(w_shape, p)
         detJ = jacobian_determinant(element_shape, element_coors, p)
 
-        y += N_w.T * f * detJ * w
+        y += N_w.T * const_func * detJ * w
     
     return y
 
@@ -156,6 +248,92 @@ def _calc_stabilization_term(w_shape:str,
     
     return y
 
+@jit(static_argnums=(0,1,))
+def _calc_b_matrix(w_shape:str, 
+                   element_shape:str,
+                   id: list[int],
+                   h_c: list[Callable[[jnp.ndarray], float]],
+                   element_coors: list[float] | np.ndarray, # Ojala recibir un único lambda que ya tenga los otros valores y solo depende del valor de la variable en el nodo, para evitar tener que pasar muchos parámetros a esta función
+                   var_values: float | np.ndarray):
+    
+    # To fix: This function is currently only for 1D and for a single node with Newton BC. 
+    # Next updates will show the code for multiple dimensions and for multiple nodes with Newton BC.
+
+    #puntos_gauss, pesos_gauss = get_gauss_points_weights(2)
+
+    # For simplicity, we will assume that the B matrix is only affected by the boundary condition at the node with the given id. 
+    # In a real implementation, this would need to be integrated over the boundary of the element.
+
+    y = jnp.zeros((len(element_coors), len(element_coors)))  # Assuming square matrix for simplicity, adjust as needed
+
+    id = jnp.atleast_1d(jnp.array(id, dtype=int))
+
+    if id.size > 0:
+        for i in id:
+
+            h_c_calc = [h(var_values[i]) for h in h_c]
+
+            y = y.at[i, i].set(h_c_calc)
+    
+    return y
+
+@jit(static_argnums=(0,1,3))
+def _calc_g_vector(w_shape:str,
+                   element_shape:str,
+                   id: list[int],
+                   g_c: Callable[[jnp.ndarray], float],
+                   element_coors: list[float] | np.ndarray, # Ojala recibir un único lambda que ya tenga los otros valores y solo depende del valor de la variable en el nodo, para evitar tener que pasar muchos parámetros a esta función
+                   var_values: float | np.ndarray):
+    
+
+    y = jnp.zeros((len(element_coors),1))  # Assuming vector for simplicity, adjust as needed
+    id = jnp.atleast_1d(jnp.array(id, dtype=int))
+
+
+    if id.size > 0:
+        for i in id:
+
+            g_c_calc = g_c(var_values[i])
+
+            y = y.at[i, 0].set(g_c_calc)  # Assuming var_values is an array with the variable values at the element nodes
+    
+    return y
+                   
+
+@jit(static_argnums=(0,1,2,3,4,6,7,))
+def _calc_element_residual_vector(w_shape:str, 
+                        var_shape:str, 
+                        element_shape:str,
+                        const_C: Callable[[jnp.ndarray], float],
+                        const_K: Callable[[jnp.ndarray], float],
+                        const_B: Callable[[jnp.ndarray], float],
+                        const_F: Callable[[jnp.ndarray], float],
+                        const_G: Callable[[jnp.ndarray], float],
+                        ids_for_B: list[int],
+                        ids_for_G: list[int],
+                        element_coors: list[float] | np.ndarray,
+                        var_values: float | np.ndarray,
+                        Vel: float | np.ndarray):
+    
+
+    #M = _calc_mass_term(w_shape, var_shape, element_shape, const_C, element_coors, var_values) # To fix: This is currently not used, but it could be used in a transient problem. Next updates will show how to use it in a transient problem.
+    C = _calc_divergence_term(w_shape, var_shape, element_shape, element_coors, const=const_C, Vel=Vel)
+    K = _calc_laplacian_term(w_shape, var_shape, element_shape, element_coors, const=const_K)
+    B = _calc_b_matrix(w_shape, element_shape, ids_for_B, const_B, element_coors, var_values)  # To fix: This is currently only for a single node with Newton BC. Next updates will show the code for multiple nodes with Newton BC.
+    
+    F = _calc_force_vector(w_shape, element_shape, const_F, element_coors, var_values)
+    G = _calc_g_vector(w_shape, element_shape, ids_for_G, const_G, element_coors, var_values) # To fix: This is currently only for a single node with Newton BC. Next updates will show the code for multiple nodes with Newton BC.
+
+    A_e = C + K + B
+    b_e = F - G
+    
+    R = jnp.dot(A_e, var_values) - b_e  
+
+    return R
+
+
+_calc_element_tangent_matrix = jax.jit(jax.jacfwd(_calc_element_residual_vector, argnums=11), static_argnums= (0,1,2,3,4,6,7,))
+                       
 #stab= lambda *args: alpha * element.getLength() / 2 * self.w.gradN_func(*args) * element.Jinv_func(*args)
 
 
@@ -181,13 +359,41 @@ class physics:
         self.F = None
         self.G = None
 
+        self.C_const = None
+        self.K_const = None
+        self.B_const = None
+        self.F_const = None
+        self.G_const = None
+
+        self.vel = 1.0  # Velocity
+
         self.Pe = 0  # Peclet number
+
+    def func_normalization(self, term):
+
+        if isinstance(term, (float, int)):
+            h_c = lambda xi: float(term)
+
+        elif callable(term):
+            h_c = term
+
+        else:
+            raise TypeError("La propiedad debe ser un float o una función.")
+
+        return h_c
 
     def getVariables(self):
         return self.var.keys()
 
     def getNumOfVar(self):
         return len(self.var.keys())
+
+    def normalize_constants(self):
+        self.C_const = self.func_normalization(self.C_const)
+        self.K_const = self.func_normalization(self.K_const)
+        self.B_const = self.func_normalization(self.B_const)
+        self.F_const = self.func_normalization(self.F_const)
+        self.G_const = self.func_normalization(self.G_const)
 
     def initField(self, variable, value):
         self.var[variable].initField(value)
@@ -212,12 +418,21 @@ class physics:
     
     def getResidualVector(self, element, Variable, solverOptions=None):
 
-        A_e = self.getElementMatrix(element, Variable, solverOptions)
-        b_e = self.getElementVector(element, Variable, solverOptions)
 
         x_e = self.var[Variable].getElementValues(element)
 
-        return A_e.dot(x_e) - b_e
+        self.normalize_constants()
+
+        jax_coors = jnp.array(element.getCoor())
+
+        ids_for_B, h_c_for_B = self.check_boundary_conditions_B(element, Variable)
+        ids_for_G, g_c_for_G = self.check_boundary_conditions_G(element, Variable)
+
+        R_e = _calc_element_residual_vector(self.w_shape, self.var[Variable].shape, element.shape,
+                        self.C_const, self.K_const, h_c_for_B, self.F_const, g_c_for_G, ids_for_B, ids_for_G,
+                        jax_coors, x_e, self.vel)
+
+        return np.asarray(R_e)
     
     def aux_getTangentMatrix(self, element, Variable, x_values, solverOptions=None):
 
@@ -239,32 +454,38 @@ class physics:
         #func1 = lambda x: self.aux_getTangentMatrix(element, Variable, x, solverOptions)
 
         x_e = self.var[Variable].getElementValues(element)
-        n = x_e.size
-        K_e = np.zeros((n, n))
-        f0 = self.aux_getTangentMatrix(element, Variable, x_e, solverOptions)
 
-        eps = 1e-8
+        self.normalize_constants()
+        # n = x_e.size
+        # K_e = np.zeros((n, n))
+        # f0 = self.aux_getTangentMatrix(element, Variable, x_e, solverOptions)
 
-        for i in range(n):
-            x_e_perturbed = np.copy(x_e)
-            x_e_perturbed[i] += eps
+        # eps = 1e-8
 
-            f1 = self.aux_getTangentMatrix(element, Variable, x_e_perturbed, solverOptions)
+        # for i in range(n):
+        #     x_e_perturbed = np.copy(x_e)
+        #     x_e_perturbed[i] += eps
 
-            K_e[:, i] = (f1 - f0) / eps
+        #     f1 = self.aux_getTangentMatrix(element, Variable, x_e_perturbed, solverOptions)
+
+        #     K_e[:, i] = (f1 - f0) / eps
 
         #return Jacobian(func1)(x_e)
 
-        return K_e
+        jax_coors = jnp.array(element.getCoor())
+
+        ids_for_B, h_c_for_B = self.check_boundary_conditions_B(element, Variable)
+        ids_for_G, g_c_for_G = self.check_boundary_conditions_G(element, Variable)
+
+        K_e = _calc_element_tangent_matrix(self.w_shape, self.var[Variable].shape, element.shape,
+                        self.C_const, self.K_const, h_c_for_B, self.F_const, g_c_for_G, ids_for_B, ids_for_G,
+                        jax_coors, x_e, self.vel)  # To fix: This is currently only for a single node with Newton BC and no convection. Next updates will show the code for multiple nodes with Newton BC and for convection.
+
+        return np.asarray(K_e)
 
     def laplacian(self, const: float, var: scalarField, element: Element):
         """
         Define the element matrix from the weak form for the Laplacian term.
-
-
-        e. g.
-        ∇.(const * ∇T)  -> Integral(dNi/dx^Trans*const*dNj/dx*det(J^-1)de1, -1, 1)
-
 
         Note: Stills for 1D. Next updates will show the code for multiple dimensions
 
@@ -274,37 +495,13 @@ class physics:
         :return: Matrix of laplacian term
         """
 
-        # B_w = lambda x: shape_functions_gradient_1d(self.w_shape, x) * element.Jinv_func(x)
-
-        # B_var = lambda x: shape_functions_gradient_1d(var.shape, x) * element.Jinv_func(x)
-
-
-
-        # def diff_Laplacian(*args):
-        #     B_w = self.w.gradN_func(*args) * element.Jinv_func(*args)
-        #     B_var = var.gradN_func(*args) * element.Jinv_func(*args)
-        #     detJ = element.Jdet_func(*args)
-
-        #     return const * jnp.dot(B_w.T, B_var) * detJ
-
-        #diffA1 = lambda *args: self.w.gradN_func(*args)*element.Jinv_func(*args)*\
-                               #const*(var.gradN_func(*args)*element.Jinv_func(*args)).T * element.Jdet_func(*args)
-
-        #diffA2 = lambda *args: const*np.dot((self.w.gradN_func(*args)*element.Jinv_func(*args)).T, (var.gradN_func(*args)*element.Jinv_func(*args)))*element.Jdet_func(*args)
-        
-        #y, err = integrate.quad_vec(diffA1, -1, 1)
-
-        # puntos_gauss = jnp.array([-0.5773502691896257, 0.5773502691896257])
-        # pesos_gauss = jnp.array([1.0, 1.0])
-
-        # y = 0.0
-
-        # for p, w in zip(puntos_gauss, pesos_gauss):
-        #     y += w * diff_Laplacian(p)
-
         jax_coors = jnp.array(element.getCoor())
 
-        return _calc_laplacian_term(self.w_shape, var.shape, element.shape, jax_coors, const)
+        const_func = self.func_normalization(const)
+
+        var_values = self.var[var.name].getElementValues(element)
+
+        return _calc_laplacian_term(self.w_shape, var.shape, element.shape, const_func, jax_coors, var_values)
 
     def Grad(self, var: scalarField, element: Element):
 
@@ -355,7 +552,11 @@ class physics:
 
         jax_coors = jnp.array(element.getCoor())
 
-        return _calc_divergence_term(self.w_shape, var.shape, element.shape, jax_coors, const, Vel)
+        const_func = self.func_normalization(const)
+
+        var_values = self.var[var.name].getElementValues(element)
+
+        return _calc_divergence_term(self.w_shape, var.shape, element.shape, const_func, jax_coors, var_values, Vel)
 
     def mass(self, var: scalarField, element: Element, constM):
 
@@ -365,16 +566,20 @@ class physics:
 
         jax_coors = jnp.array(element.getCoor())
 
-        return _calc_mass_term(self.w_shape, var.shape, element.shape, jax_coors, constM)
+        constM_func = self.func_normalization(constM)
+
+        var_values = self.var[var.name].getElementValues(element)
+
+        return _calc_mass_term(self.w_shape, var.shape, element.shape, constM_func, jax_coors, var_values)
 
     def forceVector(self, element: Element, Variable):
 
-        if callable(self.source):
+        # if callable(self.source):
 
-            f = self.source(element, Variable)
-        else:
+        #     f = self.source(element, Variable)
+        # else:
 
-            f = self.source
+        #     f = self.source
 
 
         # diff_F = self.w.N * f * element.Jacobian()
@@ -389,26 +594,36 @@ class physics:
 
         jax_coors = jnp.array(element.getCoor())
 
-        return _calc_force_vector(self.w_shape, element.shape, jax_coors, f)
+        f_func = self.func_normalization(self.source)
+
+        var_values = self.var[Variable].getElementValues(element)
+
+        return _calc_force_vector(self.w_shape, element.shape, f_func, jax_coors, var_values)
 
     def addBMatrix(self, element, Variable):
 
         B = jnp.zeros((element.getNumberNodes(), element.getNumberNodes()))
 
+        jax_coors = jnp.array(element.getCoor())
+
+        ids = []
+        h_c_funcs = []
+
+        var_values = self.var[Variable].getElementValues(element)
+
         for i, node in enumerate(element.nodes):
+
+            #var_value = self.var[Variable].getElementValues(element)[i]
 
             if node.BC and node.BC[Variable]['type'] == 'Newton':
 
-                if callable(node.BC[Variable]['h']):
+                h_c = self.func_normalization(node.BC[Variable]['h'])
 
-                    B.at[i, i].set(node.BC[Variable]['h'](i))
+                ids.append(i)
+                h_c_funcs.append(h_c)
 
-                    #B[i, i] = node.BC[Variable]['h'](i)
-                    # print('Radiaction BC used')
-                else:
-                    B.at[i, i].set(node.BC[Variable]['h'])
+        B += _calc_b_matrix(self.w_shape, element.shape, ids, h_c_funcs, jax_coors, var_values)
 
-                    #B[i, i] = node.BC[Variable]['h']
 
         return B
 
@@ -416,30 +631,127 @@ class physics:
 
         G = jnp.zeros((element.getNumberNodes(),1))
 
+        jax_coors = jnp.array(element.getCoor())
+
+        ids = []
+
+        g_c_funcs = []
+
+        var_values = self.var[Variable].getElementValues(element)
+
+        g_c = lambda n: 0.0  # Default value for g_c, can be overwritten if there are Newton BCs
+
         for i, node in enumerate(element.nodes):
 
-            if node.BC:
+            #var_value = self.var[Variable].getElementValues(element)[i]
 
-                if node.BC[Variable]['type'] == 'Newton':
+            if node.BC and node.BC[Variable]['type'] == 'Newton':
 
-                    if callable(node.BC[Variable]['h']):
+                h_c = self.func_normalization(node.BC[Variable]['h'])
 
-                        G.at[i].set(- node.BC[Variable]['h'](i) * node.BC[Variable]['var_ext'])
+                if callable(node.BC[Variable]['h']):
 
-                        # G[i] = - node.BC[Variable]['h'](i) * node.BC[Variable]['var_ext']
-                        # print('Radiaction BC used')
-                    else:
-                        G.at[i].set(- node.BC[Variable]['h'] * node.BC[Variable]['var_ext'])
+                    g_c = lambda n: -h_c(n) * node.BC[Variable]['var_ext']
 
-                        # G[i] = - node.BC[Variable]['h'] * node.BC[Variable]['var_ext']
+                    g_c = self.func_normalization(g_c)
 
-                elif node.BC[Variable]['type'] == 'Neumann':
+                    ids.append(i)
+                    g_c_funcs.append(g_c)
 
-                    G.at[i].set(node.BC[Variable]['flux'])
-                    # G[i] = node.BC[Variable]['flux']
+
+                    #G.at[i].set(- node.BC[Variable]['h'](i) * node.BC[Variable]['var_ext'])
+
+                    # G[i] = - node.BC[Variable]['h'](i) * node.BC[Variable]['var_ext']
+                    # print('Radiaction BC used')
+                else:
+                    g_c = -node.BC[Variable]['h'] * node.BC[Variable]['var_ext']
+
+                    g_c = self.func_normalization(g_c)
+
+                    ids.append(i)
+                    g_c_funcs.append(g_c)
+                    #G.at[i].set(g_c(i))
+
+                    # G[i] = - node.BC[Variable]['h'] * node.BC[Variable]['var_ext']
+
+                #g_c = self.func_normalization(g_c)
+
+                #G += _calc_g_vector(self.w_shape, element.shape, i, g_c, jax_coors, var_value)
+
+            elif node.BC and node.BC[Variable]['type'] == 'Neumann':
+
+                g_c = lambda n: node.BC[Variable]['flux']
+
+                g_c = self.func_normalization(g_c)
+
+                ids.append(i)
+                g_c_funcs.append(g_c)
+                # G[i] = node.BC[Variable]['flux']
+
+                #g_c = self.func_normalization(g_c)
+
+                #G += _calc_g_vector(self.w_shape, element.shape, i, g_c, jax_coors, var_value)
+
+        #g_tup = tuple(g_c_funcs)
+
+        G += _calc_g_vector(self.w_shape, element.shape, ids, g_c, jax_coors, var_values)
 
         return G
 
+    def check_boundary_conditions_B(self, element, Variable):
+
+        ids = []
+        h_c_funcs = []
+
+        for i, node in enumerate(element.nodes):
+
+            if node.BC and node.BC[Variable]['type'] == 'Newton':
+
+                h_c = self.func_normalization(node.BC[Variable]['h'])
+
+                ids.append(i)
+                h_c_funcs.append(h_c)
+
+        return ids, h_c_funcs
+    
+    def check_boundary_conditions_G(self, element, Variable):
+        ids = []
+        g_c_funcs = []
+
+        g_c = lambda n: 0.0  # Default value for g_c, can be overwritten if there are Newton BCs
+        for i, node in enumerate(element.nodes):
+
+            if node.BC and node.BC[Variable]['type'] == 'Newton':
+
+                if callable(node.BC[Variable]['h']):
+
+                    g_c = lambda n: -node.BC[Variable]['h'](n) * node.BC[Variable]['var_ext']
+
+                    g_c = self.func_normalization(g_c)
+
+                    ids.append(i)
+                    g_c_funcs.append(g_c)
+
+                else:
+                    g_c = -node.BC[Variable]['h'] * node.BC[Variable]['var_ext']
+
+                    g_c = self.func_normalization(g_c)
+
+                    ids.append(i)
+                    g_c_funcs.append(g_c)
+
+            elif node.BC and node.BC[Variable]['type'] == 'Neumann':
+
+                g_c = lambda n: node.BC[Variable]['flux']
+
+                g_c = self.func_normalization(g_c)
+
+                ids.append(i)
+                g_c_funcs.append(g_c)
+
+        return ids, g_c # To fix: This is currently only for a single node with Newton BC. Next updates will show the code for multiple nodes with Newton BC.
+
+    
     def stabilization(self, element: Element):
 
         Pe_h = self.Pe * element.getLength()

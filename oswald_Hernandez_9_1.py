@@ -33,7 +33,7 @@ PD = 1
 # Create mesh from linear element
 
 L = 0.04  # Length size of the domain [m]
-NoE = 40  # Number of Elements
+NoE = 5  # Number of Elements
 MeshType = ElementType.line  # Type of element
 shapeFunction = ShapeFunctionType.linear  # Shape function for spatial discretization
 

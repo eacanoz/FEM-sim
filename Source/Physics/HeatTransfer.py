@@ -11,7 +11,20 @@ from Source.Physics.Physics import physics
 from Source.Primals.Scalar import scalarField
 from Source.enums import ElementType, ShapeFunctionType
 
+import jax
+jax.config.update("jax_enable_x64", True)
+import jax.numpy as jnp
+from jax import jit
+
+
 u = 1  # Velocity for convection term, hardcoded for now
+
+@jit
+def _calculate_radiative_heat_coef(epsilon, T_ext, T_surface):
+    sigma = 5.6704e-8  # Stefan-Boltzmann constant
+    h_rad = epsilon * sigma * ((T_surface)**3 + T_ext*(T_surface)**2 
+                             + (T_surface)*T_ext**2 + T_ext**3)
+    return h_rad
 
 
 class ht(physics):
@@ -24,20 +37,28 @@ class ht(physics):
 
         self.var = {'T': scalarField('T', 'Temperature', 'K', ShapeFunctionType.linear, model.mesh)}
 
+        self.C_const = self.mat.rho * self.mat.Cp
+        self.K_const = self.mat.k
+        self.M_const = self.mat.rho * self.mat.Cp
+        self.B_const = 0
+        self.F_const = 0
+        self.G_const = 0
+
+
         self.Pe = self.mat.rho * self.mat.Cp * u / self.mat.k
 
     def initializeMatrices(self, element, Variable):
 
         if self.Convection:
-            self.C = self.div(self.var[Variable], element, self.mat.rho * self.mat.Cp, u)  # 1 stands for velocity (u = 1)
+            self.C = self.div(self.var[Variable], element, self.C_const, u)  # 1 stands for velocity (u = 1)
 
-        self.K = self.laplacian(self.mat.k, self.var[Variable], element)
+        self.K = self.laplacian(self.K_const, self.var[Variable], element)
 
         self.B = self.addBMatrix(element, Variable)
 
     def initializeMassMatrix(self, element):
 
-        self.M = self.mass(self.var['T'], element, self.mat.rho * self.mat.Cp)
+        self.M = self.mass(self.var['T'], element, self.M_const)
 
     def initializeVectors(self, element, Variable):
 
@@ -69,9 +90,6 @@ class ht(physics):
 
     def addBC_Radiation(self, id: int, epsilon: float, T_ext: float):
 
-        sigma = 5.6704e-8
-
-        h_c = lambda n: sigma*epsilon*((self.var['T'].values[n])**3 + T_ext*(self.var['T'].values[n])**2 
-                             + (self.var['T'].values[n])*T_ext**2 + T_ext**3)
+        h_c = lambda n: _calculate_radiative_heat_coef(epsilon, T_ext, n)
         
         self.modelRef._mesh.NL[id].BC['T'] = self.setNewtonBC(h_c, T_ext)
