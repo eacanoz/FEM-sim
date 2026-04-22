@@ -26,6 +26,9 @@ from Source.Primals.Scalar import scalarField
 
 from Source.Pre_processing.Mesh import Mesh, Element, Node
 
+u = 1  # Velocity for convection term, hardcoded for now
+
+@jit
 def _calculate_reaction_rate(w_shape:str, element_shape:str, element_coors: list[float] | np.ndarray, k, a, b, A_values, B_values, nu_stoich):
 
     puntos_gauss, pesos_gauss = get_gauss_points_weights(2)
@@ -57,6 +60,10 @@ class mt(physics):
 
         self.var = {}
 
+        self.C_const = 1
+        self.K_const = 1
+        self.M_const = 1
+
         self.Pe = 1
 
         self.Diffusivities = {}
@@ -78,7 +85,7 @@ class mt(physics):
     def initializeMatrices(self, element, Variable):
 
         if self.Convection:
-            self.C = self.div(self.var[Variable], element, 1, 0.01)  # 1 stands for velocity (u = 1)
+            self.C = self.div(self.var[Variable], element, self.C_const, u)  # 1 stands for velocity (u = 1)
 
         self.K = self.laplacian(self.Diffusivities[Variable], self.var[Variable], element)
 

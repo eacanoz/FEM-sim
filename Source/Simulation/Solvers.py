@@ -315,46 +315,48 @@ class modelSolver():
 
             # self.linearSolver()
 
+            xi = self.x0 + lamb * dX
             
-            while (True):
+            # while (True):
 
-                xi = self.x0 + lamb * dX
+            #     xi = self.x0 + lamb * dX
 
-                Fi = self.createNonlinearSystem(xi)
+            #     Fi = self.createNonlinearSystem(xi)
 
-            # estimating error for new iteration.
-
-
-                if self.model.solverOptions['Method'] == SolverType.direct:
-
-                    error = DirectSolver(J, Fi, dX, self.model.solverOptions).solve()      
+            # # estimating error for new iteration.
 
 
-                elif self.model.solverOptions['Method'] == SolverType.iterative:
+            #     if self.model.solverOptions['Method'] == SolverType.direct:
 
-                    error = IterativeSolver(J, Fi, dX, self.model.solverOptions).solve()
+            #         error = DirectSolver(J, -Fi, dX, self.model.solverOptions).solve()      
+
+
+            #     elif self.model.solverOptions['Method'] == SolverType.iterative:
+
+            #         error = IterativeSolver(J, -Fi, dX, self.model.solverOptions).solve()
 
                 
-                if np.linalg.norm(error) < error_1:
+            #     if np.linalg.norm(error) < error_1:
 
-                    lamb = min(lamb * 1.2, lamb_max)
+            #         lamb = min(lamb * 1.2, lamb_max)
 
-                    error_1 = np.linalg.norm(error)
+            #         error_1 = np.linalg.norm(error)
 
-                    break
+            #         break
 
-                else:
-                    lamb = max(lamb * 0.5, lamb_min)
+            #     else:
+            #         lamb = max(lamb * 0.5, lamb_min)
 
-                    error_1 = np.linalg.norm(error)
+            #         error_1 = np.linalg.norm(error)
 
-                    if lamb == lamb_min:
-                        break
+            #         if lamb == lamb_min:
+            #             break
 
             #self.tolerance = np.linalg.norm(self.sol - self.x0)
             #self.tolerance = np.linalg.norm(Fi) 
 
-            self.tolerance = np.linalg.norm(Fi) / np.linalg.norm(Fi_1)
+            #self.tolerance = np.linalg.norm(Fi) / np.linalg.norm(Fi_1)
+            self.tolerance = np.linalg.norm(dX)
 
             self.updateSolution(xi)
 

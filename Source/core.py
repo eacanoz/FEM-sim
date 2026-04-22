@@ -203,7 +203,7 @@ class Model(object):
                     #rows_F.append(global_idx_i)
                     #values_F.append(penalty*(x_e[idx] - node_i.BC.get('value', 0.0)))
 
-                    local_contributions.append((global_idx_i, penalty*(x_e[idx] - node_i.BC.get('value', 0.0))))
+                    local_contributions.append((global_idx_i, F_e[idx] + penalty*(x_e[idx] - node_i.BC.get('value', 0.0))))
                     
                 else:
                     local_contributions.append((global_idx_i, F_e[idx]))
@@ -291,8 +291,9 @@ class Model(object):
             
                         rows_K.append(g_i)
                         cols_K.append(g_i)
-                        values_K.append(K_e[i, i]+penalty)
-                        F[g_i] = penalty*(x_e[i] - bc.get('value', 0.0))
+                        #values_K.append(K_e[i, i]+penalty)
+                        values_K.append(1.0)
+                        F[g_i] += (x_e[i] - bc.get('value', 0.0))
                         #F[g_i] = bc.get('value', 0.0)
                     else:
                         F[g_i] += f_e[i]

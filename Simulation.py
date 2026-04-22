@@ -30,15 +30,15 @@ Mat1 = material('Aluminio', k = 1, miu=1, rho=1, Cp= 1)
 
 Model1 = Model(name='1D_Conductivity', mtype=None, dim=PD, mesh=Mesh1, mat=Mat1, psc=ht)
 
-Model1.physics.addBC_Temperature(id=Mesh1.boundaries['inlet'], T=2.0)
+Model1.physics.addBC_Temperature(id=Mesh1.boundaries['inlet'], T=60)
 #Model1.physics.addBC_Convection(Mesh1.boundaries['outlet'], 1, 10)
-Model1.physics.addBC_Radiation(Mesh1.boundaries['outlet'], 0.7, 4.0)
+Model1.physics.addBC_Radiation(Mesh1.boundaries['outlet'], 0.7, 26)
 #Model1.physics.addBC_Temperature(id=Mesh1.boundaries['outlet'], T=4.0)
 
 Model1.physics.Convection = True
 Model1.physics.Stab = None
 
-Model1.physics.initField('T', 2.0)
+Model1.physics.initField('T', 60.0)
 
 options = {'Study': StudyType.steady_state, 'Type': ProblemType.nonlinear, 'Method': SolverType.direct, 'Solver':'PARDISO'}
 
