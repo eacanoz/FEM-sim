@@ -250,60 +250,43 @@ class Model(object):
 
         F = np.zeros(nDOF)
 
-        def process_element_parallel(element: Element, idxVar: int, Variable: str):
-            K_e = self.physics.getElementTangentMatrix(element, Variable, solverOptions)
-            f_e = self.physics.getResidualVector(element, Variable, solverOptions)
-            nodes_id = [node.id for node in element.nodes]
-            nodes_bc = [node.BC for node in element.nodes]
+        for element in self._mesh.EL:
 
-            return contributions_determination_nonlinear(K_e, f_e, nVar, nodes_id, nodes_bc, idxVar, Variable)   
-        
-        for idxVar, Variable in enumerate(Var):
-            #results.extend(sum([process_element(element, idxVar, Variable) for element in self._mesh.EL], []))
-            #results_K.extend(sum([process_element_parallel(element, idxVar, Variable)[0] for element in self._mesh.EL], []))
-            #results_F.extend(sum([process_element_parallel(element, idxVar, Variable)[1] for element in self._mesh.EL], []))
+            nodes_id = element.getNodesId()
 
-            for element in self._mesh.EL:
+            for idxVar, Variable in enumerate(Var):
                 K_e = self.physics.getElementTangentMatrix(element, Variable, solverOptions)
                 f_e = self.physics.getResidualVector(element, Variable, solverOptions)
 
                 x_e = self.physics.get_variable_element_values(element, Variable)
-                #r, c, v, rhs = self._element_contributions(element, idxVar, Variable, K_e, f_e)
 
-                #rows_K.extend(r)
-                #cols_K.extend(c)
-                #values_K.extend(v)
+                for i_local, i_global in enumerate(nodes_id):
 
-                #for gi, value in rhs:
-                #    if self._get_dirichlet_value(element.nodes[gi], Variable) is None:
-                #        F[gi] += value
-
-                # Indices globales para ensamblaje
-                g_indices = [idxVar + nVar * node.id for node in element.nodes]
-
-                for i, g_i in enumerate(g_indices):
-
-                    node_i = element.nodes[i]
+                    dof_r = i_global*nVar + idxVar
+                    node_i = element.nodes[i_local]
                     bc = node_i.BC.get(Variable, {}) if node_i.BC else {}
 
                     if bc.get('type') == 'Dirichlet':
 
-            
-                        rows_K.append(g_i)
-                        cols_K.append(g_i)
+                        rows_K.append(dof_r)
+                        cols_K.append(dof_r)
                         #values_K.append(K_e[i, i]+penalty)
                         values_K.append(1.0)
-                        F[g_i] += (x_e[i] - bc.get('value', 0.0))
+                        F[dof_r] += (x_e[i_local] - bc.get('value', 0.0))
                         #F[g_i] = bc.get('value', 0.0)
                     else:
-                        F[g_i] += f_e[i]
+                        F[dof_r] += f_e[i_local]
 
-                        for j, g_j in enumerate(g_indices):
-                            rows_K.append(g_i)
-                            cols_K.append(g_j)
-                            values_K.append(K_e[i, j])
+                        for jdxVar, Variable in enumerate(Var):
+                            K_block = np.asarray(K_e[Variable])
 
+                            for j_local, j_global in enumerate(nodes_id):
+                                dof_c = j_global*nVar + jdxVar
+                                rows_K.append(dof_r)
+                                cols_K.append(dof_c)
+                                values_K.append(K_block[i_local, j_local])
 
+                        
         K = sc.sparse.coo_matrix((values_K, (rows_K, cols_K)), shape=(nDOF, nDOF)).tocsr()
 
         return K, F

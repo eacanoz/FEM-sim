@@ -19,6 +19,7 @@ from jax import jit
 from scipy import integrate
 
 from Source.Pre_processing.BasisFunctions import basisFunctions, shape_functions_1d, shape_functions_gradient_1d, mapping_function, jacobian_mapping_function, jacobian_determinant, jacobian_inverse
+from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType
 
 
 from Source.Physics.Physics import physics, get_gauss_points_weights
@@ -26,7 +27,7 @@ from Source.Primals.Scalar import scalarField
 
 from Source.Pre_processing.Mesh import Mesh, Element, Node
 
-u = 1  # Velocity for convection term, hardcoded for now
+u = 0.01  # Velocity for convection term, hardcoded for now
 
 @jit
 def _calculate_reaction_rate(w_shape:str, element_shape:str, element_coors: list[float] | np.ndarray, k, a, b, A_values, B_values, nu_stoich):
@@ -64,11 +65,16 @@ class mt(physics):
         self.K_const = 1
         self.M_const = 1
 
+        self.ChemSpecies = []
+        self.stoich = {}
+   
+
+
         self.Pe = 1
 
         self.Diffusivities = {}
 
-        self.reaction = None
+        self.source = 0.0
 
     def setDiffusivity(self, chemSpecies, value):
 
@@ -80,7 +86,9 @@ class mt(physics):
 
     def setChemSpecies(self, chemSpecies, name):
 
-        self.var[chemSpecies] = scalarField(chemSpecies, name, 'mol/m3', 'Linear', self.modelRef.mesh)
+        self.ChemSpecies.append(chemSpecies)
+
+        self.var[chemSpecies] = scalarField(chemSpecies, name, 'mol/m3', ShapeFunctionType.linear, self.modelRef.mesh)
 
     def initializeMatrices(self, element, Variable):
 
@@ -98,15 +106,42 @@ class mt(physics):
 
 ## ------------- Source terms -------------- ##
 
-    def addReaction(self, stoich):
+    def addReaction(self, stoich: dict, k0: float, E_R: float, T: float, order: dict):
 
-        k0 = 10
-        E_R = 500
-        T = 303.15
-        self.a_param = 1
-        self.b_param = 1
+        k0 = k0
+        E_R = E_R
+        T = T
+        a = order['A']
+        b = order['B']
+        c = order['C']
 
-        self.k_rate = k0 * math.exp(-(E_R/T))
+
+        k_rate = k0 * math.exp(-(E_R/T))
+
+        def reaction_func(element_shape:str, xi: float, state_at_p: dict, target_var: str):
+
+            nu = stoich.get(target_var, 0.0)
+
+            N_e = shape_functions_1d(element_shape, xi)
+
+            C_A = jnp.maximum(state_at_p['A'], 1e-12)
+            C_B = jnp.maximum(state_at_p['B'], 1e-12)
+            C_C = jnp.maximum(state_at_p['C'], 1e-12)
+
+            rate_vector = k_rate * (C_A**a) * (C_B**b) * (C_C**c)
+
+            rate_vector.reshape(-1, 1)
+
+            rate = jnp.dot(N_e, rate_vector)
+
+            return nu * rate
+
+        self.source = reaction_func
+
+        return reaction_func
+
+
+
 
         #self.rRate = lambda n: self.k_rate * (self.var['A'].values[n]**a) * (self.var['B'].values[n]**b)
 
@@ -130,24 +165,24 @@ class mt(physics):
 
     # Overwrite forceVector method
 
-    def forceVector(self, element: Element, Variable):
+    # def forceVector(self, element: Element, Variable):
 
-        nu = self.stoich.get(Variable, 0.0)
+    #     nu = self.stoich.get(Variable, 0.0)
 
-        if not getattr(self, 'has_reaction', False) or nu == 0.0:
-            return jnp.zeros((element.getNumberNodes(), 1))
+    #     if not getattr(self, 'has_reaction', False) or nu == 0.0:
+    #         return jnp.zeros((element.getNumberNodes(), 1))
 
-        A_np = np.array(self.var['A'].getElementValues(element)).reshape(-1, 1)
-        B_np = np.array(self.var['B'].getElementValues(element)).reshape(-1, 1)
+    #     A_np = np.array(self.var['A'].getElementValues(element)).reshape(-1, 1)
+    #     B_np = np.array(self.var['B'].getElementValues(element)).reshape(-1, 1)
 
-        A_nodal = jnp.asarray(A_np)
-        B_nodal = jnp.asarray(B_np)
+    #     A_nodal = jnp.asarray(A_np)
+    #     B_nodal = jnp.asarray(B_np)
 
-        coors = jnp.asarray(element.getCoor())
+    #     coors = jnp.asarray(element.getCoor())
 
-        F_reaction = _calculate_reaction_rate(self.w_shape, element.shape, coors, self.k_rate, self.a_param, self.b_param, A_nodal, B_nodal, nu)
+    #     F_reaction = _calculate_reaction_rate(self.w_shape, element.shape, coors, self.k_rate, self.a_param, self.b_param, A_nodal, B_nodal, nu)
 
-        return F_reaction
+    #     return F_reaction
 
         # if callable(self.source):
 

@@ -6,6 +6,9 @@ from Source.core import Model
 from Source.Material import material
 from Source.Physics.MassTransfer import mt
 
+from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType
+
+
 # Defining problem dimension: 1D
 PD = 1 
 
@@ -13,8 +16,8 @@ PD = 1
 
 L = 1  # Length size of the domain [m]
 NoE = 10  # Number of Elements
-MeshType = "1DROD2P"  # Type of element
-shapeFunction = 'Linear' # Shape function for spatial discretization
+MeshType = ElementType.line  # Type of element
+shapeFunction = ShapeFunctionType.linear  # Shape function for spatial discretization
 
 Mesh1 = Mesh()
 Mesh1.Generate_Mesh(PD, L, NoE, MeshType)
@@ -26,7 +29,7 @@ Mesh1.defineBoundary('outlet', NoE) # Hardcoded
 # Defining material properties
 Mat1 = material('Media', k = 0.2, miu=1, rho=1, Cp= 1)
 
-Model1 = Model(name='Couette_device', mtype=None, dim=PD, mesh=Mesh1, mat=Mat1, psc=mt)
+Model1 = Model(name='Diff_reaction_problem', mtype=None, dim=PD, mesh=Mesh1, mat=Mat1, psc=mt)
 
 Model1.physics.setChemSpecies('A', 'Component A')
 Model1.physics.setChemSpecies('B', 'Component B')
@@ -51,14 +54,18 @@ Model1.physics.addBC_Outflow(Mesh1.boundaries['outlet'], 'C')
 
 # Add reaction
 stoich = {'A': -1, 'B': -1, 'C': 1}
-Model1.physics.addReaction(stoich)
+order = {'A': 1, 'B': 1, 'C': 0}
+k0 = 10
+E_R = 500
+T = 300
+Model1.physics.addReaction(stoich, k0, E_R, T, order)
 
 # Initialize field
 Model1.physics.initField('A', 30)
 Model1.physics.initField('B', 20)
 Model1.physics.initField('C', 1)
 
-solverOptions = {'Study': 'Steady state', 'Type': 'Nonlinear', 'Method': 'Direct', 'Solver':'PARDISO'}
+solverOptions = {'Study': StudyType.steady_state, 'Type': ProblemType.nonlinear, 'Method': SolverType.direct, 'Solver':'PARDISO'}
 
 Model1.solverConfiguration(**solverOptions)
 
