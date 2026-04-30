@@ -1,0 +1,27 @@
+2026-04-29 22:22:15 - INFO - ------- Starting simulation -------
+2026-04-29 22:22:15 - INFO - Model: 1D_Conductivity_Radiation
+2026-04-29 22:22:15 - INFO - Dimension: 1D
+2026-04-29 22:22:15 - INFO - Nodes: 11
+2026-04-29 22:22:15 - INFO - Elements: 10
+2026-04-29 22:22:15 - INFO - Physics: Heat transfer
+2026-04-29 22:22:15 - INFO - ------- Solver configuration -------
+2026-04-29 22:22:15 - INFO - Study: Steady state
+2026-04-29 22:22:15 - INFO - Type: Nonlinear
+2026-04-29 22:22:15 - INFO - Method: Direct
+2026-04-29 22:22:15 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-04-29 22:22:15 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-04-29 22:22:15 - INFO - Minimum Tolerance: 1.0000e-04, Max Number of Iterations: 200
+2026-04-29 22:22:15 - INFO - --------------------------------------------
+2026-04-29 22:22:15 - INFO - |  Iter  | Error (Norm R)  |  Alpha (Step)  
+2026-04-29 22:22:15 - INFO - --------------------------------------------
+2026-04-29 22:22:17 - INFO - |   1    |   6.5928e-01    |     0.8000     
+2026-04-29 22:22:19 - INFO - |   2    |   1.3205e-01    |     0.8000     
+2026-04-29 22:22:20 - INFO - |   3    |   2.6417e-02    |     0.8000     
+2026-04-29 22:22:22 - INFO - |   4    |   5.2836e-03    |     0.8000     
+2026-04-29 22:22:23 - INFO - |   5    |   1.0567e-03    |     0.8000     
+2026-04-29 22:22:25 - INFO - |   6    |   2.1135e-04    |     0.8000     
+2026-04-29 22:22:27 - INFO - |   7    |   4.2270e-05    |     0.8000     
+2026-04-29 22:22:27 - INFO - --------------------------------------------
+2026-04-29 22:22:27 - INFO - Succefully converged in 7 iterations.
+2026-04-29 22:22:27 - INFO - method finished on 11.097 seconds
+2026-04-29 22:22:27 - INFO - ------- Simulation finished -------

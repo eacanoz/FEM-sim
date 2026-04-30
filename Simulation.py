@@ -5,7 +5,7 @@ from Source.core import Model
 from Source.Material import material
 from Source.Physics.HeatTransfer import ht
 
-from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType
+from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType, DirectSolvers
 
 # Define basis functions variables
 # e1 = sp.symbols('e1')
@@ -28,7 +28,7 @@ Mesh1.defineBoundary('outlet', NoE) # Hardcoded
 
 Mat1 = material('Aluminio', k = 1, miu=1, rho=1, Cp= 1)
 
-Model1 = Model(name='1D_Conductivity', mtype=None, dim=PD, mesh=Mesh1, mat=Mat1, psc=ht)
+Model1 = Model(name='1D_Conductivity_Radiation', mtype=None, dim=PD, mesh=Mesh1, mat=Mat1, psc=ht)
 
 Model1.physics.addBC_Temperature(id=Mesh1.boundaries['inlet'], T=60)
 #Model1.physics.addBC_Convection(Mesh1.boundaries['outlet'], 1, 10)
@@ -40,7 +40,7 @@ Model1.physics.Stab = None
 
 Model1.physics.initField('T', 60.0)
 
-options = {'Study': StudyType.steady_state, 'Type': ProblemType.nonlinear, 'Method': SolverType.direct, 'Solver':'PARDISO'}
+options = {'Study': StudyType.steady_state, 'Type': ProblemType.nonlinear, 'Method': SolverType.direct, 'Solver': DirectSolvers.PARDISO}
 
 
 #solverOptions = {'Study': StudyType.steady_state, 'Type': ProblemType.linear, 'Method': SolverType.direct, 'Solver':'PARDISO'}
