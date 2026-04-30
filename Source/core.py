@@ -17,7 +17,10 @@ from Source.Physics.Physics import physics
 from Source.Material import material
 from Source.Pre_processing.BasisFunctions import basisFunctions
 import Source.Simulation.Solvers as Solution
-from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType
+from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType, DirectSolvers, IterativeSolvers, Preconditioners
+from Source.logger_config import sim_logger
+
+
 
 from progress.bar import Bar
 from joblib import Parallel, delayed
@@ -56,15 +59,16 @@ class Model(object):
         self.mat = mat  # Material domain
         self.physics = psc(self)  # Model physics
 
+        if self.physics is None:
+            self.physics_status = 'Not defined'
+
+        else:
+            self.physics_status = self.physics.physics_description
+
         self.A = None
         self.b = None
 
         self.solverOptions = None
-
-        #self.solverOptions = {'Study': 'Steady state', 'Type': 'Nonlinear', 'Method': 'Direct', 'Solver':'PARDISO'}
-        # self.solverOptions = {'Type': 'Linear', 'Method': 'Direct', 'Solver':'PARDISO'}
-        # self.solverOptions = {'Type': 'Linear', 'Method': 'Iterative', 'Solver':'BicgStab', 'Preconditioner': 'iLU Factorization'}
-        # self.solverOptions = {'Type': 'Linear', 'Method': 'Iterative', 'Solver':'BicgStab', 'Preconditioner': None}
 
         self.sol = None
 
@@ -86,14 +90,12 @@ class Model(object):
 
         """String representation of the model."""
 
-        if self.physics is None:
-            physics_status = 'Not defined'
 
         custom_str = ("Model: " + self.name + 
                       "\nDimension: " + str(self._PD) + "D" + 
                       "\nNodes: " + str(self.mesh.getNoN()) + 
                       "\nElements: " + str(self.mesh.getNoE()) + 
-                      "\nPhysics: " + physics_status)
+                      "\nPhysics: " + self.physics_status)
 
         return custom_str
 
@@ -179,47 +181,37 @@ class Model(object):
 
         penalty = 1e15
         
+
+        self.physics.normalize_constants()
+
         #rows_F = []
         #values_F = []
 
 
         F = np.zeros(nDOF)
 
-        # F = sc.sparse.dok_array((nDOF, 1))
+        for element in self._mesh.EL:
 
-        def process_element(element, idxVar, Variable):
-            """
-            Process a single element to compute its contributions to the global system.
-            """
-            F_e = self.physics.getResidualVector(element, Variable, solverOptions)
-            x_e = self.physics.get_variable_element_values(element, Variable)
-            local_contributions = []
+            nodes_id = element.getNodesId()
 
-            for idx, node_i in enumerate(element.nodes):
-                global_idx_i = idxVar + nVar * node_i.id
+            for idxVar, Variable in enumerate(Var):
+                
+                f_e = self.physics.getResidualVector(element, Variable, solverOptions)
 
-                if node_i.BC and node_i.BC[Variable]['type'] == 'Dirichlet':
+                x_e = self.physics.get_variable_element_values(element, Variable)
 
-                    #rows_F.append(global_idx_i)
-                    #values_F.append(penalty*(x_e[idx] - node_i.BC.get('value', 0.0)))
+                for i_local, i_global in enumerate(nodes_id):
 
-                    local_contributions.append((global_idx_i, F_e[idx] + penalty*(x_e[idx] - node_i.BC.get('value', 0.0))))
-                    
-                else:
-                    local_contributions.append((global_idx_i, F_e[idx]))
-                    #rows_F.append(global_idx_i)
-                    #values_F.append(F_e[idx])
-                    
-            return local_contributions
+                    dof_r = i_global*nVar + idxVar
+                    node_i = element.nodes[i_local]
+                    bc = node_i.BC.get(Variable, {}) if node_i.BC else {}
 
-        for idxVar, Variable in enumerate(Var):
+                    if bc.get('type') == 'Dirichlet':
 
-            results.extend(sum([process_element(element, idxVar, Variable) for element in self._mesh.EL], []))
-
-
-        for local_contributions in results:
-            global_idx_i, value = local_contributions
-            F[global_idx_i] += value
+                        F[dof_r] += (x_e[i_local] - bc.get('value', 0.0))
+                        #F[g_i] = bc.get('value', 0.0)
+                    else:
+                        F[dof_r] += f_e[i_local]
 
         return F
     
@@ -240,13 +232,13 @@ class Model(object):
         #results_K = []
         #results_F = []      
 
-        penalty = 1e15
-
         #K = sc.sparse.dok_matrix((nDOF, nDOF))
 
         rows_K = []
         cols_K = []
         values_K = []
+
+        self.physics.normalize_constants()
 
         F = np.zeros(nDOF)
 
@@ -351,8 +343,8 @@ class Model(object):
         return rows, cols, vals, rhs
 
 
-    def solverConfiguration(self, Study=StudyType.steady_state, Type=ProblemType.linear, Method=SolverType.direct, Solver = 'PARDISO', 
-                            timeDisc = 1, timeStep=0.05, totalTime = 3, prec = 'iLU Factorization'):
+    def solverConfiguration(self, Study=StudyType.steady_state, Type=ProblemType.linear, Method=SolverType.direct, Solver = DirectSolvers.PARDISO, 
+                            timeDisc = 1, timeStep=0.05, totalTime = 3, prec = Preconditioners.iLU):
         
         """Configures the solver for the model based on the provided options."""
 
@@ -372,7 +364,29 @@ class Model(object):
 
         """Solves the model based on the configured solver options."""
 
-        print('-------Simulation started-------')
+        sim_logger.info("------- Starting simulation -------")
+        sim_logger.info("Model: " + self.name)
+        sim_logger.info("Dimension: " + str(self._PD) + "D")
+        sim_logger.info("Nodes: " + str(self.mesh.getNoN()))
+        sim_logger.info("Elements: " + str(self.mesh.getNoE()))
+        sim_logger.info("Physics: " + self.physics_status)
+
+        sim_logger.info("------- Solver configuration -------")
+        sim_logger.info("Study: " + str(self.solverOptions['Study'].value))
+        sim_logger.info("Type: " + str(self.solverOptions['Type'].value))
+        sim_logger.info("Method: " + str(self.solverOptions['Method'].value))
+        sim_logger.info("Solver: " + str(self.solverOptions['Solver'].value))
+
+        if self.solverOptions['Method'] == SolverType.iterative:
+            sim_logger.info("Preconditioner: " + str(self.solverOptions['Preconditioner'].value))
+
+        if self.solverOptions['Study'] == StudyType.transient:
+            sim_logger.info("Time Discretization: " + str(self.solverOptions['Time Discretization'].value))
+            sim_logger.info("Time Step: " + str(self.solverOptions['Time Step'].value))
+            sim_logger.info("Total Time: " + str(self.solverOptions['Time'].value))
+
+
+        #print('-------Simulation started-------')
 
         if self.solverOptions is None:
             self.solverConfiguration()
@@ -383,7 +397,8 @@ class Model(object):
 
         self.timeVector = solver.timeVector
 
-        print('Simulation finished')
+        sim_logger.info("------- Simulation finished -------")
+
 
     def postProcess(self):
 

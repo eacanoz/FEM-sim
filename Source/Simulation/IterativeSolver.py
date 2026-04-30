@@ -4,6 +4,9 @@ import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 import scipy.linalg as scla
 
+from Source.enums import  IterativeSolvers, Preconditioners
+
+
 import matplotlib.pyplot as plt
 
 class IterativeSolver:
@@ -26,9 +29,9 @@ class IterativeSolver:
 
         self.convRes()
 
-        if self.options['Solver'] == 'BicgStab':
+        if self.options['Solver'] == IterativeSolvers.BiCGSTAB:
             return self.BicgStab()
-        elif self.options['Solver'] == 'GMRES':
+        elif self.options['Solver'] == IterativeSolvers.GMRES:
             return self.GMres()
 
     def BicgStab(self):
@@ -55,7 +58,7 @@ class IterativeSolver:
     
     def Preconditioner(self):
 
-        if self.options['Preconditioner'] == 'iLU Factorization':
+        if self.options['Preconditioner'] == Preconditioners.iLU:
             return self.iLUFactorization()
         elif self.options['Preconditioner'] == None:
             return None

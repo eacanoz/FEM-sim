@@ -6,7 +6,7 @@ from Source.core import Model
 from Source.Material import material
 from Source.Physics.MassTransfer import mt
 
-from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType
+from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType, DirectSolvers
 
 
 # Defining problem dimension: 1D
@@ -65,16 +65,16 @@ Model1.physics.initField('A', 30)
 Model1.physics.initField('B', 20)
 Model1.physics.initField('C', 1)
 
-solverOptions = {'Study': StudyType.steady_state, 'Type': ProblemType.nonlinear, 'Method': SolverType.direct, 'Solver':'PARDISO'}
+solverOptions = {'Study': StudyType.steady_state, 'Type': ProblemType.nonlinear, 'Method': SolverType.direct, 'Solver':DirectSolvers.PARDISO}
 
 Model1.solverConfiguration(**solverOptions)
 
 # Solving PDE
 Model1.solve()
 
-plt.plot(Model1.mesh.getXCoor(), Model1.sol['A'], 'or')
-plt.plot(Model1.mesh.getXCoor(), Model1.sol['B'], 'ob')
-plt.plot(Model1.mesh.getXCoor(), Model1.sol['C'], 'og')
+plt.plot(Model1.mesh.getXCoor(), Model1.sol['A'], '-or')
+plt.plot(Model1.mesh.getXCoor(), Model1.sol['B'], '-ob')
+plt.plot(Model1.mesh.getXCoor(), Model1.sol['C'], '-og')
 plt.legend(['A', 'B', 'C'])
 
 plt.xlabel("x-axis [m]")

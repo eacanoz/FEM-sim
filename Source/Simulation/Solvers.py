@@ -5,7 +5,7 @@ import scipy.sparse.linalg as spla
 import scipy.linalg as scla
 
 from scipy.integrate import solve_ivp
-from scipy.optimize import fsolve
+from scipy.optimize import root
 
 from numba import jit, njit, prange, guvectorize, vectorize, float64
 
@@ -15,6 +15,8 @@ from matplotlib.animation import FuncAnimation
 from Source.Simulation.DirectSolver import DirectSolver
 from Source.Simulation.IterativeSolver import IterativeSolver
 from Source.enums import SolverType, StudyType, ProblemType
+from Source.logger_config import sim_logger
+
 
 import time
 from progress.bar import Bar
@@ -29,7 +31,9 @@ def tictoc(method):
             t1 = time.time()
             method(*args, **kwargs)
             t2 = time.time() - t1
-            print(f'method finished on {round(t2, 3)} seconds')
+            #print(f'method finished on {round(t2, 3)} seconds')
+            sim_logger.info(f'method finished on {round(t2, 3)} seconds')
+            return t2
         
         return wrapper
 
@@ -134,8 +138,6 @@ class modelSolver():
         self.model.physics.var['T'].updateTimeValues(sol.y) # Fix
 
 
-
-
     def transientRHS(self, t, y):
 
         """Defines the right-hand side of the transient problem for the ODE solver."""
@@ -190,7 +192,6 @@ class modelSolver():
 
         self.updateSolution(sol)
 
-    #@guvectorize()
     def createNonlinearSystem(self, x):
 
         """Creates the nonlinear system of equations for the model based on the current solution vector x.
@@ -225,6 +226,8 @@ class modelSolver():
 
         self.tolerance = 1
         self.numbIterations = 0
+
+        
 
         alpha = 0.7
 
@@ -264,6 +267,9 @@ class modelSolver():
         """Implements a Newton-Raphson solver for the nonlinear problem.
         It iteratively computes the Jacobian matrix, solves the linearized system, and updates the solution vector until convergence based on a relaxation parameter lambda."""
 
+        sim_logger.info("------- Starting Newton-Raphson nonlinear solver -------")
+
+
         self.tolerance = 1
         self.numbIterations = 0
 
@@ -274,18 +280,35 @@ class modelSolver():
 
         lamb = 0.8
 
-        # nLS = self.createNonlinearSystem
+        min_tolerance = 1e-4
+        max_numb_iterations = 200
 
-        # self.jac = Jacobian(nLS)
 
-        while (self.tolerance > 1e-4 and self.numbIterations < 200):
+        sim_logger.info(f"Minimum Tolerance: {min_tolerance:.4e}, Max Number of Iterations: {max_numb_iterations}")
+
+        # 1. IMPRIMIR EL ENCABEZADO DE LA TABLA ANTES DEL BUCLE
+        # Explicación del formato:
+        # :^6  -> Centrado ocupando 6 espacios
+        # :^15 -> Centrado ocupando 15 espacios
+        header = f"| {'Iter':^6} | {'Error (Norm R)':^15} | {'Alpha (Step)':^15}"
+        separator = "-" * len(header)
+        
+        sim_logger.info(separator)
+        sim_logger.info(header)
+        sim_logger.info(separator)
+        
+        # Fila para la iteración 0 (Condición Inicial)
+        #row_0 = f"| {0:^6} | {error:^15.4e} | {'-':^15} | {'Condición Inicial':^20} |"
+        #sim_logger.info(row_0)
+
+        while (self.tolerance > min_tolerance and self.numbIterations < max_numb_iterations):
 
             self.numbIterations += 1
 
             if lamb == lamb_min:
                 lamb = 0.8
 
-            print(f'----- Iteration number: {self.numbIterations} -----')
+            #print(f'----- Iteration number: {self.numbIterations} -----')
             #self.construcProblem()
             #self.getInitialField()
 
@@ -362,9 +385,17 @@ class modelSolver():
 
             self.x0 = xi
 
-            print(f'\nTolerance for iteration number {self.numbIterations}: {self.tolerance}\n')
+            row = f"| {self.numbIterations:^6} | {self.tolerance:^15.4e} | {lamb:^15.4f}"
+            sim_logger.info(row)
 
-           
+            #print(f'\nTolerance for iteration number {self.numbIterations}: {self.tolerance}\n')
+
+        sim_logger.info(separator)
+
+        if self.tolerance <= min_tolerance:
+            sim_logger.info(f"Succefully converged in {self.numbIterations} iterations.")
+        else:
+            sim_logger.warning("Solver did not converge at the specified tolerance and number of iterations.")
 
         return xi
 
@@ -417,8 +448,6 @@ class modelSolver():
 
             #self.x0 = np.append(self.x0, self.model.physics.var[fieldVar].values)
 #------------------------------------------------------------------------------
-# Converting self.x0 to np.array that append different values from self.model.physics.var[fieldVar].values
-# Fix Jacobian matrix
 
 
         

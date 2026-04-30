@@ -442,6 +442,7 @@ class physics:
 
         #x_e = self.var[Variable].getElementValues(element)
 
+        self.F_const = self.source
         self.normalize_constants()
 
         jax_coors = jnp.array(element.getCoor())
@@ -478,26 +479,8 @@ class physics:
 
     def getElementTangentMatrix(self, element, Variable, solverOptions=None):
         
-        #func1 = lambda x: self.aux_getTangentMatrix(element, Variable, x, solverOptions)
-
-        #x_e = self.var[Variable].getElementValues(element)
-
+        self.F_const = self.source
         self.normalize_constants()
-        # n = x_e.size
-        # K_e = np.zeros((n, n))
-        # f0 = self.aux_getTangentMatrix(element, Variable, x_e, solverOptions)
-
-        # eps = 1e-8
-
-        # for i in range(n):
-        #     x_e_perturbed = np.copy(x_e)
-        #     x_e_perturbed[i] += eps
-
-        #     f1 = self.aux_getTangentMatrix(element, Variable, x_e_perturbed, solverOptions)
-
-        #     K_e[:, i] = (f1 - f0) / eps
-
-        #return Jacobian(func1)(x_e)
 
         jax_coors = jnp.array(element.getCoor())
 

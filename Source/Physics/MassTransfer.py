@@ -29,35 +29,59 @@ from Source.Pre_processing.Mesh import Mesh, Element, Node
 
 u = 0.01  # Velocity for convection term, hardcoded for now
 
-@jit
-def _calculate_reaction_rate(w_shape:str, element_shape:str, element_coors: list[float] | np.ndarray, k, a, b, A_values, B_values, nu_stoich):
 
-    puntos_gauss, pesos_gauss = get_gauss_points_weights(2)
-    
-    y = jnp.zeros((len(A_values), 1))
+def build_reaction_function(param_dict: dict):
 
-    for p, w in zip(puntos_gauss, pesos_gauss):
+    required_keys = ['stoich', 'k0', 'E_R', 'T', 'order']
 
-        N = shape_functions_1d(w_shape, p)
-        det_J = jacobian_determinant(element_shape, element_coors, p)
+    try:
+        for key in required_keys:
+            if key not in param_dict or param_dict[key] is None:
+                raise KeyError(f'{key} not defined')
+    except KeyError as e:
+        print(f'Execution error: {e}')
 
-        A_p = jnp.dot(N, A_values)[0,0]
-        B_p = jnp.dot(N, B_values)[0,0]
+    else:
+        stoich = param_dict['stoich']
+        k0 = param_dict['k0']
+        E_R = param_dict['E_R']
+        T = param_dict['T']
+        reaction_order = param_dict['order']
+        components = tuple(stoich.keys())
+        component_order = tuple(reaction_order[comp] for comp in components)
+        k_rate = k0 * jnp.exp(-(E_R/T))
 
-        A_gauss = jnp.maximum(A_gauss, 0.0)
-        B_gauss = jnp.maximum(B_gauss, 0.0)
 
-        r_p = k * (A_p**a) * (B_p**b)
+        @jit(static_argnums=(0,3))
+        def compiled_reaction_func(element_shape:str, xi: float, state_at_p: dict, target_var: str):
 
-        y += N.T * (nu_stoich * r_p) * det_J * w
+            nu = stoich.get(target_var, 0.0)
 
-    return y
+            N_e = shape_functions_1d(element_shape, xi)
+
+            rate_vector = k_rate
+
+            for comp, order in zip(components, component_order):
+
+                c = jnp.maximum(state_at_p[comp], 1e-12)
+
+                rate_vector *= c**order
+
+            rate_vector.reshape(-1, 1)
+
+            rate = jnp.dot(N_e, rate_vector)
+
+            return nu * rate
+
+        return compiled_reaction_func
 
 
 class mt(physics):
 
     def __init__(self, model):
         super().__init__(model)
+
+        self.physics_description = 'Transport of Chemical Species'
 
         self.var = {}
 
@@ -68,8 +92,6 @@ class mt(physics):
         self.ChemSpecies = []
         self.stoich = {}
    
-
-
         self.Pe = 1
 
         self.Diffusivities = {}
@@ -111,98 +133,20 @@ class mt(physics):
         k0 = k0
         E_R = E_R
         T = T
-        a = order['A']
-        b = order['B']
-        c = order['C']
 
+        param_dict = {'stoich': stoich, 'k0': k0, 'E_R': E_R, 'T': T, 'order': order}
 
-        k_rate = k0 * math.exp(-(E_R/T))
+        reaction_func = build_reaction_function(param_dict)
 
-        def reaction_func(element_shape:str, xi: float, state_at_p: dict, target_var: str):
-
-            nu = stoich.get(target_var, 0.0)
-
-            N_e = shape_functions_1d(element_shape, xi)
-
-            C_A = jnp.maximum(state_at_p['A'], 1e-12)
-            C_B = jnp.maximum(state_at_p['B'], 1e-12)
-            C_C = jnp.maximum(state_at_p['C'], 1e-12)
-
-            rate_vector = k_rate * (C_A**a) * (C_B**b) * (C_C**c)
-
-            rate_vector.reshape(-1, 1)
-
-            rate = jnp.dot(N_e, rate_vector)
-
-            return nu * rate
 
         self.source = reaction_func
+        self.F_const = reaction_func
+        self.stoich = stoich
+        self.has_reaction = True
+        self.order = order
 
         return reaction_func
 
-
-
-
-        #self.rRate = lambda n: self.k_rate * (self.var['A'].values[n]**a) * (self.var['B'].values[n]**b)
-
-        self.stoich = stoich
-
-        self.has_reaction = True
-        # self.reaction = lambda elem, chemSpec:  self.stoich[chemSpec] * self.rRate(elem)
-
-        # def reaction(element):
-
-        #     rates = [self.rRate(n.id) for n in element.nodes]
-
-        #     rateVector = element.sF.N.transpose() * sp.Matrix(rates)
-
-        #     rateVectorfunc = sp.lambdify(list(element.sF.N.free_symbols), rateVector, 'numpy')
-
-        #     return  rateVectorfunc
-
-
-        #self.source = reaction
-
-    # Overwrite forceVector method
-
-    # def forceVector(self, element: Element, Variable):
-
-    #     nu = self.stoich.get(Variable, 0.0)
-
-    #     if not getattr(self, 'has_reaction', False) or nu == 0.0:
-    #         return jnp.zeros((element.getNumberNodes(), 1))
-
-    #     A_np = np.array(self.var['A'].getElementValues(element)).reshape(-1, 1)
-    #     B_np = np.array(self.var['B'].getElementValues(element)).reshape(-1, 1)
-
-    #     A_nodal = jnp.asarray(A_np)
-    #     B_nodal = jnp.asarray(B_np)
-
-    #     coors = jnp.asarray(element.getCoor())
-
-    #     F_reaction = _calculate_reaction_rate(self.w_shape, element.shape, coors, self.k_rate, self.a_param, self.b_param, A_nodal, B_nodal, nu)
-
-    #     return F_reaction
-
-        # if callable(self.source):
-
-        #     f = lambda *args: self.stoich[Variable] * self.source(element)(*args)
-        # else:
-
-        #     f = self.source
-
-
-        # # diff_F = self.w.N * f * element.Jacobian()
-
-        # # F = sp.integrate(diff_F, (e1, -1, 1)).tolist()
-
-        # # return np.array(F).astype(np.float64).reshape((element.getNumberNodes(), 1))[0]  ## To fix!!!
-
-        # diffF = lambda *args: self.w.N_func(*args) * f(*args) * element.J_func(*args)
-
-        # y, err = integrate.quad_vec(diffF, -1, 1)
-
-        # return y[0]
 
 
 ## ---------- Boundary conditions ---------- ##

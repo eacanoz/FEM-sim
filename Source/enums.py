@@ -9,7 +9,6 @@ class ShapeFunctionType(Enum):
     linear = 'Linear'
     quadratic = 'Quadratic'
 
-
 class SolverType(Enum):
     direct = 'Direct'
     iterative = 'Iterative'
@@ -22,14 +21,16 @@ class ProblemType(Enum):
     linear = 'Linear'
     nonlinear = 'Nonlinear'
 
-
 class DirectSolvers(Enum):
-    PARDISO = 'PARDISO'
+    PARDISO = 'PARDISO (Parallel Direct Sparse Solver)'
     UMFPACK = 'UMFPACK'
     MUMPS = 'MUMPS'
-    SuperLU = 'SuperLU'
+    SuperLU = 'SuperLU (Supernodal LU)'
 
 class IterativeSolvers(Enum):
     CG = 'Conjugate Gradient'
     BiCGSTAB = 'Bi-Conjugate Gradient Stabilized'
     GMRES = 'Generalized Minimal Residual'
+
+class Preconditioners(Enum):
+    iLU = 'iLU Factorization'

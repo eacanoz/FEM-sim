@@ -35,6 +35,8 @@ class ht(physics):
     def __init__(self, model):
         super().__init__(model)
 
+        self.physics_description = 'Heat transfer'
+
         self.var = {'T': scalarField('T', 'Temperature', 'K', ShapeFunctionType.linear, model.mesh)}
 
         self.C_const = self.mat.rho * self.mat.Cp

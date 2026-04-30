@@ -1,0 +1,32 @@
+2026-04-29 21:52:07 - INFO - ------- Starting simulation -------
+2026-04-29 21:52:07 - INFO - Model: Diff_reaction_problem
+2026-04-29 21:52:07 - INFO - Dimension: 1D
+2026-04-29 21:52:07 - INFO - Nodes: 11
+2026-04-29 21:52:07 - INFO - Elements: 10
+2026-04-29 21:52:07 - INFO - Physics: Transport of Chemical Species
+2026-04-29 21:52:07 - INFO - ------- Solver configuration -------
+2026-04-29 21:52:07 - INFO - Study: Steady state
+2026-04-29 21:52:07 - INFO - Type: Nonlinear
+2026-04-29 21:52:07 - INFO - Method: Direct
+2026-04-29 21:52:07 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-04-29 21:52:07 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-04-29 21:52:07 - INFO - Minimum Tolerance: 1.0000e-04, Max Number of Iterations: 200
+2026-04-29 21:52:07 - INFO - --------------------------------------------
+2026-04-29 21:52:07 - INFO - |  Iter  | Error (Norm R)  |  Alpha (Step)  
+2026-04-29 21:52:07 - INFO - --------------------------------------------
+2026-04-29 21:52:13 - INFO - |   1    |   6.2099e+01    |     0.8000     
+2026-04-29 21:52:18 - INFO - |   2    |   3.3180e+01    |     0.8000     
+2026-04-29 21:52:24 - INFO - |   3    |   1.5796e+01    |     0.8000     
+2026-04-29 21:52:30 - INFO - |   4    |   6.0402e+00    |     0.8000     
+2026-04-29 21:52:37 - INFO - |   5    |   1.7114e+00    |     0.8000     
+2026-04-29 21:52:43 - INFO - |   6    |   3.8542e-01    |     0.8000     
+2026-04-29 21:52:49 - INFO - |   7    |   7.9309e-02    |     0.8000     
+2026-04-29 21:52:56 - INFO - |   8    |   1.5957e-02    |     0.8000     
+2026-04-29 21:53:03 - INFO - |   9    |   3.1951e-03    |     0.8000     
+2026-04-29 21:53:10 - INFO - |   10   |   6.3918e-04    |     0.8000     
+2026-04-29 21:53:17 - INFO - |   11   |   1.2784e-04    |     0.8000     
+2026-04-29 21:53:25 - INFO - |   12   |   2.5569e-05    |     0.8000     
+2026-04-29 21:53:25 - INFO - --------------------------------------------
+2026-04-29 21:53:25 - INFO - Succefully converged in 12 iterations.
+2026-04-29 21:53:25 - INFO - method finished on 78.051 seconds
+2026-04-29 21:53:25 - INFO - ------- Simulation finished -------

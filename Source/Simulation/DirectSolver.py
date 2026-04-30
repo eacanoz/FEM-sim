@@ -4,6 +4,9 @@ import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 import scipy.linalg as scla
 
+from Source.enums import DirectSolvers
+
+
 import pypardiso
 
 class DirectSolver:
@@ -19,9 +22,9 @@ class DirectSolver:
 
     def solve(self):
 
-        if self.options['Solver'] == 'PARDISO':
+        if self.options['Solver'] == DirectSolvers.PARDISO:
             return self.PARDISO()
-        elif self.options['Solver'] == 'SuperLU':
+        elif self.options['Solver'] == DirectSolvers.SuperLU:
             return self.SuperLU()
 
     def PARDISO(self):
