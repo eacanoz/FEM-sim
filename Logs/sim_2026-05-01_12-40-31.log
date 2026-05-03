@@ -1,0 +1,11 @@
+2026-05-01 12:40:31 - INFO - ------- Starting simulation -------
+2026-05-01 12:40:31 - INFO - Model: Couette_device
+2026-05-01 12:40:31 - INFO - Dimension: 1D
+2026-05-01 12:40:31 - INFO - Nodes: 6
+2026-05-01 12:40:31 - INFO - Elements: 5
+2026-05-01 12:40:31 - INFO - Physics: Heat transfer
+2026-05-01 12:40:31 - INFO - ------- Solver configuration -------
+2026-05-01 12:40:31 - INFO - Study: Steady state
+2026-05-01 12:40:31 - INFO - Type: Linear
+2026-05-01 12:40:31 - INFO - Method: Direct
+2026-05-01 12:40:31 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)

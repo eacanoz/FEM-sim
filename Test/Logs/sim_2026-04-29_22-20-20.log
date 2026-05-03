@@ -1,0 +1,13 @@
+2026-04-29 22:20:21 - INFO - ------- Starting simulation -------
+2026-04-29 22:20:21 - INFO - Model: 1D_Conductivity
+2026-04-29 22:20:21 - INFO - Dimension: 1D
+2026-04-29 22:20:21 - INFO - Nodes: 11
+2026-04-29 22:20:21 - INFO - Elements: 10
+2026-04-29 22:20:21 - INFO - Physics: Heat transfer
+2026-04-29 22:20:21 - INFO - ------- Solver configuration -------
+2026-04-29 22:20:21 - INFO - Study: Steady state
+2026-04-29 22:20:21 - INFO - Type: Linear
+2026-04-29 22:20:21 - INFO - Method: Direct
+2026-04-29 22:20:21 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-04-29 22:20:23 - INFO - method finished on 2.056 seconds
+2026-04-29 22:20:23 - INFO - ------- Simulation finished -------

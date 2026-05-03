@@ -6,6 +6,10 @@ from Source.Material import material
 from Source.Physics.HeatTransfer import ht
 import matplotlib.pyplot as plt
 
+
+from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType, DirectSolvers, IterativeSolvers
+
+
 # Define basis functions variables
 # e1 = sp.symbols('e1')
 
@@ -15,8 +19,8 @@ PD = 1  # Problem Dimension: 1->1D; 2->2D(!); 3->3D(!)
 
 L = 2  # Length size of the domain [mm]
 NoE = 10  # Number of Elements
-MeshType = "1DROD2P"  # Type of Mesh: LIN1D2P-> 1D Linear with 2 points per element
-shapeFunction = 'Linear'
+MeshType = ElementType.line  # Type of element
+shapeFunction = ShapeFunctionType.linear  # Shape function for spatial discretization
 
 Mesh1 = Mesh()
 Mesh1.Generate_Mesh(PD, L, NoE, MeshType)
@@ -46,7 +50,9 @@ options = {'Study': 'Transient',
            'Solver':'BicgStab', 
            'totalTime': 16}
 
-Model1.solverConfiguration(**options)
+solverOptions = {'Study': StudyType.transient, 'Type': ProblemType.linear, 'Method': SolverType.iterative, 'Solver': IterativeSolvers.BiCGSTAB, 'totalTime': 16}
+
+Model1.solverConfiguration(**solverOptions)
 
 Model1.solve()
 

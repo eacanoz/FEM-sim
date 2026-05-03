@@ -1,0 +1,17 @@
+2026-05-01 09:59:15 - INFO - ------- Starting simulation -------
+2026-05-01 09:59:15 - INFO - Model: 1D_Conductivity_HDPE
+2026-05-01 09:59:15 - INFO - Dimension: 1D
+2026-05-01 09:59:15 - INFO - Nodes: 11
+2026-05-01 09:59:15 - INFO - Elements: 10
+2026-05-01 09:59:15 - INFO - Physics: Heat transfer
+2026-05-01 09:59:15 - INFO - ------- Solver configuration -------
+2026-05-01 09:59:15 - INFO - Study: Transient
+2026-05-01 09:59:15 - INFO - Type: Linear
+2026-05-01 09:59:15 - INFO - Method: Iterative
+2026-05-01 09:59:15 - INFO - Solver: Bi-Conjugate Gradient Stabilized
+2026-05-01 09:59:15 - INFO - Preconditioner: iLU Factorization
+2026-05-01 09:59:15 - INFO - Time Discretization: 1
+2026-05-01 09:59:15 - INFO - Time Step: 0.05
+2026-05-01 09:59:15 - INFO - Total Time: 16
+2026-05-01 10:03:45 - INFO - method finished on 269.893 seconds
+2026-05-01 10:03:45 - INFO - ------- Simulation finished -------

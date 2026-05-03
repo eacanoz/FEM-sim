@@ -25,7 +25,7 @@ from Source.core import Model
 from Source.Material import material
 from Source.Physics.HeatTransfer import ht
 
-from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType
+from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType, DirectSolvers
 
 # Defining problem dimension: 1D
 PD = 1 
@@ -54,7 +54,7 @@ Mat1 = material('Polymer', k = 0.2, miu=1.0, rho=1.0, Cp= 1.0)
 Model1 = Model(name='Couette_device', mtype=None, dim=PD, mesh=Mesh1, mat=Mat1, psc=ht)
 
 # Adding source term (Q_viscous_heating)
-Model1.physics.source = 25000.0
+Model1.physics.F_const = 25000.0 # fix
 
 # Neglecting convection term
 Model1.physics.Convection = False
@@ -70,7 +70,7 @@ Model1.physics.initField('T', 200.0)
 
 # Setting solver options
 
-solverOptions = {'Study': StudyType.steady_state, 'Type': ProblemType.linear, 'Method': SolverType.direct, 'Solver':'PARDISO'}
+solverOptions = {'Study': StudyType.steady_state, 'Type': ProblemType.linear, 'Method': SolverType.direct, 'Solver': DirectSolvers.PARDISO}
 
 Model1.solverConfiguration(**solverOptions)
 

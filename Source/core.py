@@ -98,6 +98,14 @@ class Model(object):
                       "\nPhysics: " + self.physics_status)
 
         return custom_str
+    
+
+    def build_batched_inputs(self):
+
+        coord_list = [element.getCoor() for element in self._mesh.EL]
+
+        return coord_list
+
 
     def assembleGlobalSystem(self, solverOptions = None):
 
@@ -120,6 +128,11 @@ class Model(object):
         cols_A = []
         values_A = []
 
+        #coord_list = self.build_batched_inputs()
+
+        mesh = self._mesh
+
+        Test_e = self.physics.get_batched_system(mesh, 'T') #Only test
 
         b = np.zeros(nDOF)
 
@@ -381,9 +394,9 @@ class Model(object):
             sim_logger.info("Preconditioner: " + str(self.solverOptions['Preconditioner'].value))
 
         if self.solverOptions['Study'] == StudyType.transient:
-            sim_logger.info("Time Discretization: " + str(self.solverOptions['Time Discretization'].value))
-            sim_logger.info("Time Step: " + str(self.solverOptions['Time Step'].value))
-            sim_logger.info("Total Time: " + str(self.solverOptions['Time'].value))
+            sim_logger.info("Time Discretization: " + str(self.solverOptions['Time Discretization']))
+            sim_logger.info("Time Step: " + str(self.solverOptions['Time Step']))
+            sim_logger.info("Total Time: " + str(self.solverOptions['Time']))
 
 
         #print('-------Simulation started-------')

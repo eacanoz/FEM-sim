@@ -130,6 +130,8 @@ class Mesh:
 
     def setElementShapeFunction(self, shapeFunction):
 
+        self.shape_function = shapeFunction
+
         meshBF = basisFunctions(self, shapeFunction)
 
         for element in self.EL:

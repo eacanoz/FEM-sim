@@ -35,6 +35,7 @@ from Source.enums import ShapeFunctionType, StudyType, ProblemType, SolverType
 # Define basis functions variables
 e1, e2, e3 = sp.symbols('e1 e2 e3')
 
+u = 1
 
 def get_gauss_points_weights(num_points: int) -> tuple[jnp.ndarray, jnp.ndarray]:
     xi, w = np.polynomial.legendre.leggauss(num_points)
@@ -184,7 +185,7 @@ def _calc_mass_term(w_shape:str,
         
         """
 
-        puntos_gauss, pesos_gauss = get_gauss_points_weights(2)
+        puntos_gauss, pesos_gauss = get_gauss_points_weights(2) #fix
         
         y = jnp.zeros((len(element_coors), len(element_coors)))  # Assuming square matrix for simplicity, adjust as needed
 
@@ -195,9 +196,9 @@ def _calc_mass_term(w_shape:str,
             constM_func = constM(element_shape, p, state_at_x, target_variable)
 
             N_w = shape_functions_1d(w_shape, p)
-            B_var = shape_functions_gradient_1d(var_shape, p)   
+            N_var = shape_functions_1d(var_shape, p)   
             detJ = jacobian_determinant(element_shape, element_coors, p)
-            y += constM_func * jnp.dot(N_w.T, B_var) * detJ * w
+            y += constM_func * jnp.dot(N_w.T, N_var) * detJ * w
         return y
 
 @jit(static_argnums=(0,1,2,5))
@@ -264,7 +265,7 @@ def _calc_stabilization_term(w_shape:str,
     
     return y
 
-@jit(static_argnums=(0,1,3))
+@jit(static_argnums=(0,1,2,3))
 def _calc_b_matrix(w_shape:str, 
                    element_shape:str,
                    id: list[int],
@@ -352,10 +353,32 @@ def _calc_element_residual_vector(w_shape:str,
 
     return R
 
-
+# Tangent matrix calculation
 _calc_element_tangent_matrix = jax.jit(jax.jacfwd(_calc_element_residual_vector, argnums=12), static_argnums= (0,1,2,3,4,5,6,7,10))
                        
 #stab= lambda *args: alpha * element.getLength() / 2 * self.w.gradN_func(*args) * element.Jinv_func(*args)
+
+# ----------------- Batched version of functions -----------------
+_batched_calc_element_residual_vector = jax.vmap(_calc_element_residual_vector, 
+                                                 in_axes=(None, None, None, None, None, None, None, None, None, None, 0, 0, None))
+
+_batched_calc_element_tangent_matrix = jax.vmap(_calc_element_tangent_matrix,
+                                                in_axes=(None, None, None, None, None, None, None, None, None, None, 0, 0, None))
+
+_batched_calc_divergence_term = jax.vmap(_calc_divergence_term,
+                                         in_axes=(None, None, None, None, 0, 0, None, None))
+
+_batched_calc_laplacian_term = jax.vmap(_calc_laplacian_term,
+                                        in_axes=(None, None, None, None, 0, 0, None))
+
+_batched_calc_b_matrix = jax.vmap(_calc_b_matrix,
+                                  in_axes=(None, None, 0, 0, 0, 0))
+
+_batched_calc_force_vector = jax.vmap(_calc_force_vector,
+                                      in_axes=(None, None, None, 0, 0, None))
+
+_batched_calc_g_vector = jax.vmap(_calc_g_vector,
+                                  in_axes=(None, None, 0, None, 0, 0))
 
 
 class physics:
@@ -390,6 +413,131 @@ class physics:
 
         self.Pe = 0  # Peclet number
 
+    def set_state_at_x(self, element):
+        state_at_x = {variable: self.var[variable].getElementValues(element) for variable in self.var.keys()}
+
+        return state_at_x
+
+    def build_batched_inputs(self, mesh):
+
+        elements = mesh.EL
+        elements_shape_function = mesh.shape_function
+
+        coord_list = [element.getCoor() for element in elements]
+        X_all = jnp.array(coord_list)
+
+        state_dict_all = {}
+        for var_name in self.var.keys():
+            state_dict_all[var_name] = jnp.array([self.var[var_name].getElementValues(element) for element in elements])
+
+        return X_all, state_dict_all, elements_shape_function
+    
+    def build_batched_bc_params(self, mesh, Variable):
+
+        ids = []
+        h_c_funcs = []
+        g_c_funcs = []
+
+        elements = mesh.EL
+
+        for element in elements:
+
+            ids_element = []
+
+            h_c = lambda n: 0.0
+            g_c = lambda *args: 0.0  # Default value for g_c, can be overwritten if there are Newton BCs
+
+            for j, node in enumerate(element.nodes):
+
+                ids_element.append(j)
+
+                if node.BC and node.BC[Variable]['type'] == 'Newton':
+
+                    h_c = self.func_normalization(node.BC[Variable]['h'])
+                    g_c = self.func_normalization(lambda *args: -h_c(*args) * node.BC[Variable]['var_ext'])
+
+
+                elif node.BC and node.BC[Variable]['type'] == 'Neumann':
+
+
+                    g_c = self.func_normalization(node.BC[Variable]['flux'])
+
+
+            ids.append(ids_element)
+            h_c_funcs.append(h_c)
+            g_c_funcs.append(g_c)
+
+        return ids, tuple(h_c_funcs), tuple(g_c_funcs)
+    
+    def build_batched_g_params(self, mesh, Variable):
+
+        ids = []
+        g_c_funcs = []
+
+        elements = mesh.EL
+
+        for element in elements:
+
+            ids_element = []
+
+            g_c = lambda *args: 0.0  # Default value for g_c, can be overwritten if there are Newton BCs
+
+            for i, node in enumerate(element.nodes):
+
+                if node.BC and node.BC[Variable]['type'] == 'Newton':
+
+                    #h_c = self.func_normalization(node.BC[Variable]['h'])
+
+                    if callable(node.BC[Variable]['h']):
+
+                        g_c = lambda *args: - node.BC[Variable]['h'](*args) * node.BC[Variable]['var_ext']
+
+                        g_c = self.func_normalization(g_c)
+
+                        ids_element.append(i)
+                        #g_c_funcs.append(g_c)
+
+
+                        #G.at[i].set(- node.BC[Variable]['h'](i) * node.BC[Variable]['var_ext'])
+
+                        # G[i] = - node.BC[Variable]['h'](i) * node.BC[Variable]['var_ext']
+                        # print('Radiaction BC used')
+                    else:
+                        g_c = -node.BC[Variable]['h'] * node.BC[Variable]['var_ext']
+
+                        g_c = self.func_normalization(g_c)
+
+                        ids_element.append(i)
+                        #g_c_funcs.append(g_c)
+                        #G.at[i].set(g_c(i))
+
+                        # G[i] = - node.BC[Variable]['h'] * node.BC[Variable]['var_ext']
+
+                    #g_c = self.func_normalization(g_c)
+
+                    #G += _calc_g_vector(self.w_shape, element.shape, i, g_c, jax_coors, var_value)
+
+                elif node.BC and node.BC[Variable]['type'] == 'Neumann':
+
+                    g_c = lambda *args: node.BC[Variable]['flux']
+
+                    g_c = self.func_normalization(g_c)
+
+                    ids_element.append(i)
+                    #g_c_funcs.append(g_c)
+                    # G[i] = node.BC[Variable]['flux']
+
+                    #g_c = self.func_normalization(g_c)
+
+                    #G += _calc_g_vector(self.w_shape, element.shape, i, g_c, jax_coors, var_value)
+
+            ids.append(ids_element)
+            #g_tup = tuple(g_c_funcs)
+
+            #G += _calc_g_vector(self.w_shape, element.shape, ids, g_c, jax_coors, var_values)
+
+
+
     def func_normalization(self, term):
 
         if isinstance(term, (float, int)):
@@ -419,11 +567,47 @@ class physics:
     def initField(self, variable, value):
         self.var[variable].initField(value)
     
+    def initializeMatrices(self, element, Variable):
+
+        if self.Convection:
+            self.C = self.div(self.var[Variable], element, self.C_const, u)  # 1 stands for velocity (u = 1)
+
+        self.K = self.laplacian(self.K_const, self.var[Variable], element)
+
+        self.B = self.addBMatrix(element, Variable)
+
+
     def getElementMatrix(self, element, Variable, solverOptions=None):
 
         self.initializeMatrices(element, Variable)
         
         return np.asarray(self.C + self.K + self.B)
+    
+    def get_batched_system(self, mesh, Variable, solverOptions=None):
+
+        X_all, state_dict_all, elements_shape_function = self.build_batched_inputs(mesh)
+
+        ids, h_c_funcs, g_c_funcs = self.build_batched_bc_params(mesh, Variable)
+
+        # ----- Matrix assembly ----- 
+        if self.Convection:
+            self.C = self.get_batched_div(self.C_const, X_all, state_dict_all, elements_shape_function, Variable, u)
+
+        self.K = self.get_batched_laplacian(self.K_const, X_all, state_dict_all, elements_shape_function, Variable)
+
+        self.B = self.get_batched_b_matrix(X_all, state_dict_all, elements_shape_function, Variable, ids, h_c_funcs)
+
+
+        # ----- Vector assembly -----
+        self.F = self.get_batched_force_vector(self.F_const, X_all, state_dict_all, elements_shape_function, Variable)
+        self.G = self.get_batched_g_vector(X_all, state_dict_all, elements_shape_function, Variable, ids, g_c_funcs)
+
+
+        # return: A, b
+        return np.asarray(self.C + self.K + self.B), np.asarray(self.F - self.G)
+
+
+
 
     def getElementVector(self, element, Variable, solverOptions=None):
 
@@ -495,6 +679,12 @@ class physics:
 
         return K_e
 
+    def get_batched_laplacian(self, const: float, X_all, state_dict_all, elements_shape_function, Variable):
+
+        const_func = self.func_normalization(const)
+
+        return _batched_calc_laplacian_term(self.w_shape, self.var[Variable].shape, elements_shape_function, const_func, X_all, state_dict_all, Variable)
+
     def laplacian(self, const: float, var: scalarField, element: Element):
         """
         Define the element matrix from the weak form for the Laplacian term.
@@ -542,6 +732,12 @@ class physics:
 
         return _calc_gradient_term(self.w_shape, var.shape, element.shape, jax_coors)
 
+    def get_batched_div(self, const: float, X_all, state_dict_all, elements_shape_function, Variable, Vel):
+
+        const_func = self.func_normalization(const)
+
+        return _batched_calc_divergence_term(self.w_shape, self.var[Variable].shape, elements_shape_function, const_func, X_all, state_dict_all, Variable, Vel)
+
     def div(self, var: scalarField, element: Element, const, Vel):
 
         """
@@ -586,7 +782,15 @@ class physics:
 
         var_values = self.var[var.name].getElementValues(element)
 
-        return _calc_mass_term(self.w_shape, var.shape, element.shape, constM_func, jax_coors, var_values)
+        state_at_x = {variable: self.var[variable].getElementValues(element) for variable in self.var.keys()}
+
+        return _calc_mass_term(self.w_shape, var.shape, element.shape, constM_func, jax_coors, state_at_x, var.name)
+
+    def get_batched_force_vector(self, const, X_all, state_dict_all, elements_shape_function, Variable):
+
+        const_func = self.func_normalization(const)
+
+        return _batched_calc_force_vector(self.w_shape, elements_shape_function, const_func, X_all, state_dict_all, Variable)
 
     def forceVector(self, element: Element, Variable):
 
@@ -603,6 +807,12 @@ class physics:
        
 
         return _calc_force_vector(self.w_shape, element.shape, f_func, jax_coors, state_at_x, Variable)
+
+    def get_batched_b_matrix(self, X_all, state_dict_all, elements_shape_function, Variable, ids, h_c):
+
+
+        return _batched_calc_b_matrix(self.w_shape, elements_shape_function, ids, h_c, X_all, state_dict_all[Variable])
+
 
     def addBMatrix(self, element, Variable):
 
@@ -632,6 +842,10 @@ class physics:
 
 
         return B
+
+    def get_batched_g_vector(self, X_all, state_dict_all, elements_shape_function, Variable, ids, g_c):
+        
+        return _batched_calc_g_vector(self.w_shape, elements_shape_function, ids, g_c, X_all, state_dict_all[Variable])
 
     def addGVector(self, element, Variable):
 
