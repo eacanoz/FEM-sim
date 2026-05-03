@@ -265,7 +265,7 @@ def _calc_stabilization_term(w_shape:str,
     
     return y
 
-@jit(static_argnums=(0,1,2,3))
+@jit(static_argnums=(0,1,3))
 def _calc_b_matrix(w_shape:str, 
                    element_shape:str,
                    id: list[int],
