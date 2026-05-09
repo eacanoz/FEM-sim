@@ -132,7 +132,7 @@ class Model(object):
 
         mesh = self._mesh
 
-        Test_e = self.physics.get_batched_system(mesh, 'T') #Only test
+        #Test_e = self.physics.get_batched_system(mesh, 'T') #Only test
 
         b = np.zeros(nDOF)
 

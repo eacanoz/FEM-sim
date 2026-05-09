@@ -463,11 +463,13 @@ class physics:
                     g_c = self.func_normalization(node.BC[Variable]['flux'])
 
 
+            # Change to return evaluated values at nodes
+
             ids.append(ids_element)
             h_c_funcs.append(h_c)
             g_c_funcs.append(g_c)
 
-        return tuple(ids), tuple(h_c_funcs), tuple(g_c_funcs)
+        return ids, tuple(h_c_funcs), tuple(g_c_funcs)
     
     def build_batched_g_params(self, mesh, Variable):
 
