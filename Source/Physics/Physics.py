@@ -816,167 +816,107 @@ class physics:
         return _batched_calc_b_matrix(self.w_shape, elements_shape_function, ids, h_c, X_all, state_dict_all[Variable])
 
 
-    def addBMatrix(self, element, Variable):
+    def _node_bc(self, node, Variable):
 
-        B = jnp.zeros((element.getNumberNodes(), element.getNumberNodes()))
+        """Returns the boundary-condition dict of `node` for `Variable`, or None if it has none."""
 
-        jax_coors = jnp.array(element.getCoor())
+        if not node.BC:
+            return None
 
-        ids = []
-        h_c_funcs = []
+        return node.BC.get(Variable)
 
-        h_c = lambda n: 0.0
+    def _flagged_nodes(self, element, Variable):
 
-        var_values = self.var[Variable].getElementValues(element)
+        """Returns [(local_index, bc)] for the Newton and Neumann nodes of an element.
+
+        The batched/jitted kernels apply one coefficient function to every flagged node of
+        an element, so an element can carry at most one such node for now.
+        """
+
+        found = []
 
         for i, node in enumerate(element.nodes):
 
-            #var_value = self.var[Variable].getElementValues(element)[i]
+            bc = self._node_bc(node, Variable)
 
-            if node.BC and node.BC[Variable]['type'] == 'Newton':
+            if bc and bc['type'] in ('Newton', 'Neumann'):
+                found.append((i, bc))
 
-                h_c = self.func_normalization(node.BC[Variable]['h'])
+        if len(found) > 1:
+            raise NotImplementedError("Un elemento con mas de un nodo Newton/Neumann aun no esta soportado.")
 
+        return found
+
+    @staticmethod
+    def _newton_rhs(bc):
+
+        """Right-hand-side term -h(T)*T_ext of a Newton BC, with its own closure (no late binding)."""
+
+        h, var_ext = bc['h'], bc['var_ext']
+
+        if callable(h):
+            return lambda n: -h(n) * var_ext
+
+        return lambda n: -h * var_ext
+
+    def addBMatrix(self, element, Variable):
+
+        jax_coors = jnp.array(element.getCoor())
+
+        var_values = self.var[Variable].getElementValues(element)
+
+        ids, h_c = self.check_boundary_conditions_B(element, Variable)
+
+        return _calc_b_matrix(self.w_shape, element.shape, ids, h_c, jax_coors, var_values)
+
+    def addGVector(self, element, Variable):
+
+        jax_coors = jnp.array(element.getCoor())
+
+        var_values = self.var[Variable].getElementValues(element)
+
+        ids, g_c = self.check_boundary_conditions_G(element, Variable)
+
+        return _calc_g_vector(self.w_shape, element.shape, ids, g_c, jax_coors, var_values)
+
+    def check_boundary_conditions_B(self, element, Variable):
+
+        """Newton nodes of the element and their coefficient h(T)."""
+
+        ids = []
+        h_c = lambda n: 0.0  # No Newton BC on this element
+
+        for i, bc in self._flagged_nodes(element, Variable):
+
+            if bc['type'] == 'Newton':
                 ids.append(i)
-                h_c_funcs.append(h_c)
+                h_c = self.func_normalization(bc['h'])
 
-        B += _calc_b_matrix(self.w_shape, element.shape, ids, h_c, jax_coors, var_values)
+        return ids, h_c
 
+    def check_boundary_conditions_G(self, element, Variable):
 
-        return B
+        """Newton and Neumann nodes of the element and their right-hand-side term g(T)."""
+
+        ids = []
+        g_c = lambda n: 0.0  # No flux BC on this element
+
+        for i, bc in self._flagged_nodes(element, Variable):
+
+            ids.append(i)
+
+            if bc['type'] == 'Newton':
+                g_c = self.func_normalization(self._newton_rhs(bc))
+            else:
+                flux = bc['flux']
+                g_c = self.func_normalization(lambda n, flux=flux: flux)
+
+        return ids, g_c
 
     def get_batched_g_vector(self, X_all, state_dict_all, elements_shape_function, Variable, ids, g_c):
         
         return _batched_calc_g_vector(self.w_shape, elements_shape_function, ids, g_c, X_all, state_dict_all[Variable])
 
-    def addGVector(self, element, Variable):
-
-        G = jnp.zeros((element.getNumberNodes()))
-
-        jax_coors = jnp.array(element.getCoor())
-
-        ids = []
-
-        g_c_funcs = []
-
-        var_values = self.var[Variable].getElementValues(element)
-
-        g_c = lambda *args: 0.0  # Default value for g_c, can be overwritten if there are Newton BCs
-
-        for i, node in enumerate(element.nodes):
-
-            #var_value = self.var[Variable].getElementValues(element)[i]
-
-            if node.BC and node.BC[Variable]['type'] == 'Newton':
-
-                h_c = self.func_normalization(node.BC[Variable]['h'])
-
-                if callable(node.BC[Variable]['h']):
-
-                    g_c = lambda *args: -h_c(*args) * node.BC[Variable]['var_ext']
-
-                    g_c = self.func_normalization(g_c)
-
-                    ids.append(i)
-                    g_c_funcs.append(g_c)
-
-
-                    #G.at[i].set(- node.BC[Variable]['h'](i) * node.BC[Variable]['var_ext'])
-
-                    # G[i] = - node.BC[Variable]['h'](i) * node.BC[Variable]['var_ext']
-                    # print('Radiaction BC used')
-                else:
-                    g_c = -node.BC[Variable]['h'] * node.BC[Variable]['var_ext']
-
-                    g_c = self.func_normalization(g_c)
-
-                    ids.append(i)
-                    g_c_funcs.append(g_c)
-                    #G.at[i].set(g_c(i))
-
-                    # G[i] = - node.BC[Variable]['h'] * node.BC[Variable]['var_ext']
-
-                #g_c = self.func_normalization(g_c)
-
-                #G += _calc_g_vector(self.w_shape, element.shape, i, g_c, jax_coors, var_value)
-
-            elif node.BC and node.BC[Variable]['type'] == 'Neumann':
-
-                g_c = lambda *args: node.BC[Variable]['flux']
-
-                g_c = self.func_normalization(g_c)
-
-                ids.append(i)
-                g_c_funcs.append(g_c)
-                # G[i] = node.BC[Variable]['flux']
-
-                #g_c = self.func_normalization(g_c)
-
-                #G += _calc_g_vector(self.w_shape, element.shape, i, g_c, jax_coors, var_value)
-
-        #g_tup = tuple(g_c_funcs)
-
-        G += _calc_g_vector(self.w_shape, element.shape, ids, g_c, jax_coors, var_values)
-
-        return G
-
-    def check_boundary_conditions_B(self, element, Variable):
-
-        ids = []
-        h_c_funcs = []
-
-        h_c = lambda n: 0.0  # Default value for h_c, can be overwritten if there are Newton BCs
-
-
-        for i, node in enumerate(element.nodes):
-
-            if node.BC and node.BC[Variable]['type'] == 'Newton':
-
-                h_c = self.func_normalization(node.BC[Variable]['h'])
-
-                ids.append(i)
-                h_c_funcs.append(h_c)
-
-        return ids, h_c
-    
-    def check_boundary_conditions_G(self, element, Variable):
-        ids = []
-        g_c_funcs = []
-
-        g_c = lambda n: 0.0  # Default value for g_c, can be overwritten if there are Newton BCs
-        for i, node in enumerate(element.nodes):
-
-            if node.BC and node.BC[Variable]['type'] == 'Newton':
-
-                if callable(node.BC[Variable]['h']):
-
-                    g_c = lambda n: -node.BC[Variable]['h'](n) * node.BC[Variable]['var_ext']
-
-                    g_c = self.func_normalization(g_c)
-
-                    ids.append(i)
-                    g_c_funcs.append(g_c)
-
-                else:
-                    g_c = -node.BC[Variable]['h'] * node.BC[Variable]['var_ext']
-
-                    g_c = self.func_normalization(g_c)
-
-                    ids.append(i)
-                    g_c_funcs.append(g_c)
-
-            elif node.BC and node.BC[Variable]['type'] == 'Neumann':
-
-                g_c = lambda n: node.BC[Variable]['flux']
-
-                g_c = self.func_normalization(g_c)
-
-                ids.append(i)
-                g_c_funcs.append(g_c)
-
-        return ids, g_c # To fix: This is currently only for a single node with Newton BC. Next updates will show the code for multiple nodes with Newton BC.
-
-    
     def stabilization(self, element: Element):
 
         Pe_h = self.Pe * element.getLength()

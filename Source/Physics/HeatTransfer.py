@@ -18,6 +18,7 @@ from jax import jit
 
 
 u = 1  # Velocity for convection term, hardcoded for now
+KELVIN_OFFSET = 273.15  # Temperatures are stored in °C; radiation needs K
 
 @jit
 def _calculate_radiative_heat_coef(epsilon, T_ext, T_surface):
@@ -92,6 +93,14 @@ class ht(physics):
 
     def addBC_Radiation(self, id: int, epsilon: float, T_ext: float):
 
-        h_c = lambda n: _calculate_radiative_heat_coef(epsilon, T_ext, n)
+        """
+        Radiation BC. Temperatures are given in °C; the Stefan-Boltzmann law needs Kelvin,
+        so h(T) is evaluated with absolute temperatures. The flux is h(T)*(T - T_ext),
+        which is the same in °C and K because only the difference appears.
+        """
+
+        T_ext_K = T_ext + KELVIN_OFFSET
+
+        h_c = lambda n: _calculate_radiative_heat_coef(epsilon, T_ext_K, n + KELVIN_OFFSET)
         
         self.modelRef._mesh.NL[id].BC['T'] = self.setNewtonBC(h_c, T_ext)

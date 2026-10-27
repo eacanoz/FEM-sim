@@ -377,6 +377,9 @@ class Model(object):
 
         """Solves the model based on the configured solver options."""
 
+        if self.solverOptions is None:
+            self.solverConfiguration()
+
         sim_logger.info("------- Starting simulation -------")
         sim_logger.info("Model: " + self.name)
         sim_logger.info("Dimension: " + str(self._PD) + "D")
@@ -398,11 +401,6 @@ class Model(object):
             sim_logger.info("Time Step: " + str(self.solverOptions['Time Step']))
             sim_logger.info("Total Time: " + str(self.solverOptions['Time']))
 
-
-        #print('-------Simulation started-------')
-
-        if self.solverOptions is None:
-            self.solverConfiguration()
 
         solver = Solution.modelSolver(self)
 

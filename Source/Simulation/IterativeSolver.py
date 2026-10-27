@@ -5,6 +5,7 @@ import scipy.sparse.linalg as spla
 import scipy.linalg as scla
 
 from Source.enums import  IterativeSolvers, Preconditioners
+from Source.logger_config import sim_logger
 
 
 import matplotlib.pyplot as plt
@@ -33,6 +34,27 @@ class IterativeSolver:
             return self.BicgStab()
         elif self.options['Solver'] == IterativeSolvers.GMRES:
             return self.GMres()
+        elif self.options['Solver'] == IterativeSolvers.CG:
+            return self.Cg()
+
+        raise ValueError(f"Iterative solver not implemented: {self.options['Solver']}")
+
+    def _check_info(self, info, name):
+
+        """scipy returns info=0 on success, >0 if not converged after maxiter, <0 on illegal input."""
+
+        if info != 0:
+            sim_logger.warning(f"{name} did not converge (info={info}).")
+
+    def Cg(self):
+
+        M = self.Preconditioner()
+
+        x, info = spla.cg(self.A, self.b, x0=self.x0, M=M, callback=self.callBackFunc)
+
+        self._check_info(info, "CG")
+
+        return x
 
     def BicgStab(self):
         # print('Solver: BicgStab (Biconjugate gradient stabilized method)')
@@ -40,17 +62,21 @@ class IterativeSolver:
         M = self.Preconditioner()
 
         x, info = spla.bicgstab(self.A, self.b, x0=self.x0, M=M, callback=self.callBackFunc)
-        
+
+        self._check_info(info, "BiCGSTAB")
+
         #self.updConvergencePlot()
 
         return x
-    
+
     def GMres(self):
-        print('Solver: GMRES (Generalized Minimal Residual method)')
+        # print('Solver: GMRES (Generalized Minimal Residual method)')
 
         M = self.Preconditioner()
 
         x, info = spla.gmres(self.A, self.b, x0=self.x0, M=M, callback=self.callBackFunc)
+
+        self._check_info(info, "GMRES")
 
         #self.updConvergencePlot()
 
