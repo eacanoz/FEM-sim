@@ -111,7 +111,11 @@ class ht(physics):
 
     def addBC_HeatFluxEdges(self, edges, q_flux: float):
 
-        """Heat flux entering the domain through the edges [W/m2]."""
+        """Heat flux leaving the domain through the edges [W/m2], q = -k dT/dn with n pointing outwards.
+
+        A positive value removes heat from the domain. Example: T = 2x + 1 on x = Lx with k = 1
+        has q = -2 at that edge.
+        """
 
         self.edge_bcs.append({'type': 'Neumann', 'edges': list(edges), 'flux': q_flux})
 
