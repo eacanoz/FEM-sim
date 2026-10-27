@@ -19,6 +19,7 @@ from Source.Pre_processing.BasisFunctions import basisFunctions
 import Source.Simulation.Solvers as Solution
 from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType, DirectSolvers, IterativeSolvers, Preconditioners
 from Source.logger_config import sim_logger
+from Source.Simulation.VectorizedAssembler import LinearGeometry1D, HeatSystem1D
 
 
 
@@ -74,6 +75,8 @@ class Model(object):
 
         self.timeVector = None
 
+        self._geometry = None  # LinearGeometry1D, built on first use by the vectorized path
+
     @property
     def mesh(self):
 
@@ -107,6 +110,29 @@ class Model(object):
         return coord_list
 
 
+    def _heat_system(self):
+
+        """Vectorized system for single-variable physics that support it, or None for the element-based path."""
+
+        if not getattr(self.physics, 'supports_vectorized_assembly', False):
+            return None
+
+        if self.physics.getNumOfVar() != 1:
+            return None
+
+        if self._geometry is None:
+            self._geometry = LinearGeometry1D(self._mesh)
+
+        return HeatSystem1D(self, self._geometry)
+
+    def _nodal_state(self):
+
+        """Nodal values of the (single) field variable."""
+
+        variable = next(iter(self.physics.var))
+
+        return np.asarray(self.physics.var[variable].values, dtype=float)
+
     def assembleGlobalSystem(self, solverOptions = None):
 
         """Assembles the global system of equations for the model based on the physics and mesh.
@@ -117,6 +143,10 @@ class Model(object):
         """
 
         #print('-------Assembling global system-------')
+
+        system = self._heat_system()
+        if system is not None:
+            return system.linear(self._nodal_state())
 
         Var = self.physics.getVariables()
         nVar = self.physics.getNumOfVar()
@@ -242,6 +272,10 @@ class Model(object):
         nVar = self.physics.getNumOfVar()
         nNodes = self._mesh.getNoN()
         nDOF = nNodes*nVar
+        system = self._heat_system()
+        if system is not None:
+            return system.residual_and_tangent(self._nodal_state())
+
         #results_K = []
         #results_F = []      
 
@@ -305,6 +339,10 @@ class Model(object):
         :param solverOptions: Dictionary containing solver configuration options.
                
         """
+
+        system = self._heat_system()
+        if system is not None:
+            return system.geo.mass(self.physics.M_const)
 
         M = sc.sparse.lil_matrix((self._mesh.getNoN(), self._mesh.getNoN()))
 

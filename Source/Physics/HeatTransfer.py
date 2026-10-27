@@ -31,6 +31,8 @@ def _calculate_radiative_heat_coef(epsilon, T_ext, T_surface):
 class ht(physics):
     ConstRel = '∇.(k * ∇T) + Q == 0'
 
+    supports_vectorized_assembly = True
+
     # Set material properties.
 
     def __init__(self, model):

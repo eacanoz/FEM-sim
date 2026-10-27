@@ -37,6 +37,8 @@ e1, e2, e3 = sp.symbols('e1 e2 e3')
 
 u = 1
 
+_zero_const = lambda *args: 0.0
+
 def get_gauss_points_weights(num_points: int) -> tuple[jnp.ndarray, jnp.ndarray]:
     xi, w = np.polynomial.legendre.leggauss(num_points)
 
@@ -383,6 +385,9 @@ _batched_calc_g_vector = jax.vmap(_calc_g_vector,
 
 class physics:
 
+    # Set to True by physics whose system can be assembled with Source.Simulation.VectorizedAssembler
+    supports_vectorized_assembly = False
+
     def __init__(self, model):
 
         self.modelRef = model
@@ -553,6 +558,15 @@ class physics:
 
         return h_c
 
+    def _C_term(self):
+
+        """Convection coefficient for the element-based residual: zero when Convection is off.
+
+        A module-level zero function is used so the jitted kernels are not recompiled.
+        """
+
+        return self.C_const if self.Convection else _zero_const
+
     def getVariables(self):
         return self.var.keys()
 
@@ -639,7 +653,7 @@ class physics:
         state_at_x = {variable: self.var[variable].getElementValues(element) for variable in self.var.keys()}
 
         R_e = _calc_element_residual_vector(self.w_shape, self.var[Variable].shape, element.shape,
-                        self.C_const, self.K_const, h_c_for_B, self.F_const, g_c_for_G, ids_for_B, ids_for_G,
+                        self._C_term(), self.K_const, h_c_for_B, self.F_const, g_c_for_G, ids_for_B, ids_for_G,
                         Variable, jax_coors, state_at_x, self.vel)
 
         return np.asarray(R_e)
@@ -676,7 +690,7 @@ class physics:
         state_at_x = {variable: self.var[variable].getElementValues(element) for variable in self.var.keys()}
 
         K_e = _calc_element_tangent_matrix(self.w_shape, self.var[Variable].shape, element.shape,
-                        self.C_const, self.K_const, h_c_for_B, self.F_const, g_c_for_G, ids_for_B, ids_for_G,
+                        self._C_term(), self.K_const, h_c_for_B, self.F_const, g_c_for_G, ids_for_B, ids_for_G,
                         Variable, jax_coors, state_at_x, self.vel)  # To fix: This is currently only for a single node with Newton BC and no convection. Next updates will show the code for multiple nodes with Newton BC and for convection.
 
         return K_e
