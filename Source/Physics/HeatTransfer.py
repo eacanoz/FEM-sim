@@ -93,6 +93,34 @@ class ht(physics):
 
         self.modelRef._mesh.NL[id].BC['T'] = self.setNeumannBC(q_flux)
 
+    ## ---------- Boundary conditions on edges (2D) ---------- ##
+
+    def addBC_TemperatureEdges(self, edges, T):
+
+        """Dirichlet temperature on every node of the given edges. edges: [(node_a, node_b), ...].
+
+        T is a number or a function T(x, y) evaluated at each node.
+        """
+
+        nodes = self.modelRef._mesh.NL
+
+        for a, b in edges:
+            for node_id in (a, b):
+                value = T(*nodes[node_id].coor[:2]) if callable(T) else T
+                nodes[node_id].BC['T'] = self.setDirichletBC(value)
+
+    def addBC_HeatFluxEdges(self, edges, q_flux: float):
+
+        """Heat flux entering the domain through the edges [W/m2]."""
+
+        self.edge_bcs.append({'type': 'Neumann', 'edges': list(edges), 'flux': q_flux})
+
+    def addBC_ConvectionEdges(self, edges, h_c: float, T_ext: float):
+
+        """Convection h_c (T_ext - T) through the edges [W/m2]. h_c must be a number."""
+
+        self.edge_bcs.append({'type': 'Newton', 'edges': list(edges), 'h': h_c, 'var_ext': T_ext})
+
     def addBC_Radiation(self, id: int, epsilon: float, T_ext: float):
 
         """

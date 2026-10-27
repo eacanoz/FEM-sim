@@ -418,6 +418,8 @@ class physics:
 
         self.Pe = 0  # Peclet number
 
+        self.edge_bcs = []  # Newton/Neumann conditions on edges (2D): dicts with 'type', 'edges', ...
+
     def set_state_at_x(self, element):
         state_at_x = {variable: self.var[variable].getElementValues(element) for variable in self.var.keys()}
 

@@ -53,53 +53,60 @@ class Mesh:
 
     def generate2DMesh(self, dim: tuple, div: tuple, element_type):
 
-        # Only for rectangular geometries
+        """Rectangular mesh of bilinear quadrilaterals (Q4).
 
-        PD = 2
-        q = np.array([[0, 0], [dim[0], 0], [0, dim[1]], [dim[0], dim[1]]]) # corners
+        dim = (Lx, Ly) size of the domain, div = (nx, ny) number of elements in each direction.
+        Node numbering runs along x first (as in 2DFEM.py); each element lists its nodes
+        counter-clockwise: bottom-left, bottom-right, top-right, top-left.
+        """
 
-        self.NoN = (div[0] + 1)*(div[1] + 1)
+        Lx, Ly = dim
+        nx, ny = div
 
-        self.NoE = (div[0])*(div[1])
+        self.PD = 2
+        self.meshType = element_type
 
-        NPE = 4
+        self.NL = []
+        for j in range(ny + 1):
+            for i in range(nx + 1):
+                self.NL.append(Node(id=len(self.NL), coor=(i * Lx / nx, j * Ly / ny)))
 
-        self.NL = np.zeros([self.NoN, PD])
+        self.EL = []
+        for j in range(ny):
+            for i in range(nx):
+                bl = j * (nx + 1) + i
+                self.EL.append(Element(id=len(self.EL),
+                                       nodes=[self.NL[bl], self.NL[bl + 1],
+                                              self.NL[bl + nx + 2], self.NL[bl + nx + 1]]))
 
-        a = (q[1,0] - q[0,0])/ div[0]  # Increment in the horizontal direction
-        b = (q[2,1] - q[0,1])/ div[1]  # Increment in the vertical direction
+        self.NoN = len(self.NL)
+        self.NoE = len(self.EL)
 
-        n = 0 # Through rows in NL
+    def boundary_edges(self, selector):
 
-        for i in range(1, div[1]+2):
+        """Outer-boundary edges whose midpoint (x, y) satisfies selector(x, y).
 
-            for j in range(1, div[0] + 2):
+        Returns a list of (node_id_a, node_id_b). An edge is on the boundary when only one
+        element uses it.
+        """
 
-                self.NL[n, 0] = q[0, 0] + (j-1)*a
-                self.NL[n, 1] = q[0, 1] + (i-1)*b
+        count = {}
+        for element in self.EL:
+            ids = element.getNodesId()
+            for a, b in zip(ids, ids[1:] + ids[:1]):
+                key = (min(a, b), max(a, b))
+                count[key] = count.get(key, 0) + 1
 
-                n +=1
+        edges = []
+        for (a, b), n_uses in count.items():
+            if n_uses != 1:
+                continue
+            xa, ya = self.NL[a].coor[:2]
+            xb, yb = self.NL[b].coor[:2]
+            if selector((xa + xb) / 2, (ya + yb) / 2):
+                edges.append((a, b))
 
-        ### Elements ###
-
-        self.EL = np.zeros([self.NoE, NPE])
-
-        for i in range(1, div[1]+1):
-
-            for j in range(1, div[0] +1):
-
-                if j ==1:
-
-                    self.EL[(i-1)*div[0]+j-1, 0] = (i-1)*(div[0]+1) + j
-                    self.EL[(i-1)*div[0]+j-1, 1] = self.EL[(i-1)*div[0]+j-1, 0] + 1
-                    self.EL[(i-1)*div[0]+j-1, 2] = self.EL[(i-1)*div[0]+j-1, 0] + (div[0]+2)
-                    self.EL[(i-1)*div[0]+j-1, 3] = self.EL[(i-1)*div[0]+j-1, 0] + (div[0]+1)
-                else:
-
-                    self.EL[(i-1)*div[0]+j-1, 0] = self.EL[(i-1)*div[0]+j-2, 1]
-                    self.EL[(i-1)*div[0]+j-1, 3] = self.EL[(i-1)*div[0]+j-2, 2]
-                    self.EL[(i-1)*div[0]+j-1, 1] = self.EL[(i-1)*div[0]+j-2, 1] + 1
-                    self.EL[(i-1)*div[0]+j-1, 2] = self.EL[(i-1)*div[0]+j-2, 2] + 1
+        return sorted(edges)
 
     def getNoN(self):
 
@@ -201,12 +208,13 @@ class Element:
         #return self.nodes[1].coor[0] - self.nodes[0].coor[0]
 
     def getCoor(self):
-        coordinates = []
 
-        for node in self.nodes:
-            coordinates.append(node.coor[0])
+        """Coordinates of the nodes: scalars in 1D, (x, y) tuples in 2D."""
 
-        return coordinates
+        if len(self.nodes[0].coor) == 1:
+            return [node.coor[0] for node in self.nodes]
+
+        return [tuple(node.coor) for node in self.nodes]
     
     def getNodesId(self):
 

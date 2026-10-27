@@ -19,7 +19,7 @@ from Source.Pre_processing.BasisFunctions import basisFunctions
 import Source.Simulation.Solvers as Solution
 from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType, DirectSolvers, IterativeSolvers, Preconditioners
 from Source.logger_config import sim_logger
-from Source.Simulation.VectorizedAssembler import LinearGeometry1D, HeatSystem1D
+from Source.Simulation.VectorizedAssembler import LinearGeometry, HeatSystem
 
 
 
@@ -121,9 +121,9 @@ class Model(object):
             return None
 
         if self._geometry is None:
-            self._geometry = LinearGeometry1D(self._mesh)
+            self._geometry = LinearGeometry(self._mesh)
 
-        return HeatSystem1D(self, self._geometry)
+        return HeatSystem(self, self._geometry)
 
     def dirichletMask(self, variable=None):
 
@@ -468,6 +468,31 @@ class Model(object):
         plt.plot(self.mesh.getXCoor(), self.sol['T'], marker='o')
         plt.xlabel("x-axis [m]")
         plt.ylabel("Temperature[°C]")
+        plt.show()
+
+    def postProcess2D(self, variable=None, levels=30):
+
+        """Filled contour of the nodal solution on a 2D mesh (each Q4 is split into two triangles)."""
+
+        import matplotlib.tri as mtri
+
+        variable = variable or next(iter(self.physics.var))
+
+        xy = np.array([node.coor[:2] for node in self._mesh.NL], dtype=float)
+
+        triangles = []
+        for element in self._mesh.EL:
+            a, b, c, d = element.getNodesId()
+            triangles += [[a, b, c], [a, c, d]]
+
+        triang = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles)
+
+        fig, ax = plt.subplots()
+        contour = ax.tricontourf(triang, self.physics.var[variable].values, levels=levels)
+        fig.colorbar(contour, ax=ax, label=variable)
+        ax.set_aspect('equal')
+        ax.set_xlabel("x [m]")
+        ax.set_ylabel("y [m]")
         plt.show()
 
 
