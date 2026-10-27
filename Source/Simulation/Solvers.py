@@ -37,6 +37,17 @@ def tictoc(method):
         
         return wrapper
 
+def _same_sparse(a, b):
+
+    """True if two sparse matrices have the same structure and values."""
+
+    if b is None or a.shape != b.shape or a.nnz != b.nnz:
+        return False
+
+    return (np.array_equal(a.indptr, b.indptr) and np.array_equal(a.indices, b.indices)
+            and np.array_equal(a.data, b.data))
+
+
 class modelSolver():
 
     """Class responsible for solving the model based on the physics and mesh. 
@@ -127,30 +138,61 @@ class modelSolver():
 
     def transientSolver(self):
 
-        """Solves the transient problem for the model based on the configured solver options using an ODE solver."""
+        """Theta-method with a fixed time step: theta = 1 is implicit Euler, theta = 0.5 Crank-Nicolson.
+
+        Each step assembles the system at the current state, so nonlinear BCs are evaluated at the
+        start of the step. The step matrix is factorized again only when it changes.
+        Dirichlet nodes keep their prescribed values (the mass matrix is zeroed on those rows/columns).
+        """
+
+        theta = float(self.solverOptions['Time Discretization'])
+        total_time = float(self.solverOptions['Time'])
+        dt_requested = float(self.solverOptions['Time Step'])
+
+        n_steps = max(1, int(np.ceil(total_time / dt_requested - 1e-12)))
+        dt = total_time / n_steps
+
+        sim_logger.info(f"Theta = {theta}, steps = {n_steps}, dt = {dt:.6g}")
 
         self.getInitialField()
 
-        sol = solve_ivp(self.transientRHS, [0, self.solverOptions['Time']], self.x0, method='BDF')
+        variable = next(iter(self.model.physics.var))
+        dirichlet = self.model.dirichletMask(variable)
 
-        self.timeVector = sol.t 
+        # Initial state satisfies the Dirichlet conditions
+        A, b = self.model.assembleGlobalSystem(self.solverOptions)
+        x = self.x0.copy()
+        x[dirichlet] = b[dirichlet]
+        self.updateSolution(x)
 
-        self.model.physics.var['T'].updateTimeValues(sol.y) # Fix
+        free = sp.diags((~dirichlet).astype(float))
+        M = (free @ self.model.assembleMassMatrix(self.solverOptions).tocsr() @ free).tocsr()
 
+        Y = np.zeros((len(x), n_steps + 1))
+        Y[:, 0] = x
 
-    def transientRHS(self, t, y):
+        lu, S_prev = None, None
 
-        """Defines the right-hand side of the transient problem for the ODE solver."""
+        for step in range(n_steps):
 
-        self.updateSolution(y)
+            A, b = self.model.assembleGlobalSystem(self.solverOptions)
 
-        self.construcProblem()
+            S = (M + theta * dt * A).tocsc()
 
-        dy_dt = spla.inv(self.M) @ (self.b - self.A.dot(y))
+            if lu is None or not _same_sparse(S, S_prev):
+                lu = spla.splu(S)
+                S_prev = S
 
-        self.updateSolution(y)
+            rhs = M @ x - (1.0 - theta) * dt * (A @ x) + dt * b
 
-        return dy_dt
+            x = lu.solve(rhs)
+            self.updateSolution(x)
+
+            Y[:, step + 1] = x
+
+        self.timeVector = np.linspace(0.0, total_time, n_steps + 1)
+
+        self.model.physics.var[variable].updateTimeValues(Y)
 
     def linearSolver(self):
 
@@ -262,142 +304,83 @@ class modelSolver():
         self.K, self.f = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
 
 
+    def _solve_newton_step(self, J, rhs):
+
+        """Solves J dX = rhs with the configured linear solver."""
+
+        if self.model.solverOptions['Method'] == SolverType.direct:
+            return DirectSolver(J, rhs, self.x0, self.model.solverOptions).solve()
+
+        return IterativeSolver(J, rhs, self.x0, self.model.solverOptions).solve()
+
     def newtonSolver(self):
 
-        """Implements a Newton-Raphson solver for the nonlinear problem.
-        It iteratively computes the Jacobian matrix, solves the linearized system, and updates the solution vector until convergence based on a relaxation parameter lambda."""
+        """Newton-Raphson for the nonlinear problem, with a backtracking line search on ||R||.
+
+        Stops when ||R|| <= rtol * ||R0|| or ||R|| <= atol. The residual and the tangent come from the
+        model; trial states are written to the field, and the last accepted state is kept.
+        """
 
         sim_logger.info("------- Starting Newton-Raphson nonlinear solver -------")
 
+        rtol = 1e-8
+        atol = 1e-10
+        max_iterations = 200
+        lam_min = 1.0 / 1024.0
 
-        self.tolerance = 1
-        self.numbIterations = 0
+        sim_logger.info(f"Relative tolerance: {rtol:.1e}, Absolute tolerance: {atol:.1e}, "
+                        f"Max Number of Iterations: {max_iterations}")
 
-        lamb_min = 0.05
-        lamb_max = 0.9
-
-        error_1 = 100
-
-        lamb = 0.8
-
-        min_tolerance = 1e-4
-        max_numb_iterations = 200
-
-
-        sim_logger.info(f"Minimum Tolerance: {min_tolerance:.4e}, Max Number of Iterations: {max_numb_iterations}")
-
-        # 1. IMPRIMIR EL ENCABEZADO DE LA TABLA ANTES DEL BUCLE
-        # Explicación del formato:
-        # :^6  -> Centrado ocupando 6 espacios
-        # :^15 -> Centrado ocupando 15 espacios
-        header = f"| {'Iter':^6} | {'Error (Norm R)':^15} | {'Alpha (Step)':^15}"
+        header = f"| {'Iter':^6} | {'||R||':^15} | {'||R||/||R0||':^15} | {'Alpha (Step)':^12}"
         separator = "-" * len(header)
-        
+
         sim_logger.info(separator)
         sim_logger.info(header)
         sim_logger.info(separator)
-        
-        # Fila para la iteración 0 (Condición Inicial)
-        #row_0 = f"| {0:^6} | {error:^15.4e} | {'-':^15} | {'Condición Inicial':^20} |"
-        #sim_logger.info(row_0)
 
-        while (self.tolerance > min_tolerance and self.numbIterations < max_numb_iterations):
+        x = self.x0.copy()
 
-            self.numbIterations += 1
+        J, R = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
+        norm_R0 = np.linalg.norm(R)
+        norm_R = norm_R0
 
-            if lamb == lamb_min:
-                lamb = 0.8
+        iteration = 0
 
-            #print(f'----- Iteration number: {self.numbIterations} -----')
-            #self.construcProblem()
-            #self.getInitialField()
+        while norm_R > atol and norm_R > rtol * norm_R0 and iteration < max_iterations:
 
+            iteration += 1
 
-            #if self.numbIterations == 1 or self.numbIterations % 3 == 0:
-            #    self.assembleNonlinearSystem()
-            #    J = self.K
-            #    Fi_1 = self.f
+            dX = self._solve_newton_step(J, -R)
 
-            self.assembleNonlinearSystem()
-            J = self.K
-            Fi_1 = self.f
+            lam = 1.0
+            while True:
 
-            #J = self.jac(self.x0)
+                x_try = x + lam * dX
+                self.updateSolution(x_try)
 
-            #J = self.Jacobian()
+                J_try, R_try = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
+                norm_try = np.linalg.norm(R_try)
 
-            #Fi_1 = self.A.dot(self.x0) - self.b
+                if norm_try < (1.0 - 1e-4 * lam) * norm_R or lam <= lam_min:
+                    break
 
-            if self.model.solverOptions['Method'] == SolverType.direct:
+                lam *= 0.5
 
-                dX = DirectSolver(J, -Fi_1, self.x0, self.model.solverOptions).solve()
+            x, J, R, norm_R = x_try, J_try, R_try, norm_try
 
-            elif self.model.solverOptions['Method'] == SolverType.iterative:
-
-                dX = IterativeSolver(J, -Fi_1, self.x0, self.model.solverOptions).solve()         
-
-            # self.linearSolver()
-
-            xi = self.x0 + lamb * dX
-            
-            # while (True):
-
-            #     xi = self.x0 + lamb * dX
-
-            #     Fi = self.createNonlinearSystem(xi)
-
-            # # estimating error for new iteration.
-
-
-            #     if self.model.solverOptions['Method'] == SolverType.direct:
-
-            #         error = DirectSolver(J, -Fi, dX, self.model.solverOptions).solve()      
-
-
-            #     elif self.model.solverOptions['Method'] == SolverType.iterative:
-
-            #         error = IterativeSolver(J, -Fi, dX, self.model.solverOptions).solve()
-
-                
-            #     if np.linalg.norm(error) < error_1:
-
-            #         lamb = min(lamb * 1.2, lamb_max)
-
-            #         error_1 = np.linalg.norm(error)
-
-            #         break
-
-            #     else:
-            #         lamb = max(lamb * 0.5, lamb_min)
-
-            #         error_1 = np.linalg.norm(error)
-
-            #         if lamb == lamb_min:
-            #             break
-
-            #self.tolerance = np.linalg.norm(self.sol - self.x0)
-            #self.tolerance = np.linalg.norm(Fi) 
-
-            #self.tolerance = np.linalg.norm(Fi) / np.linalg.norm(Fi_1)
-            self.tolerance = np.linalg.norm(dX)
-
-            self.updateSolution(xi)
-
-            self.x0 = xi
-
-            row = f"| {self.numbIterations:^6} | {self.tolerance:^15.4e} | {lamb:^15.4f}"
-            sim_logger.info(row)
-
-            #print(f'\nTolerance for iteration number {self.numbIterations}: {self.tolerance}\n')
+            sim_logger.info(f"| {iteration:^6} | {norm_R:^15.4e} | {norm_R / norm_R0:^15.4e} | {lam:^12.4f}")
 
         sim_logger.info(separator)
 
-        if self.tolerance <= min_tolerance:
-            sim_logger.info(f"Succefully converged in {self.numbIterations} iterations.")
+        if norm_R <= atol or norm_R <= rtol * norm_R0:
+            sim_logger.info(f"Succefully converged in {iteration} iterations.")
         else:
             sim_logger.warning("Solver did not converge at the specified tolerance and number of iterations.")
 
-        return xi
+        self.x0 = x
+        self.updateSolution(x)
+
+        return x
 
     def updateSolution(self, x):
 

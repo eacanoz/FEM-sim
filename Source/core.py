@@ -125,6 +125,20 @@ class Model(object):
 
         return HeatSystem1D(self, self._geometry)
 
+    def dirichletMask(self, variable=None):
+
+        """Boolean array over the nodes: True where `variable` has a Dirichlet condition."""
+
+        variable = variable or next(iter(self.physics.var))
+
+        mask = np.zeros(self._mesh.getNoN(), dtype=bool)
+
+        for node in self._mesh.NL:
+            if node.BC and node.BC.get(variable, {}).get('type') == 'Dirichlet':
+                mask[node.id] = True
+
+        return mask
+
     def _nodal_state(self):
 
         """Nodal values of the (single) field variable."""
