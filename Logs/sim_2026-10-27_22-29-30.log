@@ -1,0 +1,393 @@
+2026-10-27 22:29:31 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:31 - INFO - Model: Reactor_placa
+2026-10-27 22:29:31 - INFO - Dimension: 2D
+2026-10-27 22:29:31 - INFO - Nodes: 861
+2026-10-27 22:29:31 - INFO - Elements: 800
+2026-10-27 22:29:31 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:31 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:31 - INFO - Study: Steady state
+2026-10-27 22:29:31 - INFO - Type: Nonlinear
+2026-10-27 22:29:31 - INFO - Method: Direct
+2026-10-27 22:29:31 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:31 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-27 22:29:31 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-27 22:29:31 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:31 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-27 22:29:31 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:31 - INFO - |   1    |   8.3964e-01    |   1.5325e-01    |    1.0000   
+2026-10-27 22:29:31 - INFO - |   2    |   5.7744e-01    |   1.0539e-01    |    0.5000   
+2026-10-27 22:29:31 - INFO - |   3    |   6.4698e-03    |   1.1808e-03    |    1.0000   
+2026-10-27 22:29:31 - INFO - |   4    |   1.3842e-06    |   2.5264e-07    |    1.0000   
+2026-10-27 22:29:31 - INFO - |   5    |   1.3183e-13    |   2.4062e-14    |    1.0000   
+2026-10-27 22:29:31 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:31 - INFO - Succefully converged in 5 iterations.
+2026-10-27 22:29:31 - INFO - method finished on 0.261 seconds
+2026-10-27 22:29:31 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:32 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:32 - INFO - Model: Reactor_placa
+2026-10-27 22:29:32 - INFO - Dimension: 2D
+2026-10-27 22:29:32 - INFO - Nodes: 861
+2026-10-27 22:29:32 - INFO - Elements: 800
+2026-10-27 22:29:32 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:32 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:32 - INFO - Study: Steady state
+2026-10-27 22:29:32 - INFO - Type: Nonlinear
+2026-10-27 22:29:32 - INFO - Method: Direct
+2026-10-27 22:29:32 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:32 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-27 22:29:32 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-27 22:29:32 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:32 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-27 22:29:32 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:32 - INFO - |   1    |   8.9465e-14    |   3.8931e-14    |    1.0000   
+2026-10-27 22:29:32 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:32 - INFO - Succefully converged in 1 iterations.
+2026-10-27 22:29:32 - INFO - method finished on 0.174 seconds
+2026-10-27 22:29:32 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:32 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:32 - INFO - Model: Reactor_placa
+2026-10-27 22:29:32 - INFO - Dimension: 2D
+2026-10-27 22:29:32 - INFO - Nodes: 861
+2026-10-27 22:29:32 - INFO - Elements: 800
+2026-10-27 22:29:32 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:32 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:32 - INFO - Study: Steady state
+2026-10-27 22:29:32 - INFO - Type: Nonlinear
+2026-10-27 22:29:32 - INFO - Method: Direct
+2026-10-27 22:29:32 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:32 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-27 22:29:32 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-27 22:29:32 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:32 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-27 22:29:32 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:32 - INFO - |   1    |   5.4325e-02    |   2.0798e-02    |    1.0000   
+2026-10-27 22:29:32 - INFO - |   2    |   3.4908e-02    |   1.3364e-02    |    0.5000   
+2026-10-27 22:29:32 - INFO - |   3    |   3.1654e-05    |   1.2118e-05    |    1.0000   
+2026-10-27 22:29:32 - INFO - |   4    |   2.3857e-11    |   9.1334e-12    |    1.0000   
+2026-10-27 22:29:32 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:32 - INFO - Succefully converged in 4 iterations.
+2026-10-27 22:29:32 - INFO - method finished on 0.272 seconds
+2026-10-27 22:29:32 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:32 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:32 - INFO - Model: Reactor_placa
+2026-10-27 22:29:32 - INFO - Dimension: 2D
+2026-10-27 22:29:32 - INFO - Nodes: 861
+2026-10-27 22:29:32 - INFO - Elements: 800
+2026-10-27 22:29:32 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:32 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:32 - INFO - Study: Steady state
+2026-10-27 22:29:32 - INFO - Type: Nonlinear
+2026-10-27 22:29:32 - INFO - Method: Direct
+2026-10-27 22:29:32 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:32 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-27 22:29:32 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-27 22:29:32 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:32 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-27 22:29:32 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:33 - INFO - |   1    |   2.1009e-01    |   6.2074e-02    |    1.0000   
+2026-10-27 22:29:33 - INFO - |   2    |   1.5175e-01    |   4.4837e-02    |    0.5000   
+2026-10-27 22:29:33 - INFO - |   3    |   5.2521e-04    |   1.5518e-04    |    1.0000   
+2026-10-27 22:29:33 - INFO - |   4    |   8.7631e-09    |   2.5892e-09    |    1.0000   
+2026-10-27 22:29:33 - INFO - |   5    |   9.3780e-14    |   2.7709e-14    |    1.0000   
+2026-10-27 22:29:33 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:33 - INFO - Succefully converged in 5 iterations.
+2026-10-27 22:29:33 - INFO - method finished on 0.314 seconds
+2026-10-27 22:29:33 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:33 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:33 - INFO - Model: Reactor_placa
+2026-10-27 22:29:33 - INFO - Dimension: 2D
+2026-10-27 22:29:33 - INFO - Nodes: 861
+2026-10-27 22:29:33 - INFO - Elements: 800
+2026-10-27 22:29:33 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:33 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:33 - INFO - Study: Steady state
+2026-10-27 22:29:33 - INFO - Type: Nonlinear
+2026-10-27 22:29:33 - INFO - Method: Direct
+2026-10-27 22:29:33 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:33 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-27 22:29:33 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-27 22:29:33 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:33 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-27 22:29:33 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:33 - INFO - |   1    |   8.3964e-01    |   1.5325e-01    |    1.0000   
+2026-10-27 22:29:33 - INFO - |   2    |   5.7744e-01    |   1.0539e-01    |    0.5000   
+2026-10-27 22:29:33 - INFO - |   3    |   6.4698e-03    |   1.1808e-03    |    1.0000   
+2026-10-27 22:29:33 - INFO - |   4    |   1.3842e-06    |   2.5264e-07    |    1.0000   
+2026-10-27 22:29:33 - INFO - |   5    |   1.3672e-13    |   2.4954e-14    |    1.0000   
+2026-10-27 22:29:33 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:33 - INFO - Succefully converged in 5 iterations.
+2026-10-27 22:29:33 - INFO - method finished on 0.316 seconds
+2026-10-27 22:29:33 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:33 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:33 - INFO - Model: Reactor_placa
+2026-10-27 22:29:33 - INFO - Dimension: 2D
+2026-10-27 22:29:33 - INFO - Nodes: 861
+2026-10-27 22:29:33 - INFO - Elements: 800
+2026-10-27 22:29:33 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:33 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:33 - INFO - Study: Steady state
+2026-10-27 22:29:33 - INFO - Type: Nonlinear
+2026-10-27 22:29:33 - INFO - Method: Direct
+2026-10-27 22:29:33 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:33 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-27 22:29:33 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-27 22:29:33 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:33 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-27 22:29:33 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:33 - INFO - |   1    |   1.9631e+00    |   2.5128e-01    |    1.0000   
+2026-10-27 22:29:33 - INFO - |   2    |   1.1800e+00    |   1.5103e-01    |    0.5000   
+2026-10-27 22:29:33 - INFO - |   3    |   2.3682e-02    |   3.0312e-03    |    1.0000   
+2026-10-27 22:29:33 - INFO - |   4    |   8.6606e-03    |   1.1085e-03    |    0.5000   
+2026-10-27 22:29:34 - INFO - |   5    |   1.0800e-06    |   1.3824e-07    |    1.0000   
+2026-10-27 22:29:34 - INFO - |   6    |   1.2524e-13    |   1.6030e-14    |    1.0000   
+2026-10-27 22:29:34 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:34 - INFO - Succefully converged in 6 iterations.
+2026-10-27 22:29:34 - INFO - method finished on 0.353 seconds
+2026-10-27 22:29:34 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:34 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:34 - INFO - Model: Reactor_placa
+2026-10-27 22:29:34 - INFO - Dimension: 2D
+2026-10-27 22:29:34 - INFO - Nodes: 861
+2026-10-27 22:29:34 - INFO - Elements: 800
+2026-10-27 22:29:34 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:34 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:34 - INFO - Study: Steady state
+2026-10-27 22:29:34 - INFO - Type: Nonlinear
+2026-10-27 22:29:34 - INFO - Method: Direct
+2026-10-27 22:29:34 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:34 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-27 22:29:34 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-27 22:29:34 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:34 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-27 22:29:34 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:34 - INFO - |   1    |   6.4186e+00    |   5.0633e-01    |    1.0000   
+2026-10-27 22:29:34 - INFO - |   2    |   3.1535e+00    |   2.4876e-01    |    0.5000   
+2026-10-27 22:29:34 - INFO - |   3    |   5.9228e-01    |   4.6722e-02    |    1.0000   
+2026-10-27 22:29:34 - INFO - |   4    |   8.7677e-02    |   6.9164e-03    |    1.0000   
+2026-10-27 22:29:34 - INFO - |   5    |   2.2712e-04    |   1.7916e-05    |    1.0000   
+2026-10-27 22:29:34 - INFO - |   6    |   1.7932e-09    |   1.4146e-10    |    1.0000   
+2026-10-27 22:29:34 - INFO - |   7    |   1.7141e-13    |   1.3521e-14    |    1.0000   
+2026-10-27 22:29:34 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:34 - INFO - Succefully converged in 7 iterations.
+2026-10-27 22:29:34 - INFO - method finished on 0.347 seconds
+2026-10-27 22:29:34 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:34 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:34 - INFO - Model: Reactor_placa
+2026-10-27 22:29:34 - INFO - Dimension: 2D
+2026-10-27 22:29:34 - INFO - Nodes: 861
+2026-10-27 22:29:34 - INFO - Elements: 800
+2026-10-27 22:29:34 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:34 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:34 - INFO - Study: Steady state
+2026-10-27 22:29:34 - INFO - Type: Nonlinear
+2026-10-27 22:29:34 - INFO - Method: Direct
+2026-10-27 22:29:34 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:34 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-27 22:29:34 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-27 22:29:34 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:34 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-27 22:29:34 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:34 - INFO - |   1    |   1.2781e+01    |   6.7693e-01    |    0.5000   
+2026-10-27 22:29:34 - INFO - |   2    |   4.8734e+00    |   2.5812e-01    |    0.5000   
+2026-10-27 22:29:34 - INFO - |   3    |   2.1326e+00    |   1.1295e-01    |    0.5000   
+2026-10-27 22:29:34 - INFO - |   4    |   1.4150e+00    |   7.4944e-02    |    1.0000   
+2026-10-27 22:29:34 - INFO - |   5    |   3.0301e-02    |   1.6049e-03    |    1.0000   
+2026-10-27 22:29:34 - INFO - |   6    |   1.4573e-05    |   7.7185e-07    |    1.0000   
+2026-10-27 22:29:34 - INFO - |   7    |   3.4418e-12    |   1.8230e-13    |    1.0000   
+2026-10-27 22:29:34 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:34 - INFO - Succefully converged in 7 iterations.
+2026-10-27 22:29:34 - INFO - method finished on 0.376 seconds
+2026-10-27 22:29:34 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:34 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:34 - INFO - Model: Reactor_placa
+2026-10-27 22:29:34 - INFO - Dimension: 2D
+2026-10-27 22:29:34 - INFO - Nodes: 861
+2026-10-27 22:29:34 - INFO - Elements: 800
+2026-10-27 22:29:34 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:34 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:34 - INFO - Study: Steady state
+2026-10-27 22:29:34 - INFO - Type: Nonlinear
+2026-10-27 22:29:34 - INFO - Method: Direct
+2026-10-27 22:29:34 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:34 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-27 22:29:34 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-27 22:29:34 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:34 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-27 22:29:34 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:35 - INFO - |   1    |   2.2577e+01    |   8.9785e-01    |    0.2500   
+2026-10-27 22:29:35 - INFO - |   2    |   2.1512e+01    |   8.5548e-01    |    0.5000   
+2026-10-27 22:29:35 - INFO - |   3    |   8.8564e+00    |   3.5220e-01    |    0.5000   
+2026-10-27 22:29:35 - INFO - |   4    |   2.3605e+00    |   9.3870e-02    |    1.0000   
+2026-10-27 22:29:35 - INFO - |   5    |   2.9764e-02    |   1.1836e-03    |    1.0000   
+2026-10-27 22:29:35 - INFO - |   6    |   1.6993e-02    |   6.7577e-04    |    0.5000   
+2026-10-27 22:29:35 - INFO - |   7    |   3.3776e-06    |   1.3432e-07    |    1.0000   
+2026-10-27 22:29:35 - INFO - |   8    |   3.1557e-13    |   1.2549e-14    |    1.0000   
+2026-10-27 22:29:35 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:35 - INFO - Succefully converged in 8 iterations.
+2026-10-27 22:29:35 - INFO - method finished on 0.444 seconds
+2026-10-27 22:29:35 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:35 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:35 - INFO - Model: Reactor_placa
+2026-10-27 22:29:35 - INFO - Dimension: 2D
+2026-10-27 22:29:35 - INFO - Nodes: 861
+2026-10-27 22:29:35 - INFO - Elements: 800
+2026-10-27 22:29:35 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:35 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:35 - INFO - Study: Steady state
+2026-10-27 22:29:35 - INFO - Type: Nonlinear
+2026-10-27 22:29:35 - INFO - Method: Direct
+2026-10-27 22:29:35 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:35 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-27 22:29:35 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-27 22:29:35 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:35 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-27 22:29:35 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:35 - INFO - |   1    |   3.3976e+01    |   8.9897e-01    |    0.2500   
+2026-10-27 22:29:35 - INFO - |   2    |   2.4239e+01    |   6.4135e-01    |    0.5000   
+2026-10-27 22:29:35 - INFO - |   3    |   1.8935e+01    |   5.0101e-01    |    0.5000   
+2026-10-27 22:29:35 - INFO - |   4    |   9.1132e+00    |   2.4113e-01    |    0.5000   
+2026-10-27 22:29:35 - INFO - |   5    |   3.2115e+00    |   8.4974e-02    |    1.0000   
+2026-10-27 22:29:35 - INFO - |   6    |   3.1921e-02    |   8.4460e-04    |    1.0000   
+2026-10-27 22:29:35 - INFO - |   7    |   1.8803e-02    |   4.9750e-04    |    0.5000   
+2026-10-27 22:29:35 - INFO - |   8    |   2.2703e-06    |   6.0070e-08    |    1.0000   
+2026-10-27 22:29:35 - INFO - |   9    |   4.4604e-13    |   1.1802e-14    |    1.0000   
+2026-10-27 22:29:35 - INFO - -----------------------------------------------------------
+2026-10-27 22:29:35 - INFO - Succefully converged in 9 iterations.
+2026-10-27 22:29:35 - INFO - method finished on 0.48 seconds
+2026-10-27 22:29:35 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:35 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:35 - INFO - Model: Adiabatico
+2026-10-27 22:29:35 - INFO - Dimension: 2D
+2026-10-27 22:29:35 - INFO - Nodes: 25
+2026-10-27 22:29:35 - INFO - Elements: 16
+2026-10-27 22:29:35 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:35 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:35 - INFO - Study: Transient
+2026-10-27 22:29:35 - INFO - Type: Nonlinear
+2026-10-27 22:29:35 - INFO - Method: Direct
+2026-10-27 22:29:35 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:35 - INFO - Time Discretization: 0.5
+2026-10-27 22:29:35 - INFO - Time Step: 0.02
+2026-10-27 22:29:35 - INFO - Total Time: 10.0
+2026-10-27 22:29:35 - INFO - Theta = 0.5, steps = 500, dt = 0.02
+2026-10-27 22:29:37 - INFO - method finished on 1.633 seconds
+2026-10-27 22:29:37 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:37 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:37 - INFO - Model: Adiabatico
+2026-10-27 22:29:37 - INFO - Dimension: 2D
+2026-10-27 22:29:37 - INFO - Nodes: 25
+2026-10-27 22:29:37 - INFO - Elements: 16
+2026-10-27 22:29:37 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:37 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:37 - INFO - Study: Transient
+2026-10-27 22:29:37 - INFO - Type: Nonlinear
+2026-10-27 22:29:37 - INFO - Method: Direct
+2026-10-27 22:29:37 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:37 - INFO - Time Discretization: 1.0
+2026-10-27 22:29:37 - INFO - Time Step: 0.1
+2026-10-27 22:29:37 - INFO - Total Time: 10.0
+2026-10-27 22:29:37 - INFO - Theta = 1.0, steps = 100, dt = 0.1
+2026-10-27 22:29:38 - INFO - method finished on 0.476 seconds
+2026-10-27 22:29:38 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:38 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:38 - INFO - Model: Adiabatico
+2026-10-27 22:29:38 - INFO - Dimension: 2D
+2026-10-27 22:29:38 - INFO - Nodes: 25
+2026-10-27 22:29:38 - INFO - Elements: 16
+2026-10-27 22:29:38 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:38 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:38 - INFO - Study: Transient
+2026-10-27 22:29:38 - INFO - Type: Nonlinear
+2026-10-27 22:29:38 - INFO - Method: Direct
+2026-10-27 22:29:38 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:38 - INFO - Time Discretization: 0.5
+2026-10-27 22:29:38 - INFO - Time Step: 0.1
+2026-10-27 22:29:38 - INFO - Total Time: 10.0
+2026-10-27 22:29:38 - INFO - Theta = 0.5, steps = 100, dt = 0.1
+2026-10-27 22:29:38 - INFO - method finished on 0.53 seconds
+2026-10-27 22:29:38 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:38 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:38 - INFO - Model: Adiabatico
+2026-10-27 22:29:38 - INFO - Dimension: 2D
+2026-10-27 22:29:38 - INFO - Nodes: 25
+2026-10-27 22:29:38 - INFO - Elements: 16
+2026-10-27 22:29:38 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:38 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:38 - INFO - Study: Transient
+2026-10-27 22:29:38 - INFO - Type: Nonlinear
+2026-10-27 22:29:38 - INFO - Method: Direct
+2026-10-27 22:29:38 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:38 - INFO - Time Discretization: 1.0
+2026-10-27 22:29:38 - INFO - Time Step: 0.05
+2026-10-27 22:29:38 - INFO - Total Time: 10.0
+2026-10-27 22:29:38 - INFO - Theta = 1.0, steps = 200, dt = 0.05
+2026-10-27 22:29:39 - INFO - method finished on 0.791 seconds
+2026-10-27 22:29:39 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:39 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:39 - INFO - Model: Adiabatico
+2026-10-27 22:29:39 - INFO - Dimension: 2D
+2026-10-27 22:29:39 - INFO - Nodes: 25
+2026-10-27 22:29:39 - INFO - Elements: 16
+2026-10-27 22:29:39 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:39 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:39 - INFO - Study: Transient
+2026-10-27 22:29:39 - INFO - Type: Nonlinear
+2026-10-27 22:29:39 - INFO - Method: Direct
+2026-10-27 22:29:39 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:39 - INFO - Time Discretization: 0.5
+2026-10-27 22:29:39 - INFO - Time Step: 0.05
+2026-10-27 22:29:39 - INFO - Total Time: 10.0
+2026-10-27 22:29:39 - INFO - Theta = 0.5, steps = 200, dt = 0.05
+2026-10-27 22:29:40 - INFO - method finished on 0.754 seconds
+2026-10-27 22:29:40 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:40 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:40 - INFO - Model: Adiabatico
+2026-10-27 22:29:40 - INFO - Dimension: 2D
+2026-10-27 22:29:40 - INFO - Nodes: 25
+2026-10-27 22:29:40 - INFO - Elements: 16
+2026-10-27 22:29:40 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:40 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:40 - INFO - Study: Transient
+2026-10-27 22:29:40 - INFO - Type: Nonlinear
+2026-10-27 22:29:40 - INFO - Method: Direct
+2026-10-27 22:29:40 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:40 - INFO - Time Discretization: 1.0
+2026-10-27 22:29:40 - INFO - Time Step: 0.025
+2026-10-27 22:29:40 - INFO - Total Time: 10.0
+2026-10-27 22:29:40 - INFO - Theta = 1.0, steps = 400, dt = 0.025
+2026-10-27 22:29:41 - INFO - method finished on 1.381 seconds
+2026-10-27 22:29:41 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:41 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:41 - INFO - Model: Adiabatico
+2026-10-27 22:29:41 - INFO - Dimension: 2D
+2026-10-27 22:29:41 - INFO - Nodes: 25
+2026-10-27 22:29:41 - INFO - Elements: 16
+2026-10-27 22:29:41 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:41 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:41 - INFO - Study: Transient
+2026-10-27 22:29:41 - INFO - Type: Nonlinear
+2026-10-27 22:29:41 - INFO - Method: Direct
+2026-10-27 22:29:41 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:41 - INFO - Time Discretization: 0.5
+2026-10-27 22:29:41 - INFO - Time Step: 0.025
+2026-10-27 22:29:41 - INFO - Total Time: 10.0
+2026-10-27 22:29:41 - INFO - Theta = 0.5, steps = 400, dt = 0.025
+2026-10-27 22:29:42 - INFO - method finished on 1.343 seconds
+2026-10-27 22:29:42 - INFO - ------- Simulation finished -------
+2026-10-27 22:29:43 - INFO - ------- Starting simulation -------
+2026-10-27 22:29:43 - INFO - Model: Reactor_placa
+2026-10-27 22:29:43 - INFO - Dimension: 2D
+2026-10-27 22:29:43 - INFO - Nodes: 861
+2026-10-27 22:29:43 - INFO - Elements: 800
+2026-10-27 22:29:43 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-27 22:29:43 - INFO - ------- Solver configuration -------
+2026-10-27 22:29:43 - INFO - Study: Transient
+2026-10-27 22:29:43 - INFO - Type: Nonlinear
+2026-10-27 22:29:43 - INFO - Method: Direct
+2026-10-27 22:29:43 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 22:29:43 - INFO - Time Discretization: 1.0
+2026-10-27 22:29:43 - INFO - Time Step: 0.02
+2026-10-27 22:29:43 - INFO - Total Time: 1.5
+2026-10-27 22:29:43 - INFO - Theta = 1.0, steps = 75, dt = 0.02
+2026-10-27 22:29:45 - INFO - method finished on 2.009 seconds
+2026-10-27 22:29:45 - INFO - ------- Simulation finished -------

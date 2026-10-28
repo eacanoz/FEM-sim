@@ -1,0 +1,55 @@
+2026-10-27 21:16:10 - INFO - ------- Starting simulation -------
+2026-10-27 21:16:10 - INFO - Model: 2d
+2026-10-27 21:16:10 - INFO - Dimension: 2D
+2026-10-27 21:16:10 - INFO - Nodes: 20
+2026-10-27 21:16:10 - INFO - Elements: 12
+2026-10-27 21:16:10 - INFO - Physics: Heat transfer
+2026-10-27 21:16:10 - INFO - ------- Solver configuration -------
+2026-10-27 21:16:10 - INFO - Study: Steady state
+2026-10-27 21:16:10 - INFO - Type: Linear
+2026-10-27 21:16:10 - INFO - Method: Direct
+2026-10-27 21:16:10 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 21:16:10 - INFO - ------- Starting simulation -------
+2026-10-27 21:16:10 - INFO - Model: 2d
+2026-10-27 21:16:10 - INFO - Dimension: 2D
+2026-10-27 21:16:10 - INFO - Nodes: 20
+2026-10-27 21:16:10 - INFO - Elements: 12
+2026-10-27 21:16:10 - INFO - Physics: Heat transfer
+2026-10-27 21:16:10 - INFO - ------- Solver configuration -------
+2026-10-27 21:16:10 - INFO - Study: Steady state
+2026-10-27 21:16:10 - INFO - Type: Linear
+2026-10-27 21:16:10 - INFO - Method: Direct
+2026-10-27 21:16:10 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 21:16:10 - INFO - ------- Starting simulation -------
+2026-10-27 21:16:10 - INFO - Model: 2d
+2026-10-27 21:16:10 - INFO - Dimension: 2D
+2026-10-27 21:16:10 - INFO - Nodes: 20
+2026-10-27 21:16:10 - INFO - Elements: 12
+2026-10-27 21:16:10 - INFO - Physics: Heat transfer
+2026-10-27 21:16:10 - INFO - ------- Solver configuration -------
+2026-10-27 21:16:10 - INFO - Study: Steady state
+2026-10-27 21:16:10 - INFO - Type: Linear
+2026-10-27 21:16:10 - INFO - Method: Direct
+2026-10-27 21:16:10 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 21:16:10 - INFO - ------- Starting simulation -------
+2026-10-27 21:16:10 - INFO - Model: 2d
+2026-10-27 21:16:10 - INFO - Dimension: 2D
+2026-10-27 21:16:10 - INFO - Nodes: 25
+2026-10-27 21:16:10 - INFO - Elements: 16
+2026-10-27 21:16:10 - INFO - Physics: Heat transfer
+2026-10-27 21:16:10 - INFO - ------- Solver configuration -------
+2026-10-27 21:16:10 - INFO - Study: Steady state
+2026-10-27 21:16:10 - INFO - Type: Linear
+2026-10-27 21:16:10 - INFO - Method: Direct
+2026-10-27 21:16:10 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 21:16:10 - INFO - ------- Starting simulation -------
+2026-10-27 21:16:10 - INFO - Model: 2d
+2026-10-27 21:16:10 - INFO - Dimension: 2D
+2026-10-27 21:16:10 - INFO - Nodes: 36
+2026-10-27 21:16:10 - INFO - Elements: 24
+2026-10-27 21:16:10 - INFO - Physics: Heat transfer
+2026-10-27 21:16:10 - INFO - ------- Solver configuration -------
+2026-10-27 21:16:10 - INFO - Study: Steady state
+2026-10-27 21:16:10 - INFO - Type: Linear
+2026-10-27 21:16:10 - INFO - Method: Direct
+2026-10-27 21:16:10 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)

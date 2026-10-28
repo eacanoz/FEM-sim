@@ -1,0 +1,204 @@
+2026-10-27 21:37:00 - INFO - ------- Starting simulation -------
+2026-10-27 21:37:00 - INFO - Model: Placa_transitoria
+2026-10-27 21:37:00 - INFO - Dimension: 2D
+2026-10-27 21:37:00 - INFO - Nodes: 861
+2026-10-27 21:37:00 - INFO - Elements: 800
+2026-10-27 21:37:00 - INFO - Physics: Heat transfer
+2026-10-27 21:37:00 - INFO - ------- Solver configuration -------
+2026-10-27 21:37:00 - INFO - Study: Transient
+2026-10-27 21:37:00 - INFO - Type: Nonlinear
+2026-10-27 21:37:00 - INFO - Method: Direct
+2026-10-27 21:37:00 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 21:37:00 - INFO - Time Discretization: 0.5
+2026-10-27 21:37:00 - INFO - Time Step: 1.5625
+2026-10-27 21:37:00 - INFO - Total Time: 3000.0
+2026-10-27 21:37:00 - INFO - Theta = 0.5, steps = 1920, dt = 1.5625
+2026-10-27 21:37:06 - INFO - method finished on 6.296 seconds
+2026-10-27 21:37:06 - INFO - ------- Simulation finished -------
+2026-10-27 21:37:06 - INFO - ------- Starting simulation -------
+2026-10-27 21:37:06 - INFO - Model: Placa_transitoria
+2026-10-27 21:37:06 - INFO - Dimension: 2D
+2026-10-27 21:37:06 - INFO - Nodes: 861
+2026-10-27 21:37:06 - INFO - Elements: 800
+2026-10-27 21:37:06 - INFO - Physics: Heat transfer
+2026-10-27 21:37:06 - INFO - ------- Solver configuration -------
+2026-10-27 21:37:06 - INFO - Study: Transient
+2026-10-27 21:37:06 - INFO - Type: Nonlinear
+2026-10-27 21:37:06 - INFO - Method: Direct
+2026-10-27 21:37:06 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 21:37:06 - INFO - Time Discretization: 1.0
+2026-10-27 21:37:06 - INFO - Time Step: 150.0
+2026-10-27 21:37:06 - INFO - Total Time: 3000.0
+2026-10-27 21:37:06 - INFO - Theta = 1.0, steps = 20, dt = 150
+2026-10-27 21:37:06 - INFO - method finished on 0.147 seconds
+2026-10-27 21:37:06 - INFO - ------- Simulation finished -------
+2026-10-27 21:37:06 - INFO - ------- Starting simulation -------
+2026-10-27 21:37:06 - INFO - Model: Placa_transitoria
+2026-10-27 21:37:06 - INFO - Dimension: 2D
+2026-10-27 21:37:06 - INFO - Nodes: 861
+2026-10-27 21:37:06 - INFO - Elements: 800
+2026-10-27 21:37:06 - INFO - Physics: Heat transfer
+2026-10-27 21:37:06 - INFO - ------- Solver configuration -------
+2026-10-27 21:37:06 - INFO - Study: Transient
+2026-10-27 21:37:06 - INFO - Type: Nonlinear
+2026-10-27 21:37:06 - INFO - Method: Direct
+2026-10-27 21:37:06 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 21:37:06 - INFO - Time Discretization: 1.0
+2026-10-27 21:37:06 - INFO - Time Step: 75.0
+2026-10-27 21:37:06 - INFO - Total Time: 3000.0
+2026-10-27 21:37:06 - INFO - Theta = 1.0, steps = 40, dt = 75
+2026-10-27 21:37:07 - INFO - method finished on 0.203 seconds
+2026-10-27 21:37:07 - INFO - ------- Simulation finished -------
+2026-10-27 21:37:07 - INFO - ------- Starting simulation -------
+2026-10-27 21:37:07 - INFO - Model: Placa_transitoria
+2026-10-27 21:37:07 - INFO - Dimension: 2D
+2026-10-27 21:37:07 - INFO - Nodes: 861
+2026-10-27 21:37:07 - INFO - Elements: 800
+2026-10-27 21:37:07 - INFO - Physics: Heat transfer
+2026-10-27 21:37:07 - INFO - ------- Solver configuration -------
+2026-10-27 21:37:07 - INFO - Study: Transient
+2026-10-27 21:37:07 - INFO - Type: Nonlinear
+2026-10-27 21:37:07 - INFO - Method: Direct
+2026-10-27 21:37:07 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 21:37:07 - INFO - Time Discretization: 1.0
+2026-10-27 21:37:07 - INFO - Time Step: 37.5
+2026-10-27 21:37:07 - INFO - Total Time: 3000.0
+2026-10-27 21:37:07 - INFO - Theta = 1.0, steps = 80, dt = 37.5
+2026-10-27 21:37:07 - INFO - method finished on 0.328 seconds
+2026-10-27 21:37:07 - INFO - ------- Simulation finished -------
+2026-10-27 21:37:07 - INFO - ------- Starting simulation -------
+2026-10-27 21:37:07 - INFO - Model: Placa_transitoria
+2026-10-27 21:37:07 - INFO - Dimension: 2D
+2026-10-27 21:37:07 - INFO - Nodes: 861
+2026-10-27 21:37:07 - INFO - Elements: 800
+2026-10-27 21:37:07 - INFO - Physics: Heat transfer
+2026-10-27 21:37:07 - INFO - ------- Solver configuration -------
+2026-10-27 21:37:07 - INFO - Study: Transient
+2026-10-27 21:37:07 - INFO - Type: Nonlinear
+2026-10-27 21:37:07 - INFO - Method: Direct
+2026-10-27 21:37:07 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 21:37:07 - INFO - Time Discretization: 1.0
+2026-10-27 21:37:07 - INFO - Time Step: 18.75
+2026-10-27 21:37:07 - INFO - Total Time: 3000.0
+2026-10-27 21:37:07 - INFO - Theta = 1.0, steps = 160, dt = 18.75
+2026-10-27 21:37:08 - INFO - method finished on 0.578 seconds
+2026-10-27 21:37:08 - INFO - ------- Simulation finished -------
+2026-10-27 21:37:08 - INFO - ------- Starting simulation -------
+2026-10-27 21:37:08 - INFO - Model: Placa_transitoria
+2026-10-27 21:37:08 - INFO - Dimension: 2D
+2026-10-27 21:37:08 - INFO - Nodes: 861
+2026-10-27 21:37:08 - INFO - Elements: 800
+2026-10-27 21:37:08 - INFO - Physics: Heat transfer
+2026-10-27 21:37:08 - INFO - ------- Solver configuration -------
+2026-10-27 21:37:08 - INFO - Study: Transient
+2026-10-27 21:37:08 - INFO - Type: Nonlinear
+2026-10-27 21:37:08 - INFO - Method: Direct
+2026-10-27 21:37:08 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 21:37:08 - INFO - Time Discretization: 1.0
+2026-10-27 21:37:08 - INFO - Time Step: 9.375
+2026-10-27 21:37:08 - INFO - Total Time: 3000.0
+2026-10-27 21:37:08 - INFO - Theta = 1.0, steps = 320, dt = 9.375
+2026-10-27 21:37:09 - INFO - method finished on 1.085 seconds
+2026-10-27 21:37:09 - INFO - ------- Simulation finished -------
+2026-10-27 21:37:09 - INFO - ------- Starting simulation -------
+2026-10-27 21:37:09 - INFO - Model: Placa_transitoria
+2026-10-27 21:37:09 - INFO - Dimension: 2D
+2026-10-27 21:37:09 - INFO - Nodes: 861
+2026-10-27 21:37:09 - INFO - Elements: 800
+2026-10-27 21:37:09 - INFO - Physics: Heat transfer
+2026-10-27 21:37:09 - INFO - ------- Solver configuration -------
+2026-10-27 21:37:09 - INFO - Study: Transient
+2026-10-27 21:37:09 - INFO - Type: Nonlinear
+2026-10-27 21:37:09 - INFO - Method: Direct
+2026-10-27 21:37:09 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 21:37:09 - INFO - Time Discretization: 0.5
+2026-10-27 21:37:09 - INFO - Time Step: 150.0
+2026-10-27 21:37:09 - INFO - Total Time: 3000.0
+2026-10-27 21:37:09 - INFO - Theta = 0.5, steps = 20, dt = 150
+2026-10-27 21:37:09 - INFO - method finished on 0.145 seconds
+2026-10-27 21:37:09 - INFO - ------- Simulation finished -------
+2026-10-27 21:37:09 - INFO - ------- Starting simulation -------
+2026-10-27 21:37:09 - INFO - Model: Placa_transitoria
+2026-10-27 21:37:09 - INFO - Dimension: 2D
+2026-10-27 21:37:09 - INFO - Nodes: 861
+2026-10-27 21:37:09 - INFO - Elements: 800
+2026-10-27 21:37:09 - INFO - Physics: Heat transfer
+2026-10-27 21:37:09 - INFO - ------- Solver configuration -------
+2026-10-27 21:37:09 - INFO - Study: Transient
+2026-10-27 21:37:09 - INFO - Type: Nonlinear
+2026-10-27 21:37:09 - INFO - Method: Direct
+2026-10-27 21:37:09 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 21:37:09 - INFO - Time Discretization: 0.5
+2026-10-27 21:37:09 - INFO - Time Step: 75.0
+2026-10-27 21:37:09 - INFO - Total Time: 3000.0
+2026-10-27 21:37:09 - INFO - Theta = 0.5, steps = 40, dt = 75
+2026-10-27 21:37:09 - INFO - method finished on 0.204 seconds
+2026-10-27 21:37:09 - INFO - ------- Simulation finished -------
+2026-10-27 21:37:09 - INFO - ------- Starting simulation -------
+2026-10-27 21:37:09 - INFO - Model: Placa_transitoria
+2026-10-27 21:37:09 - INFO - Dimension: 2D
+2026-10-27 21:37:09 - INFO - Nodes: 861
+2026-10-27 21:37:09 - INFO - Elements: 800
+2026-10-27 21:37:09 - INFO - Physics: Heat transfer
+2026-10-27 21:37:09 - INFO - ------- Solver configuration -------
+2026-10-27 21:37:09 - INFO - Study: Transient
+2026-10-27 21:37:09 - INFO - Type: Nonlinear
+2026-10-27 21:37:09 - INFO - Method: Direct
+2026-10-27 21:37:09 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 21:37:09 - INFO - Time Discretization: 0.5
+2026-10-27 21:37:09 - INFO - Time Step: 37.5
+2026-10-27 21:37:09 - INFO - Total Time: 3000.0
+2026-10-27 21:37:09 - INFO - Theta = 0.5, steps = 80, dt = 37.5
+2026-10-27 21:37:10 - INFO - method finished on 0.331 seconds
+2026-10-27 21:37:10 - INFO - ------- Simulation finished -------
+2026-10-27 21:37:10 - INFO - ------- Starting simulation -------
+2026-10-27 21:37:10 - INFO - Model: Placa_transitoria
+2026-10-27 21:37:10 - INFO - Dimension: 2D
+2026-10-27 21:37:10 - INFO - Nodes: 861
+2026-10-27 21:37:10 - INFO - Elements: 800
+2026-10-27 21:37:10 - INFO - Physics: Heat transfer
+2026-10-27 21:37:10 - INFO - ------- Solver configuration -------
+2026-10-27 21:37:10 - INFO - Study: Transient
+2026-10-27 21:37:10 - INFO - Type: Nonlinear
+2026-10-27 21:37:10 - INFO - Method: Direct
+2026-10-27 21:37:10 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 21:37:10 - INFO - Time Discretization: 0.5
+2026-10-27 21:37:10 - INFO - Time Step: 18.75
+2026-10-27 21:37:10 - INFO - Total Time: 3000.0
+2026-10-27 21:37:10 - INFO - Theta = 0.5, steps = 160, dt = 18.75
+2026-10-27 21:37:10 - INFO - method finished on 0.602 seconds
+2026-10-27 21:37:10 - INFO - ------- Simulation finished -------
+2026-10-27 21:37:10 - INFO - ------- Starting simulation -------
+2026-10-27 21:37:10 - INFO - Model: Placa_transitoria
+2026-10-27 21:37:10 - INFO - Dimension: 2D
+2026-10-27 21:37:10 - INFO - Nodes: 861
+2026-10-27 21:37:10 - INFO - Elements: 800
+2026-10-27 21:37:10 - INFO - Physics: Heat transfer
+2026-10-27 21:37:10 - INFO - ------- Solver configuration -------
+2026-10-27 21:37:10 - INFO - Study: Transient
+2026-10-27 21:37:10 - INFO - Type: Nonlinear
+2026-10-27 21:37:10 - INFO - Method: Direct
+2026-10-27 21:37:10 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 21:37:10 - INFO - Time Discretization: 0.5
+2026-10-27 21:37:10 - INFO - Time Step: 9.375
+2026-10-27 21:37:10 - INFO - Total Time: 3000.0
+2026-10-27 21:37:10 - INFO - Theta = 0.5, steps = 320, dt = 9.375
+2026-10-27 21:37:11 - INFO - method finished on 1.081 seconds
+2026-10-27 21:37:11 - INFO - ------- Simulation finished -------
+2026-10-27 21:37:11 - INFO - ------- Starting simulation -------
+2026-10-27 21:37:11 - INFO - Model: Placa_transitoria
+2026-10-27 21:37:11 - INFO - Dimension: 2D
+2026-10-27 21:37:11 - INFO - Nodes: 861
+2026-10-27 21:37:11 - INFO - Elements: 800
+2026-10-27 21:37:11 - INFO - Physics: Heat transfer
+2026-10-27 21:37:11 - INFO - ------- Solver configuration -------
+2026-10-27 21:37:11 - INFO - Study: Transient
+2026-10-27 21:37:11 - INFO - Type: Nonlinear
+2026-10-27 21:37:11 - INFO - Method: Direct
+2026-10-27 21:37:11 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 21:37:11 - INFO - Time Discretization: 0.5
+2026-10-27 21:37:11 - INFO - Time Step: 50.0
+2026-10-27 21:37:11 - INFO - Total Time: 3000.0
+2026-10-27 21:37:11 - INFO - Theta = 0.5, steps = 60, dt = 50
+2026-10-27 21:37:12 - INFO - method finished on 0.271 seconds
+2026-10-27 21:37:12 - INFO - ------- Simulation finished -------

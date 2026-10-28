@@ -1,0 +1,25 @@
+2026-10-27 19:39:39 - INFO - ------- Starting simulation -------
+2026-10-27 19:39:39 - INFO - Model: Diff_reaction_problem
+2026-10-27 19:39:39 - INFO - Dimension: 1D
+2026-10-27 19:39:39 - INFO - Nodes: 11
+2026-10-27 19:39:39 - INFO - Elements: 10
+2026-10-27 19:39:39 - INFO - Physics: Transport of Chemical Species
+2026-10-27 19:39:39 - INFO - ------- Solver configuration -------
+2026-10-27 19:39:39 - INFO - Study: Steady state
+2026-10-27 19:39:39 - INFO - Type: Nonlinear
+2026-10-27 19:39:39 - INFO - Method: Direct
+2026-10-27 19:39:39 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-27 19:39:39 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-27 19:39:39 - INFO - Relative tolerance: 1.0e-08, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-27 19:39:39 - INFO - -----------------------------------------------------------
+2026-10-27 19:39:39 - INFO - |  Iter  |      ||R||      |  ||R||/||R0||   | Alpha (Step)
+2026-10-27 19:39:39 - INFO - -----------------------------------------------------------
+2026-10-27 19:39:53 - INFO - |   1    |   1.2884e+02    |   2.1582e-01    |    1.0000   
+2026-10-27 19:40:02 - INFO - |   2    |   2.2735e+01    |   3.8084e-02    |    1.0000   
+2026-10-27 19:40:11 - INFO - |   3    |   2.0500e+00    |   3.4339e-03    |    1.0000   
+2026-10-27 19:40:20 - INFO - |   4    |   2.7772e-02    |   4.6522e-05    |    1.0000   
+2026-10-27 19:40:28 - INFO - |   5    |   5.5019e-06    |   9.2162e-09    |    1.0000   
+2026-10-27 19:40:28 - INFO - -----------------------------------------------------------
+2026-10-27 19:40:28 - INFO - Succefully converged in 5 iterations.
+2026-10-27 19:40:28 - INFO - method finished on 49.078 seconds
+2026-10-27 19:40:28 - INFO - ------- Simulation finished -------
