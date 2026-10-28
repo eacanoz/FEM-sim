@@ -144,6 +144,7 @@ Las aristas se seleccionan con un predicado sobre su punto medio: `mesh.boundary
 | `Example_2D_Poisson.py` | Poisson 2D con solución exacta, tabla de convergencia y gráficos |
 | `Example_2D_Transient.py` | Placa 2D con punto caliente, radiación y convección: transitorio no lineal, convergencia en el tiempo y gráficos |
 | `Example_Reactive_Heat.py` | Reacción exotérmica acoplada con el calor: verificación frente a una EDO, barrido del calor de reacción y arranque transitorio |
+| `Ejemplo_Fisicas_Acopladas.ipynb` | **Cuaderno guiado** del caso reactivo: monta el modelo paso a paso, explica cada función y parámetro, muestra qué ocurre dentro del solver (geometría, DOF, jacobiano, Newton), los resultados, la verificación y el transitorio |
 | `2DFEM.py` | Generación de malla 2D (referencia de numeración) |
 | `readMesh.py` | Lectura de información de un archivo `.msh` con gmsh |
 
