@@ -2,7 +2,6 @@
 
 import sympy as sp
 import numpy as np
-#import jax.jnp as jnp
 
 import jax
 jax.config.update("jax_enable_x64", True)
@@ -57,8 +56,6 @@ class basisFunctions:
         else:
             self.N = sp.Matrix([])
 
-        self.stabilized = False
-
 
     def set_basisFunctions(self, mesh, shape:str):
 
@@ -108,30 +105,17 @@ class basisFunctions:
 
         self.N = sp.Matrix(Nj)
 
-        #self.N_func = sp.lambdify(map_dim[:self.dim], self.N, 'numpy')
         self.N_func = lambda x: shape_functions_1d(mapping, x)
 
     def bfGrad(self, mapping):
 
         self.gradN = self.N.jacobian(sp.Matrix(list(self.N.free_symbols)))
-        #self.gradN_func = sp.lambdify(map_dim[:self.dim], self.gradN, 'numpy')
         self.gradN_func = lambda x: shape_functions_gradient_1d(mapping, x)
 
         return self.gradN
 
 
-    # Add stabilization function
 
-    def addStab(self, type:str, stab):
-
-        if not self.stabilized:
-            if type == 'PG':
-                #self.N_func += stab
-                self.N_func_original = self.N_func
-                self.N_func = None
-                self.N_func = lambda x: self.N_func_original(x) + stab(x)
-                #self.gradN_func = sp.lambdify(map_dim[:self.dim], self.gradN, 'numpy')
-                self.stabilized = True
 
     def lagrangePoly(self, var: sp.core.symbol.Symbol, node: int, nodes: list):
         L = 1
@@ -140,7 +124,6 @@ class basisFunctions:
                 L *= (var - nodes[i])/(nodes[node] - nodes[i])
 
         return L
-
 
 
 @jit(static_argnums=(1,))

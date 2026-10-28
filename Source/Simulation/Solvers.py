@@ -1,30 +1,14 @@
+import time
+
 import numpy as np
-import scipy as sc
 import scipy.sparse as sp
 import scipy.sparse.linalg as spla
-import scipy.linalg as scla
-
-from scipy.integrate import solve_ivp
-from scipy.optimize import root
-
-from numba import jit, njit, prange, guvectorize, vectorize, float64
-
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 
 from Source.Simulation.DirectSolver import DirectSolver
 from Source.Simulation.IterativeSolver import IterativeSolver
 from Source.enums import SolverType, StudyType, ProblemType
 from Source.logger_config import sim_logger
 
-
-import time
-from progress.bar import Bar
-
-# from Source.core import Model
-
-Nfeval = 1
-xi_1 = []
 
 def tictoc(method):
         def wrapper(*args, **kwargs):
@@ -58,21 +42,12 @@ class modelSolver():
 
         """Initializes the model solver with a reference to the model and sets up necessary attributes."""
 
-        self.nIter=1
-        self.error = []
-        self.iter_list = []
-
         self.model = model
 
         self.A = None
         self.b = None
         self.M = None
 
-
-        self.K = None
-        self.f = None
-
-        #self.x0 = {}
         self.x0 = np.array([])
         self.sol = None
 
@@ -96,10 +71,6 @@ class modelSolver():
 
         self.A = self.A.tocsc()
 
-    def convRes(self):
-        self.nIter=1
-        self.error = []
-        self.iter_list = []
 
     @tictoc
     def solve(self):
@@ -107,8 +78,6 @@ class modelSolver():
         """Solves the model based on the configured solver options and updates the solution in the model."""
 
         solDict = {}
-
-        self.convRes()
 
         self.getFieldVariables()
 
@@ -131,10 +100,6 @@ class modelSolver():
             self.linearSolver()
         elif self.model.solverOptions['Type'] == ProblemType.nonlinear:
             self.nonlinearSolver()
-
-        #nls = self.nonlinearSolver
-
-        
 
     def transientSolver(self):
 
@@ -215,7 +180,6 @@ class modelSolver():
             self.sol = solutionMethod.solve()
 
         self.updateSolution(self.sol)
-        # self.updConvergencePlot()
 
 
     def nonlinearSolver(self):
@@ -223,85 +187,12 @@ class modelSolver():
         """Solves the nonlinear problem for the model based on the configured solver options.
         It constructs the global system, computes the Jacobian, and uses a Newton solver to find the solution iteratively until convergence."""
 
-        # print('---------- Nonlinear Solver ----------')
-
         self.getInitialField()
-
-        # sol = fsolve(self.createNonlinearSystem, self.x0)
-        # sol = self.fixPointSolver()
 
         sol = self.newtonSolver()
 
         self.updateSolution(sol)
 
-    def createNonlinearSystem(self, x):
-
-        """Creates the nonlinear system of equations for the model based on the current solution vector x.
-        It updates the solution in the model, constructs the global system, and returns the residual vector for the nonlinear problem."""
-
-        x_init = self.x0.copy()
-
-        self.updateSolution(x)
-        F = self.model.assembleResidualVector(self.solverOptions)
-
-        self.updateSolution(x_init)
-        return F
-
-    def callBackFunc(self, xk):
-
-        """Callback function for monitoring the convergence of the nonlinear solver.
-        It computes the error at each iteration and updates the convergence plot."""
-
-        error = np.linalg.norm(self.A.dot(xk)-self.b)
-        self.error.append(error)
-        self.iter_list.append(self.nIter)
-
-        print('{0:4d}   {1:3.14f}'.format(self.nIter, error))
-
-        self.nIter += 1
-
-    def fixPointSolver(self):
-
-        """Implements a fixed-point iteration solver for the nonlinear problem.
-        It iteratively updates the solution vector until convergence based on a relaxation parameter alpha."""
-        print('---------- Nonlinear Solver ----------')
-
-        self.tolerance = 1
-        self.numbIterations = 0
-
-        
-
-        alpha = 0.7
-
-        while (self.tolerance > 1e-4 or self.numbIterations < 200):
-
-            self.numbIterations += 1
-
-            print(f'----- Iteration number: {self.numbIterations} -----')
-
-            self.linearSolver()
-
-            self.tolerance = np.linalg.norm(self.sol - self.x0) 
-
-            print(f'Tolerance for iteration number {self.numbIterations}: {self.tolerance}')
-
-            if self.tolerance < 1e-4 or self.numbIterations > 200:
-                break
-            else:
-
-                xi = self.x0 + alpha *(self.sol - self.x0)
-
-                self.updateSolution(xi) # Fix -- Hardcoded
-
-        return self.sol
-
-
-    def assembleNonlinearSystem(self):
-
-        """Assembles the nonlinear system of equations for the model based on the current solution vector.
-        It constructs the global system and returns the residual vector for the nonlinear problem."""
-
-        self.K, self.f = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
 
 
     def _solve_newton_step(self, J, rhs):
@@ -396,15 +287,6 @@ class modelSolver():
             self.model.physics.var[fieldVar].updateField(sol)
 
 
-    def updConvergencePlot(self):
-        plt.clf() # Limpiar la figura actual
-        plt.plot(self.iter_list, self.error) # Graficar los datos
-        plt.yscale('log')
-        plt.grid(True)
-        # plt.title('Convergencia') # Añadir título
-        plt.xlabel('Iteration') # Etiqueta del eje x
-        plt.ylabel('Error') # Etiqueta del eje y
-        plt.show() # Mostrar la figura
         
 
     def getFieldVariables(self):

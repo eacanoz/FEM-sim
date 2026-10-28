@@ -1,0 +1,13 @@
+2026-10-26 20:12:54 - INFO - ------- Starting simulation -------
+2026-10-26 20:12:54 - INFO - Model: check
+2026-10-26 20:12:54 - INFO - Dimension: 1D
+2026-10-26 20:12:54 - INFO - Nodes: 11
+2026-10-26 20:12:54 - INFO - Elements: 10
+2026-10-26 20:12:54 - INFO - Physics: Heat transfer
+2026-10-26 20:12:54 - INFO - ------- Solver configuration -------
+2026-10-26 20:12:54 - INFO - Study: Steady state
+2026-10-26 20:12:54 - INFO - Type: Linear
+2026-10-26 20:12:54 - INFO - Method: Direct
+2026-10-26 20:12:54 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-26 20:12:56 - INFO - method finished on 1.624 seconds
+2026-10-26 20:12:56 - INFO - ------- Simulation finished -------

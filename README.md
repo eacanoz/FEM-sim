@@ -113,7 +113,13 @@ Algunos ejemplos abren ventanas de Matplotlib (`plt.show()`). Para ejecutarlos s
 
 ## Pruebas
 
-Cada archivo de `Test/` se ejecuta directamente y también es compatible con pytest:
+Para correr todas las suites de una vez (devuelve código de salida distinto de cero si alguna falla):
+
+```bash
+python run_tests.py
+```
+
+Cada archivo de `Test/` también se ejecuta directamente y es compatible con pytest:
 
 ```bash
 python Test/test_analytic.py       # 1D: soluciones analíticas (5 pruebas)

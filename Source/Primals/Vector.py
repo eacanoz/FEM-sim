@@ -1,5 +1,3 @@
-import numpy as np
-from Source.Pre_processing.BasisFunctions import basisFunctions
 
 class vectorField:
 

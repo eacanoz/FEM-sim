@@ -2,34 +2,21 @@
 # Author: Edgar Alejandro Cano Zapata
 # E-mail: edgara.cano@outlook.com
 # Blog: ---
-# +++++++++++++++++++++++++++++++++++++++++++++++
+# +++++++++++++++++++++++++++++++++++++++++++++
 
 # Main Class for FEA model
 
 import numpy as np
-import sympy as sp
-import scipy as sc
+import scipy.sparse as sparse
 import matplotlib.pyplot as plt
-from itertools import product
 
-from Source.Pre_processing.Mesh import Mesh, Element, Node
-from Source.Physics.Physics import physics
+from Source.Pre_processing.Mesh import Mesh
 from Source.Material import material
 from Source.Pre_processing.BasisFunctions import basisFunctions
 import Source.Simulation.Solvers as Solution
-from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType, DirectSolvers, IterativeSolvers, Preconditioners
+from Source.enums import ShapeFunctionType, StudyType, ProblemType, SolverType, DirectSolvers, Preconditioners
 from Source.logger_config import sim_logger
 from Source.Simulation.VectorizedAssembler import LinearGeometry, HeatSystem
-
-
-
-from progress.bar import Bar
-from joblib import Parallel, delayed
-
-import jax
-
-from numba import jit
-# Model
 
 
 class Model(object):
@@ -75,7 +62,7 @@ class Model(object):
 
         self.timeVector = None
 
-        self._geometry = None  # LinearGeometry1D, built on first use by the vectorized path
+        self._geometry = None  # LinearGeometry, built on first use by the vectorized path
 
     @property
     def mesh(self):
@@ -101,14 +88,6 @@ class Model(object):
                       "\nPhysics: " + self.physics_status)
 
         return custom_str
-    
-
-    def build_batched_inputs(self):
-
-        coord_list = [element.getCoor() for element in self._mesh.EL]
-
-        return coord_list
-
 
     def _heat_system(self):
 
@@ -156,8 +135,6 @@ class Model(object):
         :param solverOptions: Dictionary containing solver configuration options.
         """
 
-        #print('-------Assembling global system-------')
-
         system = self._heat_system()
         if system is not None:
             return system.linear(self._nodal_state())
@@ -167,16 +144,9 @@ class Model(object):
         nNodes = self._mesh.getNoN()
         nDOF = nNodes*nVar
 
-        # Preallocate lists for local contributions
         rows_A = []
         cols_A = []
         values_A = []
-
-        #coord_list = self.build_batched_inputs()
-
-        mesh = self._mesh
-
-        #Test_e = self.physics.get_batched_system(mesh, 'T') #Only test
 
         b = np.zeros(nDOF)
 
@@ -184,15 +154,6 @@ class Model(object):
             for element in self._mesh.EL:
                 K_e = self.physics.getElementMatrix(element, Variable, solverOptions)
                 f_e = self.physics.getElementVector(element, Variable, solverOptions)
-
-                #r, c, v, rhs = self._element_contributions(element, idxVar, Variable, K_e, f_e)
-
-                #rows_A.extend(r)
-                #cols_A.extend(c)
-                #values_A.extend(v)
-
-                #for gi, value in rhs:
-                #    b[gi] = value  # Dirichlet sobrescribe
 
                 g_indices = [idxVar + nVar * node.id for node in element.nodes]
 
@@ -215,63 +176,10 @@ class Model(object):
                             values_A.append(K_e[i, j])
 
 
-        A = sc.sparse.coo_matrix((values_A, (rows_A, cols_A)), shape=(nDOF, nDOF)).tocsr()
+        A = sparse.coo_matrix((values_A, (rows_A, cols_A)), shape=(nDOF, nDOF)).tocsr()
 
         return A, b
 
-    def assembleResidualVector(self, solverOptions = None):
-
-        """Assembles the global residual vector for the model based on the physics and mesh.
-        
-        Parameters
-        -----------
-        :param solverOptions: Dictionary containing solver configuration options.
-       
-        """
-
-        Var = self.physics.getVariables()
-        nVar = self.physics.getNumOfVar()
-        nNodes = self._mesh.getNoN()
-   
-        nDOF = nNodes*nVar
-        results = []
-
-        penalty = 1e15
-        
-
-        self.physics.normalize_constants()
-
-        #rows_F = []
-        #values_F = []
-
-
-        F = np.zeros(nDOF)
-
-        for element in self._mesh.EL:
-
-            nodes_id = element.getNodesId()
-
-            for idxVar, Variable in enumerate(Var):
-                
-                f_e = self.physics.getResidualVector(element, Variable, solverOptions)
-
-                x_e = self.physics.get_variable_element_values(element, Variable)
-
-                for i_local, i_global in enumerate(nodes_id):
-
-                    dof_r = i_global*nVar + idxVar
-                    node_i = element.nodes[i_local]
-                    bc = node_i.BC.get(Variable, {}) if node_i.BC else {}
-
-                    if bc.get('type') == 'Dirichlet':
-
-                        F[dof_r] += (x_e[i_local] - bc.get('value', 0.0))
-                        #F[g_i] = bc.get('value', 0.0)
-                    else:
-                        F[dof_r] += f_e[i_local]
-
-        return F
-    
     def assembleGlobalSystemNonLinear(self, solverOptions = None):
 
         """Assembles the global system of equations for a nonlinear problem, based on the physics and mesh.
@@ -282,18 +190,14 @@ class Model(object):
        
         """
 
-        Var = self.physics.getVariables()
-        nVar = self.physics.getNumOfVar()
-        nNodes = self._mesh.getNoN()
-        nDOF = nNodes*nVar
         system = self._heat_system()
         if system is not None:
             return system.residual_and_tangent(self._nodal_state())
 
-        #results_K = []
-        #results_F = []      
-
-        #K = sc.sparse.dok_matrix((nDOF, nDOF))
+        Var = self.physics.getVariables()
+        nVar = self.physics.getNumOfVar()
+        nNodes = self._mesh.getNoN()
+        nDOF = nNodes*nVar
 
         rows_K = []
         cols_K = []
@@ -323,10 +227,8 @@ class Model(object):
 
                         rows_K.append(dof_r)
                         cols_K.append(dof_r)
-                        #values_K.append(K_e[i, i]+penalty)
                         values_K.append(1.0)
                         F[dof_r] += (x_e[i_local] - bc.get('value', 0.0))
-                        #F[g_i] = bc.get('value', 0.0)
                     else:
                         F[dof_r] += f_e[i_local]
 
@@ -339,8 +241,7 @@ class Model(object):
                                 cols_K.append(dof_c)
                                 values_K.append(K_block[i_local, j_local])
 
-                        
-        K = sc.sparse.coo_matrix((values_K, (rows_K, cols_K)), shape=(nDOF, nDOF)).tocsr()
+        K = sparse.coo_matrix((values_K, (rows_K, cols_K)), shape=(nDOF, nDOF)).tocsr()
 
         return K, F
 
@@ -358,7 +259,7 @@ class Model(object):
         if system is not None:
             return system.geo.mass(self.physics.M_const)
 
-        M = sc.sparse.lil_matrix((self._mesh.getNoN(), self._mesh.getNoN()))
+        M = sparse.lil_matrix((self._mesh.getNoN(), self._mesh.getNoN()))
 
         for element in self._mesh.EL:
 
@@ -372,41 +273,6 @@ class Model(object):
                     M[node_i.id, node_j.id] += M_e[idx, jdx]
 
         return M
-    
-    def _element_global_dof_indices(self, element: Element, idxVar: int, nVar: int) -> list[int]:
-        return [idxVar + nVar * node.id for node in element.nodes]
-    
-    def _get_dirichlet_value(self, node: Node, variable: str):
-        if not node.BC:
-            return None
-        bc = node.BC.get(variable)
-        if bc and bc.get('type') == 'Dirichlet':
-            return bc.get('value', 0.0)
-        return None
-
-    def _element_contributions(self, element, idxVar, Variable, K_e, f_e):
-        rows = []
-        cols = []
-        vals = []
-        rhs = []
-        g_indices = self._element_global_dof_indices(element, idxVar, self.physics.getNumOfVar())
-
-        for i, g_i in enumerate(g_indices):
-            value_dirichlet = self._get_dirichlet_value(element.nodes[i], Variable)
-            if value_dirichlet is not None:
-                rows.append(g_i)
-                cols.append(g_i)
-                vals.append(1.0)
-                rhs.append((g_i, value_dirichlet))
-            else:
-                rhs.append((g_i, f_e[i]))
-                for j, g_j in enumerate(g_indices):
-                    rows.append(g_i)
-                    cols.append(g_j)
-                    vals.append(K_e[i, j])
-
-        return rows, cols, vals, rhs
-
 
     def solverConfiguration(self, Study=StudyType.steady_state, Type=ProblemType.linear, Method=SolverType.direct, Solver = DirectSolvers.PARDISO, 
                             timeDisc = 1, timeStep=0.05, totalTime = 3, prec = Preconditioners.iLU):
@@ -498,73 +364,5 @@ class Model(object):
 
 
 #@jit
-def contributions_determination(A_e: np.ndarray, b_e: np.ndarray, nVar: int, nodes_id: list[int], nodes_bc: list[dict],
-                                idxVar: int, Variable: str) -> tuple[list[tuple[int, int, float]], list[tuple[int, float]]]:
-
-    """Determines the contributions of an element to the global system, taking into account boundary conditions.
-    
-    Parameters
-    -----------
-    :param A_e: Element matrix for the variable being processed.
-    :param b_e: Element vector for the variable being processed.
-    :param nVar: Total number of variables in the system.
-    :param nodes_id: List of node IDs for the current element.
-    :param nodes_bc: List of boundary condition dictionaries for each node.
-    :param idxVar: Index of the variable in the global system.
-    :param Variable: Name of the variable being assembled.
-
-    """
-
-    local_contributions = []
-
-    force_contributions = []
-
-    for idx, node_i in enumerate(nodes_id):
-        global_idx_i = idxVar + nVar * node_i
-        
-        if nodes_bc[idx] and nodes_bc[idx].get(Variable, {}).get('type') == 'Dirichlet':
-            local_contributions.append((global_idx_i, global_idx_i, 1))
-            force_contributions.append((global_idx_i, nodes_bc[idx][Variable]['value']))
-        else:
-            force_contributions.append((global_idx_i, b_e[idx]))
-            for jdx, node_j in enumerate(nodes_id):
-                global_idx_j = idxVar + nVar * node_j
-                local_contributions.append((global_idx_i, global_idx_j, A_e[idx, jdx]))
-
-    return local_contributions, force_contributions
 
 
-def contributions_determination_nonlinear(K_e: np.ndarray, f_e: np.ndarray, nVar: int, nodes_id: list[int], nodes_bc: list[dict],
-                                idxVar: int, Variable: str) -> tuple[list[tuple[int, int, float]], list[tuple[int, float]]]:
-
-    """Determines the contributions of an element to the global system, taking into account boundary conditions.
-    
-    Parameters
-    -----------
-    :param K_e: Element tangent matrix for the variable being processed.
-    :param f_e: Element residual vector for the variable being processed.
-    :param nVar: Total number of variables in the system.
-    :param nodes_id: List of node IDs for the current element.
-    :param nodes_bc: List of boundary condition dictionaries for each node.
-    :param idxVar: Index of the variable in the global system.
-    :param Variable: Name of the variable being assembled.
-
-    """
-
-    local_contributions = []
-
-    force_contributions = []
-
-    for idx, node_i in enumerate(nodes_id):
-        global_idx_i = idxVar + nVar * node_i
-        
-        if nodes_bc[idx] and nodes_bc[idx].get(Variable, {}).get('type') == 'Dirichlet':
-            local_contributions.append((global_idx_i, global_idx_i, 1))
-            force_contributions.append((global_idx_i, 0))
-        else:
-            force_contributions.append((global_idx_i, f_e[idx]))
-            for jdx, node_j in enumerate(nodes_id):
-                global_idx_j = idxVar + nVar * node_j
-                local_contributions.append((global_idx_i, global_idx_j, K_e[idx, jdx]))
-
-    return local_contributions, force_contributions

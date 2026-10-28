@@ -1,14 +1,9 @@
 import numpy as np
-import scipy as sc
-import scipy.sparse as sp
 import scipy.sparse.linalg as spla
-import scipy.linalg as scla
 
 from Source.enums import  IterativeSolvers, Preconditioners
 from Source.logger_config import sim_logger
 
-
-import matplotlib.pyplot as plt
 
 class IterativeSolver:
 
@@ -65,8 +60,6 @@ class IterativeSolver:
 
         self._check_info(info, "BiCGSTAB")
 
-        #self.updConvergencePlot()
-
         return x
 
     def GMres(self):
@@ -77,8 +70,6 @@ class IterativeSolver:
         x, info = spla.gmres(self.A, self.b, x0=self.x0, M=M, callback=self.callBackFunc)
 
         self._check_info(info, "GMRES")
-
-        #self.updConvergencePlot()
 
         return x
     
@@ -108,16 +99,5 @@ class IterativeSolver:
         self.error.append(error)
         self.iter_list.append(self.nIter)
 
-        # print('{0:4d}   {1:3.14f}'.format(self.nIter, error))
-
         self.nIter += 1
 
-    def updConvergencePlot(self):
-        plt.clf() # Limpiar la figura actual
-        plt.plot(self.iter_list, self.error) # Graficar los datos
-        plt.yscale('log')
-        plt.grid(True)
-        # plt.title('Convergencia') # Añadir título
-        plt.xlabel('Iteration') # Etiqueta del eje x
-        plt.ylabel('Error') # Etiqueta del eje y
-        plt.show() # Mostrar la figura

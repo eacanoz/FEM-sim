@@ -1,6 +1,6 @@
 # Estado del proyecto, validación y próximos pasos
 
-Última actualización: 2026-10-26. Rama de trabajo: `test-branch`.
+Última actualización: 2026-10-27. Rama de trabajo: `test-branch`.
 
 ## 1. Qué está validado
 
@@ -39,19 +39,25 @@ Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
 - `build_reaction_function` tiene un `rate_vector.reshape(-1, 1)` sin asignar (no hace nada).
 - Usa la ruta antigua por elemento.
 
-### Código muerto o incompleto (candidato a limpieza)
-- `Solvers.py`: `fixPointSolver`, `createNonlinearSystem`, `callBackFunc` de `modelSolver`, `updConvergencePlot`.
-- `Physics.py`: `get_batched_*`, `build_batched_g_params` (no devuelve nada), `_batched_*` con `in_axes` de 13 entradas
-  para 14 parámetros, `_calc_stabilization_term`, `stabilization`, `Grad`, `_calc_b_matrix_2` (asume el último nodo).
-- `core.py`: `assembleResidualVector` (variable `penalty` sin uso), `build_batched_inputs`.
-- `Mesh.py`: `generate1DMesh` (vacía), `checkBoundaries` (usa `EpP`, solo fijado para `line`).
-- Imports sin uso: `jax` y `numba` en varios módulos, `numba.jitclass` en `Mesh.py`, `numdifftools`.
+### Limpieza hecha en la Etapa 5 y lo que queda
+Se eliminó el código muerto y los imports sin uso (`Source/` pasó de 3463 a 2763 líneas, -20 %):
+- `Solvers.py`: `fixPointSolver`, `createNonlinearSystem`, `callBackFunc`, `updConvergencePlot`, `assembleNonlinearSystem`.
+- `Physics.py`: toda la ruta por lotes con `jax.vmap` (`get_batched_*`, `build_batched_*`, `_batched_*`), `Grad`,
+  `stabilization`, `aux_getTangentMatrix` y el código comentado.
+- `core.py`: `assembleResidualVector`, `build_batched_inputs` y las funciones `contributions_determination*`.
+- `Mesh.py`: `generate1DMesh`. `BasisFunctions.py`: `addStab`.
+- Imports sin uso en todos los módulos (`numba`, `joblib`, `progress`, `numdifftools`, `scipy.linalg`, ...).
+
+Lo que sigue pendiente:
+- `Mesh.checkBoundaries` usa `EpP`, que solo se fija para elementos `line` (la usa `oswald_Hernandez_9_1.py`).
+- `Model` y `Mesh.setElementShapeFunction` aún construyen `basisFunctions` (sympy), que la ruta vectorizada no necesita.
+- `Physics.py` conserva comentarios con `To fix` sobre la ruta por elemento (un solo nodo Newton por elemento).
 - Los archivos `test_ilu.py`, `test_lagrange.py`, `test_lambda.py`, `test_pardiso.py` y `testNumDiffTools.py` son
   scripts exploratorios, no pruebas automáticas.
 
 ### Física y numérica
 - **Convección:** diferencias centradas sin estabilización. Para Pe alto habrá oscilaciones. `Pe` se calcula pero no se
-  usa. `_calc_stabilization_term` existe pero no está conectado.
+  usa. El código de estabilización que no estaba conectado se eliminó en la Etapa 5; habrá que implementarlo.
 - **Convección 2D:** no implementada.
 - **Transitorio:** solo 1D. Las BC no lineales se evalúan al inicio de cada paso (esquema semi-implícito).
 - **Transitorio, precisión:** `Simulation_time_dependent.py` usa `timeStep = 0.05` (valor por defecto). Con Euler
@@ -87,15 +93,16 @@ Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
 | `141d15e` | `test-branch` | Etapa 3: Newton con line search, transitorio θ-método |
 | `fa50dbe` | `test-branch` | Etapa 4: calor 2D estacionario lineal (Q4) con BC en aristas |
 
-Los cambios posteriores a `fa50dbe` (ejemplo 2D, documentación y `requirements.txt`) no están commiteados.
+| `d8b1740` | `test-branch` | Documentación, `requirements.txt` y `Example_2D_Poisson.py` |
+
+La limpieza de la Etapa 5 (`run_tests.py` incluido) está en el árbol de trabajo y todavía no está commiteada.
 
 ## 4. Próximos pasos propuestos
 
 Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus pruebas.
 
-1. **Limpieza (Etapa 5).** Eliminar el código muerto de la sección 2 y los imports sin uso. Añadir `run_tests.py` que
-   ejecute las cuatro suites y devuelva código de salida. Resultado esperado: el mismo número de pruebas en verde y menos
-   líneas en `Physics.py`. Es la base para escalar sin miedo a romper cosas.
+1. ~~**Limpieza (Etapa 5).**~~ Hecha: código muerto e imports eliminados y `run_tests.py` añadido. Las 19 pruebas
+   siguen en verde y `Physics.py` pasó de 980 a 660 líneas.
 2. **Transporte de especies vectorizado (Etapa 6).** Llevar `mt` a `HeatSystem` (o una clase genérica) con reacción
    dependiente del estado vía `residual_and_tangent`. Validar con difusión-reacción 1D con solución analítica
    (decaimiento lineal de primer orden) y con la ruta antigua.

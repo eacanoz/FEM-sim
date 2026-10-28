@@ -4,12 +4,9 @@ import numpy as np
 
 from Source.Pre_processing.BasisFunctions import basisFunctions
 
-from numba.experimental import jitclass
 
 from Source.enums import ElementType
 
-import jax
-import jax.numpy as jnp
 
 
 class Mesh:
@@ -46,10 +43,7 @@ class Mesh:
         for i in range(0, self.NoE):
             self.EL.append(Element(id=i, nodes=[self.NL[i], self.NL[i + 1]]))
 
-        flag = 0
 
-    def generate1DMesh():
-        pass
 
     def generate2DMesh(self, dim: tuple, div: tuple, element_type):
 

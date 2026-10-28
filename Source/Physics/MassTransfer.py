@@ -6,26 +6,16 @@
 
 # Class Definition for Heat transfer physics
 
-import numpy as np
-import scipy as sc
-import sympy as sp
-import math
-
 import jax
 jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 from jax import jit
 
-from scipy import integrate
+from Source.Pre_processing.BasisFunctions import shape_functions_1d
+from Source.enums import ShapeFunctionType
 
-from Source.Pre_processing.BasisFunctions import basisFunctions, shape_functions_1d, shape_functions_gradient_1d, mapping_function, jacobian_mapping_function, jacobian_determinant, jacobian_inverse
-from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType
-
-
-from Source.Physics.Physics import physics, get_gauss_points_weights
+from Source.Physics.Physics import physics
 from Source.Primals.Scalar import scalarField
-
-from Source.Pre_processing.Mesh import Mesh, Element, Node
 
 u = 0.01  # Velocity for convection term, hardcoded for now
 

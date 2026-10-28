@@ -136,6 +136,6 @@ Mesh  ──►  Model (core.py)  ──►  physics (ht, mt)  ──►  ensamb
 
 ## 5. Dónde está cada cosa en el historial
 
-- `backup/vmap-wip`: intento de ensamblado por lotes con `jax.vmap` (`Physics.get_batched_*`). No se usa; contiene
-  errores conocidos (ver `docs/ESTADO.md`).
+- `backup/vmap-wip`: intento de ensamblado por lotes con `jax.vmap` (`Physics.get_batched_*`). Ese código ya no existe
+  en `test-branch` (se eliminó en la Etapa 5); la rama se conserva solo como respaldo.
 - `test-branch`: rama de trabajo. Las etapas 1 a 4 están commiteadas en orden (`d464fa9`, `d7388e3`, `141d15e`, `fa50dbe`).

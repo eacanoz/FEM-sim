@@ -1,8 +1,4 @@
-import numpy as np
-import scipy as sc
-import scipy.sparse as sp
 import scipy.sparse.linalg as spla
-import scipy.linalg as scla
 
 from Source.enums import DirectSolvers
 

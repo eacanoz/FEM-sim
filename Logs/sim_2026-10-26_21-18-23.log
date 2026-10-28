@@ -1,0 +1,17 @@
+2026-10-26 21:18:23 - INFO - ------- Starting simulation -------
+2026-10-26 21:18:23 - INFO - Model: decay
+2026-10-26 21:18:23 - INFO - Dimension: 1D
+2026-10-26 21:18:23 - INFO - Nodes: 41
+2026-10-26 21:18:23 - INFO - Elements: 40
+2026-10-26 21:18:23 - INFO - Physics: Heat transfer
+2026-10-26 21:18:23 - INFO - ------- Solver configuration -------
+2026-10-26 21:18:23 - INFO - Study: Transient
+2026-10-26 21:18:23 - INFO - Type: Linear
+2026-10-26 21:18:23 - INFO - Method: Direct
+2026-10-26 21:18:23 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-26 21:18:23 - INFO - Time Discretization: 1.0
+2026-10-26 21:18:23 - INFO - Time Step: 0.05
+2026-10-26 21:18:23 - INFO - Total Time: 0.1
+2026-10-26 21:18:23 - INFO - Theta = 1.0, steps = 2, dt = 0.05
+2026-10-26 21:18:23 - INFO - method finished on 0.005 seconds
+2026-10-26 21:18:23 - INFO - ------- Simulation finished -------

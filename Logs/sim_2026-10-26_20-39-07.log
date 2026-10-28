@@ -1,0 +1,53 @@
+2026-10-26 20:39:07 - INFO - ------- Starting simulation -------
+2026-10-26 20:39:07 - INFO - Model: bar
+2026-10-26 20:39:07 - INFO - Dimension: 1D
+2026-10-26 20:39:07 - INFO - Nodes: 11
+2026-10-26 20:39:07 - INFO - Elements: 10
+2026-10-26 20:39:07 - INFO - Physics: Heat transfer
+2026-10-26 20:39:07 - INFO - ------- Solver configuration -------
+2026-10-26 20:39:07 - INFO - Study: Steady state
+2026-10-26 20:39:07 - INFO - Type: Linear
+2026-10-26 20:39:07 - INFO - Method: Direct
+2026-10-26 20:39:07 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-26 20:39:07 - INFO - method finished on 0.295 seconds
+2026-10-26 20:39:07 - INFO - ------- Simulation finished -------
+2026-10-26 20:39:07 - INFO - ------- Starting simulation -------
+2026-10-26 20:39:07 - INFO - Model: bar
+2026-10-26 20:39:07 - INFO - Dimension: 1D
+2026-10-26 20:39:07 - INFO - Nodes: 11
+2026-10-26 20:39:07 - INFO - Elements: 10
+2026-10-26 20:39:07 - INFO - Physics: Heat transfer
+2026-10-26 20:39:07 - INFO - ------- Solver configuration -------
+2026-10-26 20:39:07 - INFO - Study: Steady state
+2026-10-26 20:39:07 - INFO - Type: Linear
+2026-10-26 20:39:07 - INFO - Method: Iterative
+2026-10-26 20:39:07 - INFO - Solver: Conjugate Gradient
+2026-10-26 20:39:07 - INFO - Preconditioner: iLU Factorization
+2026-10-26 20:39:08 - INFO - method finished on 0.002 seconds
+2026-10-26 20:39:08 - INFO - ------- Simulation finished -------
+2026-10-26 20:39:08 - INFO - ------- Starting simulation -------
+2026-10-26 20:39:08 - INFO - Model: bar
+2026-10-26 20:39:08 - INFO - Dimension: 1D
+2026-10-26 20:39:08 - INFO - Nodes: 11
+2026-10-26 20:39:08 - INFO - Elements: 10
+2026-10-26 20:39:08 - INFO - Physics: Heat transfer
+2026-10-26 20:39:08 - INFO - ------- Solver configuration -------
+2026-10-26 20:39:08 - INFO - Study: Steady state
+2026-10-26 20:39:08 - INFO - Type: Linear
+2026-10-26 20:39:08 - INFO - Method: Direct
+2026-10-26 20:39:08 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-26 20:39:08 - INFO - method finished on 0.001 seconds
+2026-10-26 20:39:08 - INFO - ------- Simulation finished -------
+2026-10-26 20:39:08 - INFO - ------- Starting simulation -------
+2026-10-26 20:39:08 - INFO - Model: bar
+2026-10-26 20:39:08 - INFO - Dimension: 1D
+2026-10-26 20:39:08 - INFO - Nodes: 11
+2026-10-26 20:39:08 - INFO - Elements: 10
+2026-10-26 20:39:08 - INFO - Physics: Heat transfer
+2026-10-26 20:39:08 - INFO - ------- Solver configuration -------
+2026-10-26 20:39:08 - INFO - Study: Steady state
+2026-10-26 20:39:08 - INFO - Type: Linear
+2026-10-26 20:39:08 - INFO - Method: Direct
+2026-10-26 20:39:08 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-26 20:39:08 - INFO - method finished on 0.002 seconds
+2026-10-26 20:39:08 - INFO - ------- Simulation finished -------

@@ -1,0 +1,92 @@
+2026-10-26 20:30:11 - INFO - ------- Starting simulation -------
+2026-10-26 20:30:11 - INFO - Model: vec
+2026-10-26 20:30:11 - INFO - Dimension: 1D
+2026-10-26 20:30:11 - INFO - Nodes: 9
+2026-10-26 20:30:11 - INFO - Elements: 8
+2026-10-26 20:30:11 - INFO - Physics: Heat transfer
+2026-10-26 20:30:11 - INFO - ------- Solver configuration -------
+2026-10-26 20:30:11 - INFO - Study: Transient
+2026-10-26 20:30:11 - INFO - Type: Linear
+2026-10-26 20:30:11 - INFO - Method: Direct
+2026-10-26 20:30:11 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-26 20:30:11 - INFO - Time Discretization: 1
+2026-10-26 20:30:11 - INFO - Time Step: 0.05
+2026-10-26 20:30:11 - INFO - Total Time: 2
+2026-10-26 20:31:25 - INFO - method finished on 74.223 seconds
+2026-10-26 20:31:25 - INFO - ------- Simulation finished -------
+2026-10-26 20:31:25 - INFO - ------- Starting simulation -------
+2026-10-26 20:31:25 - INFO - Model: vec
+2026-10-26 20:31:25 - INFO - Dimension: 1D
+2026-10-26 20:31:25 - INFO - Nodes: 9
+2026-10-26 20:31:25 - INFO - Elements: 8
+2026-10-26 20:31:25 - INFO - Physics: Heat transfer
+2026-10-26 20:31:25 - INFO - ------- Solver configuration -------
+2026-10-26 20:31:25 - INFO - Study: Transient
+2026-10-26 20:31:25 - INFO - Type: Linear
+2026-10-26 20:31:25 - INFO - Method: Direct
+2026-10-26 20:31:25 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-26 20:31:25 - INFO - Time Discretization: 1
+2026-10-26 20:31:25 - INFO - Time Step: 0.05
+2026-10-26 20:31:25 - INFO - Total Time: 2
+2026-10-26 20:31:25 - INFO - method finished on 0.102 seconds
+2026-10-26 20:31:25 - INFO - ------- Simulation finished -------
+2026-10-26 20:31:30 - INFO - ------- Starting simulation -------
+2026-10-26 20:31:30 - INFO - Model: vec
+2026-10-26 20:31:30 - INFO - Dimension: 1D
+2026-10-26 20:31:30 - INFO - Nodes: 11
+2026-10-26 20:31:30 - INFO - Elements: 10
+2026-10-26 20:31:30 - INFO - Physics: Heat transfer
+2026-10-26 20:31:30 - INFO - ------- Solver configuration -------
+2026-10-26 20:31:30 - INFO - Study: Steady state
+2026-10-26 20:31:30 - INFO - Type: Nonlinear
+2026-10-26 20:31:30 - INFO - Method: Direct
+2026-10-26 20:31:30 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-26 20:31:30 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-26 20:31:30 - INFO - Minimum Tolerance: 1.0000e-04, Max Number of Iterations: 200
+2026-10-26 20:31:30 - INFO - --------------------------------------------
+2026-10-26 20:31:30 - INFO - |  Iter  | Error (Norm R)  |  Alpha (Step)  
+2026-10-26 20:31:30 - INFO - --------------------------------------------
+2026-10-26 20:31:32 - INFO - |   1    |   5.3960e+01    |     0.8000     
+2026-10-26 20:31:35 - INFO - |   2    |   1.7759e+01    |     0.8000     
+2026-10-26 20:31:37 - INFO - |   3    |   4.2786e+00    |     0.8000     
+2026-10-26 20:31:39 - INFO - |   4    |   8.9718e-01    |     0.8000     
+2026-10-26 20:31:41 - INFO - |   5    |   1.8125e-01    |     0.8000     
+2026-10-26 20:31:44 - INFO - |   6    |   3.6324e-02    |     0.8000     
+2026-10-26 20:31:46 - INFO - |   7    |   7.2678e-03    |     0.8000     
+2026-10-26 20:31:48 - INFO - |   8    |   1.4537e-03    |     0.8000     
+2026-10-26 20:31:50 - INFO - |   9    |   2.9074e-04    |     0.8000     
+2026-10-26 20:31:53 - INFO - |   10   |   5.8148e-05    |     0.8000     
+2026-10-26 20:31:53 - INFO - --------------------------------------------
+2026-10-26 20:31:53 - INFO - Succefully converged in 10 iterations.
+2026-10-26 20:31:53 - INFO - method finished on 22.465 seconds
+2026-10-26 20:31:53 - INFO - ------- Simulation finished -------
+2026-10-26 20:31:53 - INFO - ------- Starting simulation -------
+2026-10-26 20:31:53 - INFO - Model: vec
+2026-10-26 20:31:53 - INFO - Dimension: 1D
+2026-10-26 20:31:53 - INFO - Nodes: 11
+2026-10-26 20:31:53 - INFO - Elements: 10
+2026-10-26 20:31:53 - INFO - Physics: Heat transfer
+2026-10-26 20:31:53 - INFO - ------- Solver configuration -------
+2026-10-26 20:31:53 - INFO - Study: Steady state
+2026-10-26 20:31:53 - INFO - Type: Nonlinear
+2026-10-26 20:31:53 - INFO - Method: Direct
+2026-10-26 20:31:53 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-26 20:31:53 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-26 20:31:53 - INFO - Minimum Tolerance: 1.0000e-04, Max Number of Iterations: 200
+2026-10-26 20:31:53 - INFO - --------------------------------------------
+2026-10-26 20:31:53 - INFO - |  Iter  | Error (Norm R)  |  Alpha (Step)  
+2026-10-26 20:31:53 - INFO - --------------------------------------------
+2026-10-26 20:31:53 - INFO - |   1    |   5.3960e+01    |     0.8000     
+2026-10-26 20:31:53 - INFO - |   2    |   1.7759e+01    |     0.8000     
+2026-10-26 20:31:53 - INFO - |   3    |   4.2786e+00    |     0.8000     
+2026-10-26 20:31:53 - INFO - |   4    |   8.9718e-01    |     0.8000     
+2026-10-26 20:31:53 - INFO - |   5    |   1.8125e-01    |     0.8000     
+2026-10-26 20:31:53 - INFO - |   6    |   3.6324e-02    |     0.8000     
+2026-10-26 20:31:53 - INFO - |   7    |   7.2678e-03    |     0.8000     
+2026-10-26 20:31:53 - INFO - |   8    |   1.4537e-03    |     0.8000     
+2026-10-26 20:31:53 - INFO - |   9    |   2.9074e-04    |     0.8000     
+2026-10-26 20:31:53 - INFO - |   10   |   5.8148e-05    |     0.8000     
+2026-10-26 20:31:53 - INFO - --------------------------------------------
+2026-10-26 20:31:53 - INFO - Succefully converged in 10 iterations.
+2026-10-26 20:31:53 - INFO - method finished on 0.028 seconds
+2026-10-26 20:31:53 - INFO - ------- Simulation finished -------

@@ -1,8 +1,6 @@
 import numpy as np
-import sympy as sp
 
 from Source.Pre_processing.Mesh import Mesh
-from Source.Pre_processing.BasisFunctions import basisFunctions
 from Source.enums import StudyType
 
 class scalarField:

@@ -1,0 +1,47 @@
+2026-10-26 20:34:33 - INFO - ------- Starting simulation -------
+2026-10-26 20:34:33 - INFO - Model: 1D_Conductivity_HDPE
+2026-10-26 20:34:33 - INFO - Dimension: 1D
+2026-10-26 20:34:33 - INFO - Nodes: 11
+2026-10-26 20:34:33 - INFO - Elements: 10
+2026-10-26 20:34:33 - INFO - Physics: Heat transfer
+2026-10-26 20:34:33 - INFO - ------- Solver configuration -------
+2026-10-26 20:34:33 - INFO - Study: Transient
+2026-10-26 20:34:33 - INFO - Type: Linear
+2026-10-26 20:34:33 - INFO - Method: Iterative
+2026-10-26 20:34:33 - INFO - Solver: Bi-Conjugate Gradient Stabilized
+2026-10-26 20:34:33 - INFO - Preconditioner: iLU Factorization
+2026-10-26 20:34:33 - INFO - Time Discretization: 1
+2026-10-26 20:34:33 - INFO - Time Step: 0.05
+2026-10-26 20:34:33 - INFO - Total Time: 16
+2026-10-26 20:34:34 - INFO - method finished on 0.265 seconds
+2026-10-26 20:34:34 - INFO - ------- Simulation finished -------
+2026-10-26 20:35:06 - INFO - ------- Starting simulation -------
+2026-10-26 20:35:06 - INFO - Model: 1D_Conductivity_Radiation
+2026-10-26 20:35:06 - INFO - Dimension: 1D
+2026-10-26 20:35:06 - INFO - Nodes: 11
+2026-10-26 20:35:06 - INFO - Elements: 10
+2026-10-26 20:35:06 - INFO - Physics: Heat transfer
+2026-10-26 20:35:06 - INFO - ------- Solver configuration -------
+2026-10-26 20:35:06 - INFO - Study: Steady state
+2026-10-26 20:35:06 - INFO - Type: Nonlinear
+2026-10-26 20:35:06 - INFO - Method: Direct
+2026-10-26 20:35:06 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-26 20:35:06 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-26 20:35:06 - INFO - Minimum Tolerance: 1.0000e-04, Max Number of Iterations: 200
+2026-10-26 20:35:06 - INFO - --------------------------------------------
+2026-10-26 20:35:06 - INFO - |  Iter  | Error (Norm R)  |  Alpha (Step)  
+2026-10-26 20:35:06 - INFO - --------------------------------------------
+2026-10-26 20:35:06 - INFO - |   1    |   3.8479e+01    |     0.8000     
+2026-10-26 20:35:06 - INFO - |   2    |   1.1446e+01    |     0.8000     
+2026-10-26 20:35:06 - INFO - |   3    |   2.6068e+00    |     0.8000     
+2026-10-26 20:35:06 - INFO - |   4    |   5.3758e-01    |     0.8000     
+2026-10-26 20:35:06 - INFO - |   5    |   1.0820e-01    |     0.8000     
+2026-10-26 20:35:06 - INFO - |   6    |   2.1668e-02    |     0.8000     
+2026-10-26 20:35:06 - INFO - |   7    |   4.3348e-03    |     0.8000     
+2026-10-26 20:35:06 - INFO - |   8    |   8.6700e-04    |     0.8000     
+2026-10-26 20:35:06 - INFO - |   9    |   1.7340e-04    |     0.8000     
+2026-10-26 20:35:06 - INFO - |   10   |   3.4681e-05    |     0.8000     
+2026-10-26 20:35:06 - INFO - --------------------------------------------
+2026-10-26 20:35:06 - INFO - Succefully converged in 10 iterations.
+2026-10-26 20:35:06 - INFO - method finished on 0.722 seconds
+2026-10-26 20:35:06 - INFO - ------- Simulation finished -------

@@ -6,14 +6,12 @@
 
 # Class Definition for Heat transfer physics
 
-import numpy as np
 from Source.Physics.Physics import physics
 from Source.Primals.Scalar import scalarField
-from Source.enums import ElementType, ShapeFunctionType
+from Source.enums import ShapeFunctionType
 
 import jax
 jax.config.update("jax_enable_x64", True)
-import jax.numpy as jnp
 from jax import jit
 
 
