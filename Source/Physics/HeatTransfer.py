@@ -48,18 +48,24 @@ class ht(physics):
         self.Pe = self.mat.rho * self.mat.Cp * self.vel / self.mat.k
 
         self.conductivity_law = None  # k(T), see setConductivityLaw
+        self.conductivity_inputs = ('T',)
 
-    def setConductivityLaw(self, k_of_T):
+    def setConductivityLaw(self, k_of_T, depends_on=('T',)):
 
-        """Temperature-dependent conductivity k(T) [W/(m K)], T in the units of the model (°C).
+        """Conductivity law k(T) [W/(m K)], T in the units of the model (°C).
 
         k_of_T must be written with jax.numpy (it is traced and differentiated), e.g.
         `lambda T: 1.0 + 0.002 * T` or `lambda T: 2.0 * jnp.exp(0.01 * T)`. It replaces the constant
         conductivity of the material; the problem becomes nonlinear (use ProblemType.nonlinear).
         Pass None to go back to the constant conductivity.
+
+        depends_on: names of the fields passed to the function, in order. With a coupled model the
+        conductivity can depend on a species, e.g. `setConductivityLaw(lambda T, c: 1 + 0.5 * c,
+        depends_on=('T', 'A'))`.
         """
 
         self.conductivity_law = k_of_T
+        self.conductivity_inputs = tuple(depends_on)
 
     def add_terms(self, system, model, disc, layout):
 
@@ -75,9 +81,13 @@ class ht(physics):
         if self.conductivity_law is None:
             system.add_matrix(layout.scatter_matrix(ops.diffusion(disc, self.K_const), rows, rows))
         else:
-            fn = self.conductivity_law
-            law = cached_law(('conductivity', fn), lambda: PointwiseLaw(lambda u: fn(u[0])))
-            system.add_diffusion_law(law, 'T')
+            fn, inputs = self.conductivity_law, list(self.conductivity_inputs)
+            for name in inputs:
+                if name not in layout.names:
+                    raise ValueError(f"La conductividad depende del campo '{name}', que no existe en el modelo.")
+            law = cached_law(('conductivity', fn, tuple(inputs)),
+                             lambda fn=fn, n_in=len(inputs): PointwiseLaw(lambda u: fn(*[u[i] for i in range(n_in)])))
+            system.add_diffusion_law(law, 'T', inputs)
 
         if self.Convection:
             system.add_matrix(layout.scatter_matrix(ops.convection(disc, self.C_const, self.vel), rows, rows))

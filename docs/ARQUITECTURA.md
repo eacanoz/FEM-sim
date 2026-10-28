@@ -127,7 +127,9 @@ Toda física debe implementar `build_system`; la antigua ruta por elemento (JAX 
 - El acoplamiento es un término cuya ley puntual lee campos de varias físicas y escribe en las de otras: se añade con
   `system.add_volume_law(ley, entradas, salidas)` desde la física que posee la ley (como las reacciones de `mt`, que
   escriben en el campo de temperatura) o con `system.add_diffusion_law(ley, campo, entradas)` si lo que depende de otros
-  campos es un coeficiente de difusión (`D(T)`, `k(c)`).
+  campos es un coeficiente de difusión (`D(T)`, `k(c)`). Desde las físicas: `ht.setConductivityLaw(fn, depends_on=(...))` y
+  `mt.setDiffusivity(especie, fn, depends_on=(...))` crean la ley (compilada una vez con `cached_law`) y llaman a
+  `add_diffusion_law`; el tangente incluye `dk/du` para cada entrada, así que aparecen los bloques cruzados.
 - Probar con una referencia independiente (una EDO del caso uniforme), con invariantes exactos del sistema acoplado y con
   el jacobiano frente a diferencias finitas, incluidos los bloques cruzados (ver `Test/test_coupling.py`).
 

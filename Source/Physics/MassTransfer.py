@@ -16,7 +16,7 @@ from Source.enums import ShapeFunctionType
 
 from Source.Physics.Physics import physics, KELVIN_OFFSET
 from Source.Primals.Scalar import scalarField
-from Source.Simulation.PointwiseLaw import PointwiseLaw
+from Source.Simulation.PointwiseLaw import PointwiseLaw, cached_law
 import Source.Simulation.Operators as ops
 
 def build_reaction_law(species, reactions, min_concentration=1e-12):
@@ -96,6 +96,7 @@ class mt(physics):
         self.Pe = 1
 
         self.Diffusivities = {}
+        self.diffusivity_inputs = {}   # species -> field names of a D(fields) law, see setDiffusivity
 
         self.reactions = []      # reaction dicts, see build_reaction_law
         self.sources = {}        # species -> external source (number or function of the coordinates)
@@ -106,12 +107,22 @@ class mt(physics):
         if chemSpecies not in self.var:
             raise ValueError(f"La especie '{chemSpecies}' no esta definida (use setChemSpecies).")
 
-    def setDiffusivity(self, chemSpecies, value):
+    def setDiffusivity(self, chemSpecies, value, depends_on=None):
 
-        """Diffusivity of a species: a number or a function of the coordinates f(x), f(x, y)."""
+        """Diffusivity of a species: a number or a function of the coordinates f(x), f(x, y).
+
+        With depends_on (field names, in order) `value` is instead a law D(*fields) written with
+        jax.numpy, e.g. `setDiffusivity('A', lambda T: 1e-3 * jnp.exp(0.02 * T), depends_on=('T',))`
+        (D(T), needs the heat physics) or `lambda A, C: ...` (D(c)). The problem becomes nonlinear.
+        """
 
         self._check_species(chemSpecies)
         self.Diffusivities[chemSpecies] = value
+
+        if depends_on:
+            self.diffusivity_inputs[chemSpecies] = tuple(depends_on)
+        else:
+            self.diffusivity_inputs.pop(chemSpecies, None)
 
     def setSource(self, chemSpecies, value):
 
@@ -151,7 +162,17 @@ class mt(physics):
 
             rows = layout.element_dofs(disc.conn, name)
 
-            system.add_matrix(layout.scatter_matrix(ops.diffusion(disc, self.Diffusivities[name]), rows, rows))
+            if name in self.diffusivity_inputs:
+                fn, inputs = self.Diffusivities[name], list(self.diffusivity_inputs[name])
+                for field in inputs:
+                    if field not in layout.names:
+                        raise ValueError(f"La difusividad de '{name}' depende del campo '{field}', que no existe en el modelo "
+                                         "(combine esta fisica con la de calor: Model(psc=[ht, mt])).")
+                law = cached_law(('diffusivity', fn, tuple(inputs)),
+                                 lambda fn=fn, n_in=len(inputs): PointwiseLaw(lambda u: fn(*[u[i] for i in range(n_in)])))
+                system.add_diffusion_law(law, name, inputs)
+            else:
+                system.add_matrix(layout.scatter_matrix(ops.diffusion(disc, self.Diffusivities[name]), rows, rows))
 
             if self.Convection:
                 system.add_matrix(layout.scatter_matrix(ops.convection(disc, self.C_const, self.vel), rows, rows))

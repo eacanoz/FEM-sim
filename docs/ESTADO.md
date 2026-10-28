@@ -44,6 +44,9 @@
 | Calor + especies: invariantes estacionarios | `k T - Q D C` y `k T + Q D A` lineales con la solución de Newton | `Test/test_coupling.py` | pasa (1e-8) |
 | Calor + especies: 2D = 1D, jacobiano cruzado | datos independientes de y; J frente a diferencias finitas con bloques T-especie | `Test/test_coupling.py` | pasa |
 | Composición de físicas | delegación, errores por física o variable repetida, campo `T` ausente, `dH` sin campo | `Test/test_coupling.py` | pasa |
+| `D(c)` exacta (Kirchhoff) | P1 con 2 puntos de Gauss es exacto en los nodos para `D = D0 (1 + b c)` | `Test/test_multifield_diffusion.py` | pasa (1e-9) |
+| `k(c)` y `D(T)` acoplados | perfil exacto con un campo conductor lineal; orden temporal-espacial | `Test/test_multifield_diffusion.py` | orden 2 |
+| Leyes multicampo | jacobiano (1D y 2D) frente a diferencias finitas, conservación transitoria con `D(c)`, errores de campo ausente | `Test/test_multifield_diffusion.py` | pasa |
 | Newton ante una reacción desbocada | nunca deja NaN: se detiene con aviso y conserva el último estado finito | `Test/test_coupling.py` | pasa |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
@@ -84,9 +87,10 @@ Lo que sigue pendiente:
   scripts exploratorios, no pruebas automáticas.
 
 ### Acoplamiento calor-masa
-- Operativo con `Model(psc=[ht, mt])`: Arrhenius con la T del campo y calor de reacción `dH`. No incluye todavía `D(T)`,
-  `k(c)`, velocidad compartida entre calor y especies (`heat.vel` y `mass.vel` son independientes) ni `rho Cp(T)`.
-  `add_diffusion_law` ya admite varias entradas, así que `D(T)` y `k(c)` son el siguiente paso natural.
+- Operativo con `Model(psc=[ht, mt])`: Arrhenius con la T del campo, calor de reacción `dH`, y coeficientes de difusión que
+  dependen de otros campos (`k(T)`, `k(c)`, `D(T)`, `D(c)` con `depends_on`). No incluye todavía velocidad compartida entre
+  calor y especies (`heat.vel` y `mass.vel` son independientes) ni `rho Cp(T)`.
+- Las leyes de difusión deben escribirse con `jax.numpy`; si se cambia la función hay que reasignarla (se compila por función).
 - **Varios estados estacionarios (ignición):** con exotermia fuerte puede haber más de una solución. Newton puede caer en
   otra rama o tardar muchas iteraciones cerca de la ignición (con `Q = 300` y `k0 = 3e4` el caso de prueba necesita
   unas 160 iteraciones). Recomendación: marchar en el tiempo hasta el estacionario y usar ese estado como inicial.
@@ -162,7 +166,7 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
 3. ~~**2D no lineal y transitorio (Etapa 7).**~~ Hecha: radiación y `h(T)` en aristas, Newton y transitorio 2D, con
    `Test/test_nonlinear_transient.py` y `Example_2D_Transient.py`. `k(T)` también está hecho (término de difusión no
    lineal). El acoplamiento calor-masa también está hecho (primer paso: Arrhenius con la T del campo y calor de reacción). Siguiente en
-   física: `D(T)` y `k(c)`, convección compartida y estabilizada, y sólidos/fluidos.
+   física: convección compartida y estabilizada, y sólidos/fluidos (`D(T)` y `k(c)` ya están).
 4. **Mallas y geometría (Etapa 8).** Importar `.msh` de gmsh (grupos físicos → aristas con nombre), añadir triángulos
    T3 a `Elements.py` y permitir geometrías no rectangulares. Validar con el parche en la malla importada.
 5. **Escalado de solvers y salida.** Precondicionador AMG (`pyamg`) para problemas grandes, cache de factorizaciones

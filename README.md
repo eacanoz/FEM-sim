@@ -21,7 +21,8 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Calor 2D transitorio (θ-método, también con BC no lineales) | Operativo, validado con soluciones analíticas, orden temporal y conservación de energía |
 | Conductividad dependiente de la temperatura `k(T)` (1D y 2D, estacionario y transitorio) | Operativo, validado con la solución exacta de Kirchhoff y una solución manufacturada |
 | Calor + especies acopladas (`Model(psc=[ht, mt])`): Arrhenius con la T del campo y calor de reacción `dH` | Operativo, validado con una EDO independiente, invariantes exactos y jacobiano cruzado |
-| Triángulos, mallas gmsh, `rho Cp(T)`, `D(T)`, convección vectorial estabilizada | No implementado |
+| Coeficientes de difusión que dependen de otros campos: `k(T)`, `k(c)`, `D(T)`, `D(c)` (`depends_on`) | Operativo, validado con soluciones exactas, convergencia de segundo orden y jacobiano |
+| Triángulos, mallas gmsh, `rho Cp(T)`, convección vectorial estabilizada | No implementado |
 
 ## Requisitos
 
@@ -101,6 +102,13 @@ model.physics.addBC_Concentration(0, 'A', 1.0)
 heat.Convection = False                                       # los atributos se asignan en la parte
 ```
 
+Los coeficientes pueden depender de cualquier campo del modelo (funciones de `jax.numpy`, con `depends_on` en el orden de los argumentos):
+
+```python
+heat.setConductivityLaw(lambda T, A: 2.0 * (1 + 0.5 * A), depends_on=('T', 'A'))          # k(c)
+mass.setDiffusivity('A', lambda T: 1e-3 * jnp.exp(0.02 * T), depends_on=('T',))          # D(T)
+```
+
 Con `T` numérico (Kelvin) la reacción es isotérmica y no depende del calor. Con campo de temperatura puede haber varios
 estados estacionarios (ignición): si Newton no converge o cae en otra rama, marche en el tiempo hasta el estacionario y
 use ese estado como inicial. Ver `Example_Reactive_Heat.py`.
@@ -170,6 +178,7 @@ python Test/test_species.py        # especies: analíticas 1D, conservación, ja
 python Test/test_nonlinear_transient.py  # 2D: radiación, Newton, transitorio, orden temporal y energía (9)
 python Test/test_nonlinear_diffusion.py  # k(T): Kirchhoff exacta, manufacturada 2D, jacobiano, transitorio (8)
 python Test/test_coupling.py       # calor + especies: EDO adiabática, conservación, invariantes, jacobiano cruzado, API (12)
+python Test/test_multifield_diffusion.py  # D(c), D(T), k(c): soluciones exactas, jacobiano, conservación, errores (8)
 ```
 
 Todas deben pasar antes de hacer un commit que toque el núcleo (`Source/`).
