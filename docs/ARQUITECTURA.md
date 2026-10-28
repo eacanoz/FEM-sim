@@ -88,6 +88,15 @@ Toda física debe implementar `build_system`; la antigua ruta por elemento (JAX 
 - `Physics.py`: clase base. `fields()` (un escalar por variable), `add_terms(system, model, disc, layout)` (a implementar por
   cada física: operadores y leyes, sin condiciones de contorno) y `build_system(...)` (crea el `System`, llama a
   `add_terms` y añade las BC). `KELVIN_OFFSET` es la constante de conversión °C → K compartida.
+- Solvers (`Simulation/Solvers.py`, `DirectSolver.py`, `IterativeSolver.py`): `modelSolver._solve_system(A, b)` es el único punto
+  de resolución lineal (estacionario, pasos de Newton y transitorio). Directo: `FactorizedSolver` (PARDISO o SuperLU) guarda la
+  factorización de la última matriz y solo refactoriza si cambia; vive en el modelo (`model._factorizer`), de modo que `solve()`
+  repetidos con la misma matriz no vuelven a factorizar. Iterativo: se eliminan los nodos con Dirichlet (filas identidad) y se
+  resuelve el sistema reducido con CG/BiCGSTAB/GMRES y `build_preconditioner` (`iLU`, `Jacobi`, `AMG` de pyamg), reutilizando el
+  precondicionador mientras la matriz no cambie. Un transitorio sin términos no lineales (`System.is_linear`) ensambla y
+  factoriza una sola vez.
+- Salida (`Post_processing/VTK.py`): `write_vtu`, `write_pvd`, `export_model` (`Model.exportVTK`). VTK XML en ASCII, sin
+  dependencias; line2, tri3 y quad4.
 - Convección: `physics.setVelocity(v)` y `setStabilization('SUPG')` (en `CoupledPhysics` se aplican a todas las partes: una sola
   velocidad compartida). `physics.add_convection(...)` añade `Operators.convection` y, con SUPG, `supg_tau` (parámetro
   `tau = h xi(Pe) / (2|a|)`, `xi = coth(Pe) - 1/Pe`, `h` de Hughes) y `supg_terms` (rigidez, masa y fuente consistentes).

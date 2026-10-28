@@ -4,8 +4,8 @@ import numpy as np
 import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 
-from Source.Simulation.DirectSolver import DirectSolver
-from Source.Simulation.IterativeSolver import IterativeSolver
+from Source.Simulation.DirectSolver import FactorizedSolver, _same_sparse
+from Source.Simulation.IterativeSolver import IterativeSolver, build_preconditioner
 from Source.enums import SolverType, StudyType, ProblemType
 from Source.logger_config import sim_logger
 
@@ -20,17 +20,6 @@ def tictoc(method):
             return t2
         
         return wrapper
-
-def _same_sparse(a, b):
-
-    """True if two sparse matrices have the same structure and values."""
-
-    if b is None or a.shape != b.shape or a.nnz != b.nnz:
-        return False
-
-    return (np.array_equal(a.indptr, b.indptr) and np.array_equal(a.indices, b.indices)
-            and np.array_equal(a.data, b.data))
-
 
 class modelSolver():
 
@@ -57,6 +46,56 @@ class modelSolver():
 
         self.timeVector = None
 
+        self._iterative_cache = (None, None)   # (matrix, preconditioner) of the last iterative solve
+        self.iterations = []                   # Krylov iterations of every iterative solve
+
+
+    def _factorizer(self):
+
+        """Direct solver kept by the model, so its factorization survives from one solve() to the next."""
+
+        kind = self.solverOptions['Solver']
+        factorizer = getattr(self.model, '_factorizer', None)
+
+        if factorizer is None or factorizer.kind != kind:
+            factorizer = FactorizedSolver(kind)
+            self.model._factorizer = factorizer
+
+        return factorizer
+
+    def _solve_system(self, A, b, guess=None):
+
+        """Solves A x = b with the configured method.
+
+        Direct: reuses the factorization when A has not changed. Iterative: the Dirichlet dofs (identity
+        rows) are eliminated first, which leaves the free-dof matrix symmetric for diffusion problems
+        (needed by CG and by AMG); the preconditioner is rebuilt only when A changes.
+        """
+
+        if self.solverOptions['Method'] == SolverType.direct:
+            return self._factorizer().solve(A, b)
+
+        fixed = self.model.dirichletDofs()
+        free = ~fixed
+
+        x = np.zeros(len(b))
+        x[fixed] = b[fixed] / A.diagonal()[fixed]
+
+        A = A.tocsr()
+        A_ff = A[free][:, free].tocsr()
+        rhs = b[free] - A[free][:, fixed] @ x[fixed]
+
+        cached_A, preconditioner = self._iterative_cache
+        if preconditioner is None or not _same_sparse(A_ff, cached_A):
+            preconditioner = build_preconditioner(A_ff, self.solverOptions.get('Preconditioner'))
+            self._iterative_cache = (A_ff, preconditioner)
+
+        x0 = None if guess is None else guess[free]
+        solver = IterativeSolver(A_ff, rhs, x0, self.solverOptions, preconditioner=preconditioner)
+        x[free] = solver.solve()
+        self.iterations.append(solver.iterations)
+
+        return x
 
     def construcProblem(self):
 
@@ -106,7 +145,8 @@ class modelSolver():
         """Theta-method with a fixed time step: theta = 1 is implicit Euler, theta = 0.5 Crank-Nicolson.
 
         Each step assembles the system at the current state, so nonlinear BCs are evaluated at the
-        start of the step. The step matrix is factorized again only when it changes.
+        start of the step. A system without nonlinear terms is assembled and factorized once; otherwise
+        the step matrix is factorized again only when it changes.
         Dirichlet nodes keep their prescribed values (the mass matrix is zeroed on those rows/columns).
         """
 
@@ -135,21 +175,18 @@ class modelSolver():
         Y = np.zeros((len(x), n_steps + 1))
         Y[:, 0] = x
 
-        lu, S_prev = None, None
+        linear = self.model._system().is_linear
+        S = (M + theta * dt * A).tocsc() if linear else None
 
         for step in range(n_steps):
 
-            A, b = self.model.assembleGlobalSystem(self.solverOptions)
-
-            S = (M + theta * dt * A).tocsc()
-
-            if lu is None or not _same_sparse(S, S_prev):
-                lu = spla.splu(S)
-                S_prev = S
+            if not linear:
+                A, b = self.model.assembleGlobalSystem(self.solverOptions)
+                S = (M + theta * dt * A).tocsc()
 
             rhs = M @ x - (1.0 - theta) * dt * (A @ x) + dt * b
 
-            x = lu.solve(rhs)
+            x = self._solve_system(S, rhs, guess=x)
             self.updateSolution(x)
 
             Y[:, step + 1] = x
@@ -169,16 +206,7 @@ class modelSolver():
         self.construcProblem()
         self.getInitialField()
 
-        if self.model.solverOptions['Method'] == SolverType.direct:
-            solutionMethod = DirectSolver(self.A, self.b, self.x0, self.model.solverOptions)
-
-            self.sol = solutionMethod.solve()
-
-
-        elif self.model.solverOptions['Method'] == SolverType.iterative:
-            solutionMethod = IterativeSolver(self.A, self.b, self.x0, self.model.solverOptions)
-
-            self.sol = solutionMethod.solve()
+        self.sol = self._solve_system(self.A, self.b, guess=self.x0)
 
         self.updateSolution(self.sol)
 
@@ -200,10 +228,7 @@ class modelSolver():
 
         """Solves J dX = rhs with the configured linear solver."""
 
-        if self.model.solverOptions['Method'] == SolverType.direct:
-            return DirectSolver(J, rhs, self.x0, self.model.solverOptions).solve()
-
-        return IterativeSolver(J, rhs, self.x0, self.model.solverOptions).solve()
+        return self._solve_system(J, rhs)
 
     def newtonSolver(self):
 

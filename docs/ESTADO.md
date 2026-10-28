@@ -54,6 +54,10 @@
 | T3: parche | `T = 2x + 3y` exacto con Dirichlet y flujo | `Test/test_triangles_gmsh.py` | pasa (1e-10) |
 | T3: manufacturada y reacción-difusión | Poisson `sin sin`; `cosh` analítica con reacción de primer orden | `Test/test_triangles_gmsh.py` | orden 2 |
 | gmsh: anillo y grupos | solución logarítmica en un cuarto de anillo; grupos físicos cubren el contorno; Q4 de gmsh exacto | `Test/test_triangles_gmsh.py` | pasa |
+| AMG y solvers iterativos | CG con AMG, iLU y Jacobi igualan a PARDISO (1e-8); iteraciones de AMG casi constantes (8-10 de 2.6 mil a 160 mil incógnitas) frente a CG sin precondicionar (72 a 293) | `Test/test_solver_scaling_output.py` | pasa |
+| Newton iterativo | GMRES + AMG en cada paso de Newton igual a Newton directo con `k(T)` | `Test/test_solver_scaling_output.py` | pasa (1e-7) |
+| Factorización reutilizada | transitorio lineal con una sola factorización (PARDISO y SuperLU); `solve()` repetido solo refactoriza si cambia la matriz | `Test/test_solver_scaling_output.py` | pasa |
+| Salida VTK | `.vtu` (Q4, T3, línea) y serie `.pvd` releídos y comparados con malla y solución | `Test/test_solver_scaling_output.py` | pasa |
 | Newton ante una reacción desbocada | nunca deja NaN: se detiene con aviso y conserva el último estado finito | `Test/test_coupling.py` | pasa |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
@@ -133,6 +137,14 @@ Lo que sigue pendiente:
   pero aún no asigna materiales distintos por región.
 - SUPG sobre triángulos reduce mucho las oscilaciones pero no las elimina (no es monótono con flujo oblicuo a la malla).
 
+### Solvers y salida
+- En mallas hasta 160 mil incógnitas PARDISO sigue siendo tan rápido como CG + AMG (el ensamblado domina): el beneficio de AMG
+  son las iteraciones casi constantes y la memoria, que importan en mallas mayores.
+- AMG (aglomeración suavizada) está pensado para difusión simétrica; con convección fuerte o varios campos acoplados puede
+  necesitar más iteraciones o GMRES/BiCGSTAB. Sin precondicionador de bloques para sistemas acoplados.
+- La salida es VTK XML en ASCII (grande en mallas muy finas); no hay XDMF/HDF5 ni VTK binario ni datos por celda.
+- La factorización se reutiliza si la matriz es idéntica; en problemas no lineales cada iteración de Newton refactoriza.
+
 ### Entorno y archivos
 - `Logs/`: cada importación de `Source` crea un archivo de log nuevo. Con muchas ejecuciones la carpeta crece.
 - `plt.show()` bloquea en `postProcess` y `postProcess2D`. En scripts sin pantalla use `MPLBACKEND=Agg`.
@@ -180,8 +192,9 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
 4. ~~**Mallas y geometría (Etapa 8).**~~ Hecha: T3 en `Elements.py`, `generate2DMesh` con triángulos, importación de gmsh con
    grupos físicos por nombre, `Test/test_triangles_gmsh.py` y `Example_Gmsh_Geometry.py`. Pendiente: materiales por región,
    elementos de orden superior y 3D.
-5. **Escalado de solvers y salida.** Precondicionador AMG (`pyamg`) para problemas grandes, cache de factorizaciones
-   en el estacionario, y exportar a VTK/XDMF para ParaView.
+5. ~~**Escalado de solvers y salida.**~~ Hecha: AMG (`pyamg`), Jacobi e iLU sobre el sistema reducido, `tol`/`maxiter`,
+   factorización reutilizada (transitorio lineal y `solve()` repetidos), exportación VTK/PVD. Pendiente: XDMF/HDF5, VTK binario,
+   iterativo para sistemas con convección fuerte o varios campos acoplados (AMG por bloques).
 6. **Estabilización de convección.** Petrov-Galerkin o SUPG en 1D (y 2D cuando exista convección vectorial). Validar con
    el problema de convección-difusión de Péclet alto.
 

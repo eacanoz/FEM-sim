@@ -164,6 +164,13 @@ class System:
         self.is_dirichlet = np.zeros(n, dtype=bool)
         self.dirichlet_value = np.zeros(n)
 
+    @property
+    def is_linear(self):
+
+        """True if the system has no nonlinear terms: A, b and the tangent do not depend on the state."""
+
+        return not self._terms
+
     # ----- building blocks -----
 
     def add_matrix(self, A):

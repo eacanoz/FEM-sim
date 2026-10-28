@@ -23,6 +23,7 @@ SUITES = [
     "Test/test_multifield_diffusion.py",
     "Test/test_convection_supg.py",
     "Test/test_triangles_gmsh.py",
+    "Test/test_solver_scaling_output.py",
 ]
 
 

@@ -155,7 +155,7 @@ class Model(object):
         return self._system().mass()
 
     def solverConfiguration(self, Study=StudyType.steady_state, Type=ProblemType.linear, Method=SolverType.direct, Solver = DirectSolvers.PARDISO, 
-                            timeDisc = 1, timeStep=0.05, totalTime = 3, prec = Preconditioners.iLU):
+                            timeDisc = 1, timeStep=0.05, totalTime = 3, prec = Preconditioners.iLU, tol = 1e-10, maxiter = None):
         
         """Configures the solver for the model based on the provided options."""
 
@@ -167,7 +167,9 @@ class Model(object):
             'Preconditioner': prec,
             'Time Discretization': timeDisc,
             'Time Step': timeStep,
-            'Time': totalTime
+            'Time': totalTime,
+            'Tolerance': tol,           # relative residual of the iterative solvers
+            'Max Iterations': maxiter   # iterative solvers (None: scipy default)
         }
 
 
@@ -194,7 +196,8 @@ class Model(object):
         sim_logger.info("Solver: " + str(self.solverOptions['Solver'].value))
 
         if self.solverOptions['Method'] == SolverType.iterative:
-            sim_logger.info("Preconditioner: " + str(self.solverOptions['Preconditioner'].value))
+            prec = self.solverOptions['Preconditioner']
+            sim_logger.info("Preconditioner: " + (prec.value if prec is not None else "none"))
 
         if self.solverOptions['Study'] == StudyType.transient:
             sim_logger.info("Time Discretization: " + str(self.solverOptions['Time Discretization']))
@@ -207,9 +210,18 @@ class Model(object):
         solver.solve()
 
         self.timeVector = solver.timeVector
+        self.solver_iterations = solver.iterations   # Krylov iterations of every linear solve (empty with direct solvers)
 
         sim_logger.info("------- Simulation finished -------")
 
+
+    def exportVTK(self, base, every=1, fields=None):
+
+        """Writes the solution for ParaView: base.vtu (steady) or base_NNNN.vtu + base.pvd (transient). Returns the files."""
+
+        from Source.Post_processing.VTK import export_model
+
+        return export_model(self, base, every=every, fields=fields)
 
     def postProcess(self):
 

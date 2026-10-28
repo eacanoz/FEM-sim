@@ -34,3 +34,5 @@ class IterativeSolvers(Enum):
 
 class Preconditioners(Enum):
     iLU = 'iLU Factorization'
+    Jacobi = 'Jacobi (diagonal)'
+    AMG = 'Algebraic multigrid (pyamg)'

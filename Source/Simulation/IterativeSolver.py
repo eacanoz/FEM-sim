@@ -1,13 +1,52 @@
 import numpy as np
+import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 
-from Source.enums import  IterativeSolvers, Preconditioners
+from Source.enums import IterativeSolvers, Preconditioners
 from Source.logger_config import sim_logger
+
+
+def build_preconditioner(A, kind):
+
+    """Preconditioner M ~ A^-1 (a LinearOperator) for the matrix A, or None.
+
+    iLU: incomplete LU (any matrix). Jacobi: inverse of the diagonal. AMG: smoothed-aggregation algebraic
+    multigrid from pyamg, one V-cycle per application; it is the one that scales (iterations almost
+    independent of the mesh) for diffusion-dominated symmetric problems. Needs the pyamg package.
+    """
+
+    if kind is None:
+        return None
+
+    if kind == Preconditioners.iLU:
+        ilu = spla.spilu(A.tocsc())
+        return spla.LinearOperator(A.shape, ilu.solve)
+
+    if kind == Preconditioners.Jacobi:
+        inverse = 1.0 / A.diagonal()
+        return spla.LinearOperator(A.shape, lambda r: inverse * r)
+
+    if kind == Preconditioners.AMG:
+        try:
+            import pyamg
+        except ImportError as error:
+            raise ImportError("El precondicionador AMG necesita el paquete pyamg (pip install pyamg).") from error
+
+        return pyamg.smoothed_aggregation_solver(A.tocsr()).aspreconditioner(cycle='V')
+
+    raise ValueError(f"Precondicionador no implementado: {kind}")
 
 
 class IterativeSolver:
 
-    def __init__(self, A, b, x0, options=None):
+    """Krylov solver (CG, BiCGSTAB, GMRES) with an optional preconditioner.
+
+    options: 'Solver', 'Preconditioner', 'Tolerance' (relative residual, default 1e-10) and 'Max Iterations'.
+    `preconditioner` can be passed already built (to reuse it over several solves); `iterations` and `converged`
+    report the last solve.
+    """
+
+    def __init__(self, A, b, x0, options=None, preconditioner=None):
 
         self.A = A
         self.b = b
@@ -15,89 +54,42 @@ class IterativeSolver:
         self.x0 = x0
 
         self.options = options
+        self.preconditioner = preconditioner
 
-        self.nIter=1
-        self.error = []
-        self.iter_list = []
-
+        self.iterations = 0
+        self.converged = True
 
     def solve(self):
 
-        self.convRes()
+        self.iterations = 0
 
-        if self.options['Solver'] == IterativeSolvers.BiCGSTAB:
-            return self.BicgStab()
-        elif self.options['Solver'] == IterativeSolvers.GMRES:
-            return self.GMres()
-        elif self.options['Solver'] == IterativeSolvers.CG:
-            return self.Cg()
+        name = self.options['Solver']
+        method = {IterativeSolvers.BiCGSTAB: spla.bicgstab, IterativeSolvers.GMRES: spla.gmres,
+                  IterativeSolvers.CG: spla.cg}.get(name)
 
-        raise ValueError(f"Iterative solver not implemented: {self.options['Solver']}")
+        if method is None:
+            raise ValueError(f"Iterative solver not implemented: {name}")
 
-    def _check_info(self, info, name):
+        M = self.preconditioner
+        if M is None:
+            M = build_preconditioner(self.A, self.options.get('Preconditioner'))
 
-        """scipy returns info=0 on success, >0 if not converged after maxiter, <0 on illegal input."""
+        def count(_):
+            self.iterations += 1
 
-        if info != 0:
-            sim_logger.warning(f"{name} did not converge (info={info}).")
+        kwargs = {'x0': self.x0, 'M': M, 'rtol': self.options.get('Tolerance', 1e-10), 'atol': 0.0,
+                  'maxiter': self.options.get('Max Iterations')}
 
-    def Cg(self):
+        if method is spla.gmres:
+            kwargs['callback'] = count
+            kwargs['callback_type'] = 'pr_norm'
+        else:
+            kwargs['callback'] = count
 
-        M = self.Preconditioner()
+        x, info = method(self.A, self.b, **kwargs)
 
-        x, info = spla.cg(self.A, self.b, x0=self.x0, M=M, callback=self.callBackFunc)
-
-        self._check_info(info, "CG")
-
-        return x
-
-    def BicgStab(self):
-        # print('Solver: BicgStab (Biconjugate gradient stabilized method)')
-
-        M = self.Preconditioner()
-
-        x, info = spla.bicgstab(self.A, self.b, x0=self.x0, M=M, callback=self.callBackFunc)
-
-        self._check_info(info, "BiCGSTAB")
+        self.converged = info == 0
+        if not self.converged:
+            sim_logger.warning(f"{name.value} did not converge (info={info}, {self.iterations} iterations).")
 
         return x
-
-    def GMres(self):
-        # print('Solver: GMRES (Generalized Minimal Residual method)')
-
-        M = self.Preconditioner()
-
-        x, info = spla.gmres(self.A, self.b, x0=self.x0, M=M, callback=self.callBackFunc)
-
-        self._check_info(info, "GMRES")
-
-        return x
-    
-    def Preconditioner(self):
-
-        if self.options['Preconditioner'] == Preconditioners.iLU:
-            return self.iLUFactorization()
-        elif self.options['Preconditioner'] == None:
-            return None
-            
-  
-    def iLUFactorization(self):
-
-        # print('Preconditioner: iLU Factorization')
-
-        sA_iLU = spla.spilu(self.A)
-
-        return spla.LinearOperator(sA_iLU.shape, sA_iLU.solve)
-
-    def convRes(self):
-        self.nIter=1
-        self.error = []
-        self.iter_list = []
-
-    def callBackFunc(self, xk):
-        error = np.linalg.norm(self.A.dot(xk)-self.b)
-        self.error.append(error)
-        self.iter_list.append(self.nIter)
-
-        self.nIter += 1
-

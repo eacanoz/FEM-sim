@@ -24,6 +24,8 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Coeficientes de difusión que dependen de otros campos: `k(T)`, `k(c)`, `D(T)`, `D(c)` (`depends_on`) | Operativo, validado con soluciones exactas, convergencia de segundo orden y jacobiano |
 | Convección con velocidad compartida entre físicas y estabilización SUPG (1D, 2D) | Operativo, nodalmente exacto en 1D a Pe alto y de segundo orden con fuente |
 | Triángulos T3 y mallas de gmsh (geometría no rectangular, grupos físicos con nombre) | Operativo: parche exacto, orden 2, anillo frente a solución logarítmica |
+| Solvers iterativos (CG, BiCGSTAB, GMRES) con AMG (pyamg), iLU o Jacobi sobre el sistema reducido; reutilización de factorizaciones | Operativo: AMG con iteraciones casi independientes de la malla |
+| Exportación a ParaView (`.vtu` y series `.pvd`) | Operativo; XDMF no implementado |
 | `rho Cp(T)`, elementos de orden superior, 3D | No implementado |
 
 ## Requisitos
@@ -34,6 +36,7 @@ Las versiones son las que usa el entorno `.venv` del proyecto (ver `requirements
 - numpy, scipy, matplotlib
 - jax y jaxlib (solo para las leyes puntuales no lineales: reacciones, `h(T)` de radiación, ...)
 - pypardiso (solver directo PARDISO). Es obligatorio: `Source/Simulation/DirectSolver.py` lo importa al cargar el módulo.
+- pyamg (precondicionador AMG, opcional)
 - gmsh (importar mallas y construir geometrías; opcional si solo se usan las mallas internas)
 
 Instalación en Windows (PowerShell):
@@ -83,6 +86,18 @@ El θ-método usa un paso fijo. Euler implícito (θ = 1) es robusto y de primer
 segundo orden pero no es L-estable: con estados iniciales discontinuos y pasos grandes los modos rígidos oscilan
 durante bastante tiempo (use un paso menor o Euler). Con BC no lineales, cada paso se linealiza con Newton al inicio
 del paso. El estado inicial puede ser un número o una función de las coordenadas: `initField('T', lambda x, y: ...)`.
+
+### Solvers y salida
+
+```python
+model.solverConfiguration(Method=SolverType.iterative, Solver=IterativeSolvers.CG,
+                          prec=Preconditioners.AMG, tol=1e-10)      # AMG necesita pyamg
+model.solve()
+model.solver_iterations                                              # iteraciones de cada solve lineal
+model.exportVTK('resultados/placa')                                  # placa.vtu; transitorio: placa_0000.vtu... + placa.pvd (every=n)
+```
+
+Los solvers iterativos eliminan antes los nodos con Dirichlet (el sistema reducido es simétrico en difusión, lo que permite CG y AMG). Un sistema lineal se factoriza una vez, también entre llamadas sucesivas a `solve()` mientras la matriz no cambie.
 
 ### Triángulos y mallas de gmsh
 
@@ -174,6 +189,7 @@ Las aristas se seleccionan con un predicado sobre su punto medio: `mesh.boundary
 | `Example_Reactive_Heat.py` | Reacción exotérmica acoplada con el calor: verificación frente a una EDO, barrido del calor de reacción y arranque transitorio |
 | `Ejemplo_Fisicas_Acopladas.ipynb` | **Cuaderno guiado** del caso reactivo: monta el modelo paso a paso, explica cada función y parámetro, muestra qué ocurre dentro del solver (geometría, DOF, jacobiano, Newton), los resultados, la verificación y el transitorio |
 | `2DFEM.py` | Generación de malla 2D (referencia de numeración) |
+| `Example_Solver_Scaling.py` | Poisson 2D hasta 160 mil incógnitas: PARDISO frente a CG y CG+AMG, factorización reutilizada y exportación a ParaView |
 | `Example_Gmsh_Geometry.py` | Cuarto de anillo (convergencia frente a la solución logarítmica) y placa con orificio, con mallas T3 de gmsh |
 | `readMesh.py` | Lectura de información de un archivo `.msh` con gmsh |
 
@@ -200,6 +216,7 @@ python Test/test_nonlinear_transient.py  # 2D: radiación, Newton, transitorio, 
 python Test/test_nonlinear_diffusion.py  # k(T): Kirchhoff exacta, manufacturada 2D, jacobiano, transitorio (8)
 python Test/test_coupling.py       # calor + especies: EDO adiabática, conservación, invariantes, jacobiano cruzado, API (12)
 python Test/test_multifield_diffusion.py  # D(c), D(T), k(c): soluciones exactas, jacobiano, conservación, errores (8)
+python Test/test_solver_scaling_output.py # AMG, solvers iterativos, reutilización de factorización y salida VTK (10)
 python Test/test_triangles_gmsh.py        # triángulos T3 y gmsh: parche, manufacturada, anillo, grupos, Q4 de gmsh (10)
 python Test/test_convection_supg.py       # velocidad compartida y SUPG: exactitud 1D, 2D = 1D, manufacturada, transitorio (9)
 ```
