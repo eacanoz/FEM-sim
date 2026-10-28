@@ -8,6 +8,8 @@
 # (build_system) that each physics implements to build its Source.Simulation.System.
 
 
+import numpy as np
+
 from Source.Simulation.DofLayout import FieldSpec
 
 
@@ -54,7 +56,14 @@ class physics:
         return len(self.var.keys())
 
     def initField(self, variable, value):
-        self.var[variable].initField(value)
+
+        """Initial value of a field: a number, or a function of the node coordinates f(x), f(x, y)."""
+
+        if callable(value):
+            nodes = self.modelRef.mesh.NL
+            self.var[variable].updateField(np.array([value(*node.coor) for node in nodes], dtype=float))
+        else:
+            self.var[variable].initField(value)
 
     # Boundary conditions
 

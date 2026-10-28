@@ -216,9 +216,13 @@ class Model(object):
         plt.ylabel("Temperature[°C]")
         plt.show()
 
-    def postProcess2D(self, variable=None, levels=30):
+    def postProcess2D(self, variable=None, levels=30, step=None, ax=None, vmin=None, vmax=None):
 
-        """Filled contour of the nodal solution on a 2D mesh (each Q4 is split into two triangles)."""
+        """Filled contour of the nodal solution on a 2D mesh (each Q4 is split into two triangles).
+
+        step: index of a time step of a transient solution (default: the final state). ax: draw on an
+        existing axes instead of opening a figure. vmin, vmax: fixed color range (to compare steps).
+        """
 
         import matplotlib.tri as mtri
 
@@ -233,13 +237,27 @@ class Model(object):
 
         triang = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles)
 
-        fig, ax = plt.subplots()
-        contour = ax.tricontourf(triang, self.physics.var[variable].values, levels=levels)
+        values = self.physics.var[variable].values if step is None else self.sol[variable][:, step]
+
+        own_figure = ax is None
+        if own_figure:
+            fig, ax = plt.subplots()
+        else:
+            fig = ax.figure
+
+        if vmin is not None and vmax is not None:
+            levels = np.linspace(vmin, vmax, levels)
+
+        contour = ax.tricontourf(triang, values, levels=levels, vmin=vmin, vmax=vmax)
         fig.colorbar(contour, ax=ax, label=variable)
         ax.set_aspect('equal')
         ax.set_xlabel("x [m]")
         ax.set_ylabel("y [m]")
-        plt.show()
+
+        if own_figure:
+            plt.show()
+
+        return contour
 
 
 

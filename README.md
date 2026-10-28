@@ -17,7 +17,9 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Calor 1D transitorio (θ-método, paso fijo) | Operativo |
 | Calor 2D estacionario lineal (Q4, BC en aristas) | Operativo, validado con soluciones manufacturadas (orden 2) |
 | Transporte de especies 1D y 2D (`mt`): difusión, convección, varias reacciones acopladas, BC en nodos y aristas | Operativo sobre la base multifísica, validado con soluciones analíticas y manufacturadas |
-| 2D no lineal, 2D transitorio, triángulos, mallas gmsh | No implementado |
+| Calor 2D no lineal (radiación y convección `h(T)` en aristas, Newton con line search) | Operativo, validado frente a 1D y por balance de energía |
+| Calor 2D transitorio (θ-método, también con BC no lineales) | Operativo, validado con soluciones analíticas, orden temporal y conservación de energía |
+| Triángulos, mallas gmsh, convección vectorial no lineal | No implementado |
 
 ## Requisitos
 
@@ -69,6 +71,11 @@ Para el caso no lineal, use `Type=ProblemType.nonlinear` y `model.physics.addBC_
 Para transitorio, use `Study=StudyType.transient` con `timeDisc` (1 = Euler implícito, 0.5 = Crank-Nicolson),
 `timeStep` y `totalTime`. Ver `Simulation_time_dependent.py`.
 
+El θ-método usa un paso fijo. Euler implícito (θ = 1) es robusto y de primer orden; Crank-Nicolson (θ = 0.5) es de
+segundo orden pero no es L-estable: con estados iniciales discontinuos y pasos grandes los modos rígidos oscilan
+durante bastante tiempo (use un paso menor o Euler). Con BC no lineales, cada paso se linealiza con Newton al inicio
+del paso. El estado inicial puede ser un número o una función de las coordenadas: `initField('T', lambda x, y: ...)`.
+
 ### Problema 2D
 
 ```python
@@ -89,6 +96,7 @@ izquierda = mesh.boundary_edges(lambda x, y: x < 1e-12)
 derecha = mesh.boundary_edges(lambda x, y: x > 1 - 1e-12)
 model.physics.addBC_TemperatureEdges(izquierda, 100.0)                  # Dirichlet en aristas
 model.physics.addBC_ConvectionEdges(derecha, h_c=5.0, T_ext=20.0)      # Newton en aristas
+# Radiación (no lineal): model.physics.addBC_RadiationEdges(derecha, epsilon=0.8, T_ext=20.0)
 
 model.solverConfiguration(Study=StudyType.steady_state, Type=ProblemType.linear,
                           Method=SolverType.direct, Solver=DirectSolvers.PARDISO)
@@ -105,6 +113,7 @@ Las aristas se seleccionan con un predicado sobre su punto medio: `mesh.boundary
 | `Simulation.py` | Barra 1D no lineal con Dirichlet, convección y radiación |
 | `Simulation_time_dependent.py` | Barra 1D transitoria |
 | `Example_2D_Poisson.py` | Poisson 2D con solución exacta, tabla de convergencia y gráficos |
+| `Example_2D_Transient.py` | Placa 2D con punto caliente, radiación y convección: transitorio no lineal, convergencia en el tiempo y gráficos |
 | `2DFEM.py` | Generación de malla 2D (referencia de numeración) |
 | `readMesh.py` | Lectura de información de un archivo `.msh` con gmsh |
 
@@ -127,6 +136,7 @@ python Test/test_solvers.py        # Newton con line search y transitorio θ-mé
 python Test/test_2d_poisson.py     # 2D: topología, parche, BC en aristas, convección y convergencia (6)
 python Test/test_foundation.py     # elementos, facetas, DOF, operadores y leyes puntuales (11)
 python Test/test_species.py        # especies: analíticas 1D, conservación, jacobiano, 2D manufacturada (8)
+python Test/test_nonlinear_transient.py  # 2D: radiación, Newton, transitorio, orden temporal y energía (9)
 ```
 
 Todas deben pasar antes de hacer un commit que toque el núcleo (`Source/`).

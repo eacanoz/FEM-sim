@@ -37,7 +37,8 @@ Mesh ─► Elements ─► Discretization ─► Operators ─► System ─►
    - `boundary_facets(selector)` (alias `boundary_edges`) devuelve las facetas del contorno cuyo punto medio cumple el predicado.
 2. **Modelo.** `Model(name, dim, mesh, mat, psc)` crea la física, que crea los campos (`scalarField`).
 3. **Condiciones.** `physics.addBC_*` escribe en `node.BC[campo]` (Dirichlet, y Newton/Neumann en un nodo en 1D) o en
-   `physics.facet_bcs` (Newton/Neumann sobre facetas: aristas en 2D).
+   `physics.facet_bcs` (Newton/Neumann sobre facetas: aristas en 2D). `addBC_ConvectionEdges` y `addBC_RadiationEdges`
+   aceptan un `h` que dependa de la temperatura (ley de faceta no lineal con jacobiano automático).
 4. **Configuración.** `solverConfiguration(...)` guarda `model.solverOptions`.
 5. **Solve.** `Model.solve()` reinicia el caché del sistema y crea un `modelSolver`. Éste pide a `Model` el `System`
    (`physics.build_system(model, disc, layout)`, construido una sola vez por solve) y lo resuelve.
@@ -58,6 +59,8 @@ Mesh ─► Elements ─► Discretization ─► Operators ─► System ─►
 | Gauss | 2 puntos por dirección (`Discretization(mesh, order=2)`) |
 | Coeficientes | número, array en puntos de Gauss, o función de las coordenadas `f(x)`, `f(x, y)` |
 | `h` y `flux` como función | en una BC, una función recibe el **valor del campo** (p. ej. `h(T)` de radiación) |
+| Transitorio | θ-método de paso fijo sobre `M x' + A x = b`; con términos no lineales cada paso usa la linealización de Newton: `(M + θ dt J) Δx = -dt R(x_n)` |
+| Estado inicial | `physics.initField(campo, valor)`: número o función de las coordenadas |
 
 ## 4. Módulos en detalle
 

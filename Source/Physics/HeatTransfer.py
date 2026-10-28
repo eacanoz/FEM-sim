@@ -120,20 +120,32 @@ class ht(physics):
 
     def addBC_ConvectionEdges(self, edges, h_c: float, T_ext: float):
 
-        """Convection h_c (T_ext - T) through the edges [W/m2]. h_c must be a number."""
+        """Convection through the edges: outgoing flux h_c (T - T_ext) [W/m2].
+
+        h_c is a number, or a function of the temperature h_c(T) (nonlinear, solved with Newton).
+        """
 
         self.facet_bcs.append({'type': 'Newton', 'field': 'T', 'facets': list(edges), 'h': h_c, 'var_ext': T_ext})
 
-    def addBC_Radiation(self, id: int, epsilon: float, T_ext: float):
+    @staticmethod
+    def _radiation_coefficient(epsilon, T_ext):
 
-        """
-        Radiation BC. Temperatures are given in °C; the Stefan-Boltzmann law needs Kelvin,
-        so h(T) is evaluated with absolute temperatures. The flux is h(T)*(T - T_ext),
-        which is the same in °C and K because only the difference appears.
-        """
+        """h(T) of a radiating surface. Temperatures are given in °C; the Stefan-Boltzmann law needs
+        Kelvin, so h(T) is evaluated with absolute temperatures. The flux is h(T)*(T - T_ext), which is
+        the same in °C and K because only the difference appears."""
 
         T_ext_K = T_ext + KELVIN_OFFSET
 
-        h_c = lambda n: _calculate_radiative_heat_coef(epsilon, T_ext_K, n + KELVIN_OFFSET)
-        
-        self.modelRef._mesh.NL[id].BC['T'] = self.setNewtonBC(h_c, T_ext)
+        return lambda n: _calculate_radiative_heat_coef(epsilon, T_ext_K, n + KELVIN_OFFSET)
+
+    def addBC_Radiation(self, id: int, epsilon: float, T_ext: float):
+
+        """Radiation to the surroundings at T_ext from the node `id` (1D). See _radiation_coefficient."""
+
+        self.modelRef._mesh.NL[id].BC['T'] = self.setNewtonBC(self._radiation_coefficient(epsilon, T_ext), T_ext)
+
+    def addBC_RadiationEdges(self, edges, epsilon: float, T_ext: float):
+
+        """Radiation to the surroundings at T_ext through the edges (2D), nonlinear in the temperature."""
+
+        self.addBC_ConvectionEdges(edges, self._radiation_coefficient(epsilon, T_ext), T_ext)

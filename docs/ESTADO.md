@@ -28,6 +28,13 @@
 | Especies: transitorio | decaimiento de sin(πx) con difusividades distintas | `Test/test_species.py` | pasa (< 2e-3) |
 | Especies 2D: reacción no lineal manufacturada | `c = 1 + sin·sin`, `k c²`, mallas 4 a 16 | `Test/test_species.py` | orden 2.0 |
 | Especies 2D: flujo y transferencia en aristas | campo lineal exacto | `Test/test_species.py` | pasa (1e-10) |
+| 2D no lineal: radiación | solución independiente de y = solución 1D en los mismos nodos | `Test/test_nonlinear_transient.py` | pasa (1e-8) |
+| 2D no lineal: balance de energía | calor que entra por el borde fijo = calor radiado (cuadratura de faceta) | `Test/test_nonlinear_transient.py` | pasa (1e-6) |
+| 2D no lineal: jacobiano y Newton | radiación + `h(T)` en otra arista frente a diferencias finitas; punto inicial malo (400 C) | `Test/test_nonlinear_transient.py` | pasa |
+| 2D transitorio: decaimiento | `exp(-2π²αt) sin(πx) sin(πy)` con Euler y Crank-Nicolson | `Test/test_nonlinear_transient.py` | pasa |
+| 2D transitorio: orden temporal | autoconvergencia en una malla | `Test/test_nonlinear_transient.py` | Euler 1.0, Crank-Nicolson 2.0 |
+| 2D transitorio: conservación | `sum(M ΔT) = -q L t` exacto para θ = 1 y 0.5 | `Test/test_nonlinear_transient.py` | pasa (1e-9) |
+| 2D transitorio no lineal: límite de tiempo largo | tiende a la solución estacionaria de Newton | `Test/test_nonlinear_transient.py` | pasa (1e-4) |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -70,16 +77,21 @@ Lo que sigue pendiente:
 - **Convección:** diferencias centradas sin estabilización. Para Pe alto habrá oscilaciones. `Pe` se calcula pero no se
   usa. El código de estabilización que no estaba conectado se eliminó en la Etapa 5; habrá que implementarlo.
 - **Convección 2D:** no implementada.
-- **Transitorio:** solo 1D. Las BC no lineales se evalúan al inicio de cada paso (esquema semi-implícito).
+- **Transitorio:** paso fijo y solver directo (`splu`). Con términos no lineales cada paso se linealiza con Newton al
+  inicio del paso (esquema linealmente implícito), sin iterar dentro del paso.
+- **Crank-Nicolson:** no es L-estable. Con estados iniciales discontinuos o muy rígidos y pasos grandes los modos de
+  alta frecuencia oscilan y decaen despacio (en `Example_2D_Transient.py` los errores con pasos grandes son irregulares
+  hasta que el paso es pequeño). Use Euler implícito o un paso menor.
 - **Transitorio, precisión:** `Simulation_time_dependent.py` usa `timeStep = 0.05` (valor por defecto). Con Euler
   implícito el error del caso analítico de prueba es 7.5e-2 (medido). Con Crank-Nicolson (`timeDisc = 0.5`) y el mismo
   paso el error es 7.9e-3. Para el ejemplo conviene usar `timeDisc = 0.5` o un paso menor.
 - **Radiación:** las temperaturas de entrada son °C. La salida de `Simulation.py` cambió en la Etapa 1
   (extremo ~33 °C, antes ~59.6 °C) porque antes la radiación no usaba Kelvin.
 - **Solvers iterativos:** solo iLU como precondicionador. No hay AMG. CG solo es válido si la matriz es SPD.
-- **Newton:** solo 1D. En 2D no lineal (radiación en aristas) no hay soporte.
-- **Aristas (2D):** `h` y `T_ext` deben ser números. Si una esquina pertenece a dos aristas con BC distintas, gana la
-  última asignación de Dirichlet.
+- **No linealidad en el material:** `k(T)` aún no está soportado (solo coeficientes numéricos o funciones de las
+  coordenadas). Las no linealidades admitidas son las de contorno (`h(T)`, radiación) y las reacciones.
+- **Aristas (2D):** `T_ext` debe ser un número (`h` puede ser un número o una función de la temperatura). Si una esquina
+  pertenece a dos aristas con BC distintas, gana la última asignación de Dirichlet.
 
 ### 2D y mallas
 - Solo cuadriláteros Q4 en rectángulo, generados internamente.
@@ -110,7 +122,9 @@ Lo que sigue pendiente:
 
 | `f2ed5bf` | `test-branch` | Etapa 6a y 6b: base multifísica y transporte de especies |
 
-La Etapa 6c (retirada de la ruta por elemento) está en el árbol de trabajo y todavía no está commiteada.
+| `0221dc8` | `test-branch` | Etapa 6c: retirada de la ruta por elemento |
+
+La Etapa 7 (2D no lineal y transitorio) está en el árbol de trabajo y todavía no está commiteada.
 
 ## 4. Próximos pasos propuestos
 
@@ -120,9 +134,9 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
    siguen en verde y `Physics.py` pasó de 980 a 660 líneas.
 2. ~~**Etapa 6: base multifísica y especies.**~~ Hecha (6a base, 6b especies, 6c retirada de la ruta por elemento).
    Las siguientes etapas de física (sólidos, fluidos) deben apoyarse en `System`, `DofLayout`, `Operators` y `PointwiseLaw`.
-3. **2D no lineal y transitorio (Etapa 7).** Radiación en aristas (Newton con h(T) y su derivada) y transitorio 2D
-   reutilizando `System.linear()` dentro del θ-método. Validar con el caso 2D de convergencia en transitorio
-   (solución exacta del decaimiento de la primera autofunción).
+3. ~~**2D no lineal y transitorio (Etapa 7).**~~ Hecha: radiación y `h(T)` en aristas, Newton y transitorio 2D, con
+   `Test/test_nonlinear_transient.py` y `Example_2D_Transient.py`. Siguiente en física: `k(T)` (término de difusión no
+   lineal), convección vectorial estabilizada y sólidos/fluidos sobre la base.
 4. **Mallas y geometría (Etapa 8).** Importar `.msh` de gmsh (grupos físicos → aristas con nombre), añadir triángulos
    T3 a `Elements.py` y permitir geometrías no rectangulares. Validar con el parche en la malla importada.
 5. **Escalado de solvers y salida.** Precondicionador AMG (`pyamg`) para problemas grandes, cache de factorizaciones
