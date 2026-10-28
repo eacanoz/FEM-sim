@@ -174,8 +174,8 @@ class mt(physics):
             else:
                 system.add_matrix(layout.scatter_matrix(ops.diffusion(disc, self.Diffusivities[name]), rows, rows))
 
-            if self.Convection:
-                system.add_matrix(layout.scatter_matrix(ops.convection(disc, self.C_const, self.vel), rows, rows))
+            self.add_convection(system, layout, disc, name, k=None if name in self.diffusivity_inputs else self.Diffusivities[name],
+                                f=self.sources.get(name))
 
             if name in self.sources:
                 system.add_vector(layout.scatter_vector(ops.source(disc, self.sources[name]), rows))

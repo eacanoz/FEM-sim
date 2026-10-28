@@ -86,6 +86,11 @@ Toda física debe implementar `build_system`; la antigua ruta por elemento (JAX 
 - `Physics.py`: clase base. `fields()` (un escalar por variable), `add_terms(system, model, disc, layout)` (a implementar por
   cada física: operadores y leyes, sin condiciones de contorno) y `build_system(...)` (crea el `System`, llama a
   `add_terms` y añade las BC). `KELVIN_OFFSET` es la constante de conversión °C → K compartida.
+- Convección: `physics.setVelocity(v)` y `setStabilization('SUPG')` (en `CoupledPhysics` se aplican a todas las partes: una sola
+  velocidad compartida). `physics.add_convection(...)` añade `Operators.convection` y, con SUPG, `supg_tau` (parámetro
+  `tau = h xi(Pe) / (2|a|)`, `xi = coth(Pe) - 1/Pe`, `h` de Hughes) y `supg_terms` (rigidez, masa y fuente consistentes).
+  La estabilización es lineal: no alcanza a las reacciones no lineales, y `tau` usa la difusión constante si existe
+  (con `k(T)` o `D(T)` usa advección pura, algo más difusivo).
 - `Coupled.py` (`CoupledPhysics`): `Model(psc=[ht, mt])` instancia cada física y las expone por nombre (`part_name`:
   `model.physics.heat`, `model.physics.mass`). Une las variables (error si dos físicas repiten una), concatena los campos
   y llama a `add_terms` de cada parte sobre **un solo** `System`; las BC se añaden una vez con las de todas. Los métodos

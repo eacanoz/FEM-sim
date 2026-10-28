@@ -10,6 +10,7 @@
 
 import numpy as np
 
+import Source.Simulation.Operators as ops
 from Source.Simulation.DofLayout import FieldSpec
 from Source.Simulation.System import System
 
@@ -62,6 +63,45 @@ class physics:
         system.add_boundary_conditions(model.mesh, self.facet_bcs)
 
         return system
+
+    def setVelocity(self, v):
+
+        """Convection velocity: a number (1D), a vector (2D) or a function of the coordinates. Switches convection on."""
+
+        self.vel = v
+        self.Convection = True
+
+    def setStabilization(self, method='SUPG'):
+
+        """Stabilization of the convection: 'SUPG' (streamline upwind Petrov-Galerkin) or None."""
+
+        if method not in (None, 'SUPG'):
+            raise ValueError(f"Estabilizacion desconocida: {method!r} (use 'SUPG' o None).")
+
+        self.Stab = method
+
+    def add_convection(self, system, layout, disc, field, k=None, f=None):
+
+        """Convection of `field` with the velocity `vel` (coefficient C_const), stabilized if Stab = 'SUPG'.
+
+        k: diffusion coefficient used only to set the SUPG parameter (None: pure advection).
+        f: source of the equation (number or function of the coordinates), for the consistent SUPG term.
+        The SUPG terms are linear: they stabilize convection, diffusion-free mass and source, not nonlinear reactions.
+        """
+
+        if not self.Convection:
+            return
+
+        rows = layout.element_dofs(disc.conn, field)
+        system.add_matrix(layout.scatter_matrix(ops.convection(disc, self.C_const, self.vel), rows, rows))
+
+        if self.Stab == 'SUPG':
+            tau = ops.supg_tau(disc, self.C_const, self.vel, k)
+            K, M, F = ops.supg_terms(disc, self.C_const, self.vel, tau, m=self.M_const, f=f)
+            system.add_matrix(layout.scatter_matrix(K, rows, rows))
+            system.add_mass(layout.scatter_matrix(M, rows, rows))
+            if F is not None:
+                system.add_vector(layout.scatter_vector(F, rows))
 
     def getVariables(self):
         return self.var.keys()

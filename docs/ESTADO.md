@@ -47,6 +47,9 @@
 | `D(c)` exacta (Kirchhoff) | P1 con 2 puntos de Gauss es exacto en los nodos para `D = D0 (1 + b c)` | `Test/test_multifield_diffusion.py` | pasa (1e-9) |
 | `k(c)` y `D(T)` acoplados | perfil exacto con un campo conductor lineal; orden temporal-espacial | `Test/test_multifield_diffusion.py` | orden 2 |
 | Leyes multicampo | jacobiano (1D y 2D) frente a diferencias finitas, conservación transitoria con `D(c)`, errores de campo ausente | `Test/test_multifield_diffusion.py` | pasa |
+| SUPG 1D | solución nodalmente exacta de convección-difusión con Pe = 20, 50, 500; Galerkin oscila | `Test/test_convection_supg.py` | error < 1e-8 |
+| SUPG 2D y fuente | 2D con flujo en x = 1D; manufacturada con fuente consistente | `Test/test_convection_supg.py` | orden 2 |
+| Velocidad compartida | calor y especie con una sola `setVelocity` siguen el mismo perfil exacto; transitorio llega al estacionario estabilizado | `Test/test_convection_supg.py` | pasa |
 | Newton ante una reacción desbocada | nunca deja NaN: se detiene con aviso y conserva el último estado finito | `Test/test_coupling.py` | pasa |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
@@ -88,8 +91,8 @@ Lo que sigue pendiente:
 
 ### Acoplamiento calor-masa
 - Operativo con `Model(psc=[ht, mt])`: Arrhenius con la T del campo, calor de reacción `dH`, y coeficientes de difusión que
-  dependen de otros campos (`k(T)`, `k(c)`, `D(T)`, `D(c)` con `depends_on`). No incluye todavía velocidad compartida entre
-  calor y especies (`heat.vel` y `mass.vel` son independientes) ni `rho Cp(T)`.
+  dependen de otros campos (`k(T)`, `k(c)`, `D(T)`, `D(c)` con `depends_on`). La velocidad se comparte con `model.physics.setVelocity(v)` y se estabiliza con `setStabilization('SUPG')`.
+  No incluye todavía `rho Cp(T)`, velocidad calculada por un solver de fluidos, ni captura de choques.
 - Las leyes de difusión deben escribirse con `jax.numpy`; si se cambia la función hay que reasignarla (se compila por función).
 - **Varios estados estacionarios (ignición):** con exotermia fuerte puede haber más de una solución. Newton puede caer en
   otra rama o tardar muchas iteraciones cerca de la ignición (con `Q = 300` y `k0 = 3e4` el caso de prueba necesita
@@ -166,7 +169,7 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
 3. ~~**2D no lineal y transitorio (Etapa 7).**~~ Hecha: radiación y `h(T)` en aristas, Newton y transitorio 2D, con
    `Test/test_nonlinear_transient.py` y `Example_2D_Transient.py`. `k(T)` también está hecho (término de difusión no
    lineal). El acoplamiento calor-masa también está hecho (primer paso: Arrhenius con la T del campo y calor de reacción). Siguiente en
-   física: convección compartida y estabilizada, y sólidos/fluidos (`D(T)` y `k(c)` ya están).
+   física: sólidos/fluidos (la convección compartida y estabilizada ya está) (`D(T)` y `k(c)` ya están).
 4. **Mallas y geometría (Etapa 8).** Importar `.msh` de gmsh (grupos físicos → aristas con nombre), añadir triángulos
    T3 a `Elements.py` y permitir geometrías no rectangulares. Validar con el parche en la malla importada.
 5. **Escalado de solvers y salida.** Precondicionador AMG (`pyamg`) para problemas grandes, cache de factorizaciones

@@ -22,7 +22,8 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Conductividad dependiente de la temperatura `k(T)` (1D y 2D, estacionario y transitorio) | Operativo, validado con la solución exacta de Kirchhoff y una solución manufacturada |
 | Calor + especies acopladas (`Model(psc=[ht, mt])`): Arrhenius con la T del campo y calor de reacción `dH` | Operativo, validado con una EDO independiente, invariantes exactos y jacobiano cruzado |
 | Coeficientes de difusión que dependen de otros campos: `k(T)`, `k(c)`, `D(T)`, `D(c)` (`depends_on`) | Operativo, validado con soluciones exactas, convergencia de segundo orden y jacobiano |
-| Triángulos, mallas gmsh, `rho Cp(T)`, convección vectorial estabilizada | No implementado |
+| Convección con velocidad compartida entre físicas y estabilización SUPG (1D, 2D) | Operativo, nodalmente exacto en 1D a Pe alto y de segundo orden con fuente |
+| Triángulos, mallas gmsh, `rho Cp(T)` | No implementado |
 
 ## Requisitos
 
@@ -102,6 +103,13 @@ model.physics.addBC_Concentration(0, 'A', 1.0)
 heat.Convection = False                                       # los atributos se asignan en la parte
 ```
 
+Una sola velocidad para todas las físicas, con estabilización para números de Péclet altos:
+
+```python
+model.physics.setVelocity([1.0, 0.0])     # número en 1D, vector o función de (x, y) en 2D; activa la convección en todas las partes
+model.physics.setStabilization('SUPG')    # None para Galerkin puro
+```
+
 Los coeficientes pueden depender de cualquier campo del modelo (funciones de `jax.numpy`, con `depends_on` en el orden de los argumentos):
 
 ```python
@@ -179,6 +187,7 @@ python Test/test_nonlinear_transient.py  # 2D: radiación, Newton, transitorio, 
 python Test/test_nonlinear_diffusion.py  # k(T): Kirchhoff exacta, manufacturada 2D, jacobiano, transitorio (8)
 python Test/test_coupling.py       # calor + especies: EDO adiabática, conservación, invariantes, jacobiano cruzado, API (12)
 python Test/test_multifield_diffusion.py  # D(c), D(T), k(c): soluciones exactas, jacobiano, conservación, errores (8)
+python Test/test_convection_supg.py       # velocidad compartida y SUPG: exactitud 1D, 2D = 1D, manufacturada, transitorio (9)
 ```
 
 Todas deben pasar antes de hacer un commit que toque el núcleo (`Source/`).

@@ -74,6 +74,18 @@ class CoupledPhysics(physics):
         for part in self.parts.values():
             part.add_terms(system, model, disc, layout)
 
+    def setVelocity(self, v):
+
+        """One velocity for every part: they all convect with the same field."""
+
+        for part in self.parts.values():
+            part.setVelocity(v)
+
+    def setStabilization(self, method='SUPG'):
+
+        for part in self.parts.values():
+            part.setStabilization(method)
+
     # ----- delegation to the parts -----
 
     def __getattr__(self, name):

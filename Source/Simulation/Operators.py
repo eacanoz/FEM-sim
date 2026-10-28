@@ -6,6 +6,7 @@ points, and returns the element arrays that DofLayout then scatters into the glo
     diffusion(disc, D)          (nel, nne, nne)    integral of D grad(N_i) . grad(N_j)
     diffusion_tensor(disc, D)   (nel, nne, nne)    same with a tensor D (dim, dim) or (nel, ngp, dim, dim)
     convection(disc, c, v)      (nel, nne, nne)    integral of N_i c v . grad(N_j)
+    supg_tau, supg_terms        SUPG stabilization of the convection (streamline-upwind Petrov-Galerkin)
     mass(disc, c)               (nel, nne, nne)    integral of c N_i N_j
     source(disc, f)             (nel, nne)         integral of f N_i
     facet_mass(facets, c)       (nf, nnf, nnf)     boundary integral of c N_i N_j
@@ -60,7 +61,7 @@ def diffusion_tensor(disc, D):
     return np.einsum('eg,egia,egab,egjb->eij', disc.detJw, disc.B, D, disc.B)
 
 
-def convection(disc, c, v):
+def _velocity(disc, v):
 
     """v: scalar (1D), constant vector (dim,), array (nel, ngp, dim) or function returning the components."""
 
@@ -77,7 +78,58 @@ def convection(disc, c, v):
             raise ValueError(f"La velocidad tiene {v.shape[0]} componentes y la malla es {disc.dim}D.")
         v = np.broadcast_to(v, disc.detJw.shape + (disc.dim,))
 
-    return np.einsum('eg,gi,egja,ega->eij', disc.detJw * at_gauss(disc, c), disc.N, disc.B, v)
+    return v
+
+
+def convection(disc, c, v):
+
+    """v: scalar (1D), constant vector (dim,), array (nel, ngp, dim) or function returning the components."""
+
+    return np.einsum('eg,gi,egja,ega->eij', disc.detJw * at_gauss(disc, c), disc.N, disc.B, _velocity(disc, v))
+
+
+def supg_tau(disc, c, v, k=None):
+
+    """SUPG stabilization parameter tau (nel, ngp) for the advection a = c v, with the diffusion k (None: pure advection).
+
+    tau = h xi(Pe) / (2 |a|), with the streamline length h = 2 |a| / sum_i |a . grad N_i| (Hughes), the element
+    Peclet number Pe = |a| h / (2 k) and the optimal xi = coth(Pe) - 1/Pe. In 1D with constant coefficients this
+    makes the steady solution nodally exact.
+    """
+
+    a = at_gauss(disc, c)[..., None] * _velocity(disc, v)
+    amag = np.linalg.norm(a, axis=-1)
+
+    s = np.abs(np.einsum('egia,ega->egi', disc.B, a)).sum(axis=-1)
+    safe_a, safe_s = np.where(amag > 0, amag, 1.0), np.where(s > 0, s, 1.0)
+    h = 2.0 * safe_a / safe_s
+
+    if k is None:
+        xi = np.ones_like(h)
+    else:
+        Pe = np.maximum(safe_a * h / (2.0 * at_gauss(disc, k)), 1e-12)
+        xi = np.where(Pe < 1e-3, Pe / 3.0, 1.0 / np.tanh(np.minimum(Pe, 350.0)) - 1.0 / Pe)
+
+    return np.where(amag > 0, h * xi / (2.0 * safe_a), 0.0)
+
+
+def supg_terms(disc, c, v, tau, m=None, f=None):
+
+    """SUPG matrices with the weight tau (a . grad N_i), a = c v: (stiffness, mass, source).
+
+    stiffness_ij = integral tau (a . grad N_i)(a . grad N_j);  mass_ij = integral tau (a . grad N_i) m N_j;
+    source_i = integral tau (a . grad N_i) f. m and f are None when the equation has no mass or source.
+    """
+
+    a = at_gauss(disc, c)[..., None] * _velocity(disc, v)
+    wa = np.einsum('egia,ega->egi', disc.B, a)
+    wt = disc.detJw * tau
+
+    K = np.einsum('eg,egi,egj->eij', wt, wa, wa)
+    M = None if m is None else np.einsum('eg,egi,gj->eij', wt * at_gauss(disc, m), wa, disc.N)
+    F = None if f is None else np.einsum('eg,egi->ei', wt * at_gauss(disc, f), wa)
+
+    return K, M, F
 
 
 def mass(disc, c):

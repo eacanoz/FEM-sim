@@ -89,8 +89,7 @@ class ht(physics):
                              lambda fn=fn, n_in=len(inputs): PointwiseLaw(lambda u: fn(*[u[i] for i in range(n_in)])))
             system.add_diffusion_law(law, 'T', inputs)
 
-        if self.Convection:
-            system.add_matrix(layout.scatter_matrix(ops.convection(disc, self.C_const, self.vel), rows, rows))
+        self.add_convection(system, layout, disc, 'T', k=self.K_const if self.conductivity_law is None else None, f=self.F_const)
 
         system.add_vector(layout.scatter_vector(ops.source(disc, self.F_const), rows))
         system.add_mass(layout.scatter_matrix(ops.mass(disc, self.M_const), rows, rows))
