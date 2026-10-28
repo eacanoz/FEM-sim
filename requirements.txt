@@ -1,14 +1,12 @@
 # Versiones usadas en el entorno .venv (Python 3.13)
 numpy==2.2.3
 scipy==1.15.2
-sympy==1.13.3
 matplotlib==3.10.1
 jax==0.9.2
 jaxlib==0.9.2
-numba==0.65.0
-numdifftools==0.9.41
-progress==1.6
-joblib==1.4.2
 pypardiso==0.4.6
 # Solo para readMesh.py
 gmsh==4.13.1
+# Solo para scripts exploratorios sueltos (Test/test_lagrange.py, testNumDiffTools.py, ...)
+# sympy==1.13.3
+# numdifftools==0.9.41

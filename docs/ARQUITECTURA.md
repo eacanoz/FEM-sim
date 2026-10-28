@@ -64,7 +64,7 @@ Mesh ─► Elements ─► Discretization ─► Operators ─► System ─►
 ### `Source/core.py` — `Model`
 `solve()`, `postProcess()` (1D), `postProcess2D()`, `layout` (el `DofLayout` de los campos de la física), `_system()`
 (construye y guarda el `System`), `dirichletDofs()`, `_state()` (vector de DOF con los valores de los campos).
-Sigue existiendo la ruta antigua por elemento para físicas sin `build_system`; se retira en la Etapa 6c.
+Toda física debe implementar `build_system`; la antigua ruta por elemento (JAX por elemento) se retiró en la Etapa 6c.
 
 ### `Source/Simulation/System.py`
 - `add_matrix`, `add_vector`, `add_mass`: partes lineales (el residuo es `A x - b`).
@@ -130,4 +130,5 @@ Sigue existiendo la ruta antigua por elemento para físicas sin `build_system`; 
 
 ## 6. Historial relevante
 - `backup/vmap-wip`: intento de ensamblado por lotes con `jax.vmap`. Ese código ya no existe en `test-branch`.
-- `test-branch`: etapas 1 a 5 commiteadas; la Etapa 6 (base multifísica y especies) está en curso.
+- `test-branch`: etapas 1 a 6 (la 6c retiró la ruta por elemento). JAX queda solo en `PointwiseLaw` y en las funciones
+  de usuario trazables (reacciones, `h(T)`).

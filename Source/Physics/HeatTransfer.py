@@ -17,7 +17,6 @@ jax.config.update("jax_enable_x64", True)
 from jax import jit
 
 
-u = 1  # Velocity for convection term, hardcoded for now
 KELVIN_OFFSET = 273.15  # Temperatures are stored in °C; radiation needs K
 
 @jit
@@ -31,8 +30,6 @@ def _calculate_radiative_heat_coef(epsilon, T_ext, T_surface):
 class ht(physics):
     ConstRel = '∇.(k * ∇T) + Q == 0'
 
-    supports_vectorized_assembly = True
-
     # Set material properties.
 
     def __init__(self, model):
@@ -45,12 +42,9 @@ class ht(physics):
         self.C_const = self.mat.rho * self.mat.Cp
         self.K_const = self.mat.k
         self.M_const = self.mat.rho * self.mat.Cp
-        self.B_const = 0
         self.F_const = 0
-        self.G_const = 0
 
-
-        self.Pe = self.mat.rho * self.mat.Cp * u / self.mat.k
+        self.Pe = self.mat.rho * self.mat.Cp * self.vel / self.mat.k
 
     def build_system(self, model, disc, layout):
 
@@ -74,24 +68,6 @@ class ht(physics):
         system.add_boundary_conditions(model.mesh, self.facet_bcs)
 
         return system
-
-    def initializeMatrices(self, element, Variable):
-
-        if self.Convection:
-            self.C = self.div(self.var[Variable], element, self.C_const, u)  # 1 stands for velocity (u = 1)
-
-        self.K = self.laplacian(self.K_const, self.var[Variable], element)
-
-        self.B = self.addBMatrix(element, Variable)
-
-    def initializeMassMatrix(self, element):
-
-        self.M = self.mass(self.var['T'], element, self.M_const)
-
-    def initializeVectors(self, element, Variable):
-
-        self.F = self.forceVector(element, Variable)
-        self.G = self.addGVector(element, Variable)
 
 ## ---------- Boundary conditions ---------- ##
 

@@ -10,7 +10,7 @@
 | 1D lineal, Newton en extremo | solución exacta con convección en un extremo | `Test/test_analytic.py` | pasa |
 | 1D CG + iLU | igual que el caso lineal | `Test/test_analytic.py` | pasa |
 | Radiación (unidades) | h(T)(T - T_ext) = εσ(T⁴ - T_ext⁴) | `Test/test_analytic.py` | pasa |
-| Ensamblado vectorizado = ruta por elemento | comparación de A, b, M, R, J y transitorio corto | `Test/test_vectorized.py` | pasa |
+| Calor vectorizado | A, b, M, R, J, transitorio y Newton frente a valores de referencia (obtenidos cuando coincidían con la ruta por elemento) y J frente a diferencias finitas | `Test/test_vectorized.py` | pasa (6) |
 | Newton (radiación) | valor de referencia y punto inicial malo | `Test/test_solvers.py` | pasa |
 | Transitorio θ-método | decaimiento analítico sin(πx)·exp(-π²t) | `Test/test_solvers.py` | pasa (error 1.6e-3 Euler dt=1e-3; 4.9e-4 CN dt=1e-2) |
 | 2D topología y orientación | 12 nodos, 6 elementos, 10 aristas de contorno | `Test/test_2d_poisson.py` | pasa |
@@ -34,13 +34,11 @@ Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
 
 ## 2. Qué no está validado o está incompleto
 
-### Ruta antigua por elemento (JAX)
-- `Physics.py` y `BasisFunctions.py` siguen usando JAX con funciones estáticas. Cada elemento puede provocar una
-  recompilación porque `func_normalization` crea funciones nuevas. Es lento. Hoy solo la usan `mt` y los casos
-  no vectorizados.
-- Límite: un elemento no puede tener más de un nodo con BC Newton o Neumann (`NotImplementedError`).
-- En esa ruta, un nodo interior con BC Neumann o Newton se contaría varias veces. El ensamblador vectorizado sí lo
-  cuenta una sola vez.
+### Ruta antigua por elemento: retirada
+La ruta por elemento con JAX (`Physics.py`, ramas de `core.py`, `basisFunctions` con sympy y las funciones 1D de JAX)
+se eliminó en la Etapa 6c (-1065 líneas). Los límites que tenía (un nodo Newton por elemento, nodos interiores contados
+varias veces) ya no existen. Las BC Newton/Neumann actúan solo sobre facetas del contorno: una BC en un nodo interior
+lanza `ValueError` en lugar de contarse varias veces.
 
 ### Transporte de especies (`MassTransfer.py`, clase `mt`)
 - Ahora usa la base multifísica (`build_system`, `System`, `PointwiseLaw`) y está validado (ver sección 1).
@@ -64,8 +62,7 @@ Se eliminó el código muerto y los imports sin uso (`Source/` pasó de 3463 a 2
 
 Lo que sigue pendiente:
 - `Mesh.checkBoundaries` usa `EpP`, que solo se fija para elementos `line` (la usa `oswald_Hernandez_9_1.py`).
-- `Model` y `Mesh.setElementShapeFunction` aún construyen `basisFunctions` (sympy), que la ruta vectorizada no necesita.
-- `Physics.py` conserva comentarios con `To fix` sobre la ruta por elemento (un solo nodo Newton por elemento).
+- `Mesh.setElementShapeFunction` solo registra el tipo de función de forma (se mantiene por compatibilidad con los ejemplos).
 - Los archivos `test_ilu.py`, `test_lagrange.py`, `test_lambda.py`, `test_pardiso.py` y `testNumDiffTools.py` son
   scripts exploratorios, no pruebas automáticas.
 
@@ -111,7 +108,9 @@ Lo que sigue pendiente:
 
 | `9e295c7` | `test-branch` | Etapa 5: limpieza de código muerto y `run_tests.py` |
 
-La Etapa 6 (6a y 6b) está en el árbol de trabajo y todavía no está commiteada.
+| `f2ed5bf` | `test-branch` | Etapa 6a y 6b: base multifísica y transporte de especies |
+
+La Etapa 6c (retirada de la ruta por elemento) está en el árbol de trabajo y todavía no está commiteada.
 
 ## 4. Próximos pasos propuestos
 
@@ -119,9 +118,8 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
 
 1. ~~**Limpieza (Etapa 5).**~~ Hecha: código muerto e imports eliminados y `run_tests.py` añadido. Las 19 pruebas
    siguen en verde y `Physics.py` pasó de 980 a 660 líneas.
-2. **Etapa 6: base multifísica y especies.** 6a (capas de elementos, DOF, operadores, leyes puntuales, `System`) y
-   6b (especies) están hechas. Queda **6c**: retirar la ruta por elemento (`Physics.py`, ramas de `core.py`, `basisFunctions`
-   con sympy) y sustituir en `test_vectorized.py` la comparación con la ruta antigua por valores de referencia.
+2. ~~**Etapa 6: base multifísica y especies.**~~ Hecha (6a base, 6b especies, 6c retirada de la ruta por elemento).
+   Las siguientes etapas de física (sólidos, fluidos) deben apoyarse en `System`, `DofLayout`, `Operators` y `PointwiseLaw`.
 3. **2D no lineal y transitorio (Etapa 7).** Radiación en aristas (Newton con h(T) y su derivada) y transitorio 2D
    reutilizando `System.linear()` dentro del θ-método. Validar con el caso 2D de convergencia en transitorio
    (solución exacta del decaimiento de la primera autofunción).

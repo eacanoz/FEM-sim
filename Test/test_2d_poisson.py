@@ -17,7 +17,7 @@ from Source.Pre_processing.Mesh import Mesh
 from Source.core import Model
 from Source.Material import material
 from Source.Physics.HeatTransfer import ht
-from Source.Simulation.VectorizedAssembler import LinearGeometry
+from Source.Simulation.Discretization import Discretization
 from Source.enums import ElementType, StudyType, ProblemType, SolverType, DirectSolvers
 
 
@@ -109,7 +109,7 @@ def l2_error_poisson(n):
     model.physics.addBC_TemperatureEdges(mesh.boundary_edges(lambda x, y: True), 0.0)
     model.solve()
 
-    geo = LinearGeometry(mesh)
+    geo = Discretization(mesh)
     T_nodes = np.asarray(model.sol["T"])
 
     T_gp = np.einsum('gi,ei->eg', geo.N, T_nodes[geo.conn])

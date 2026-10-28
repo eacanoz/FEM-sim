@@ -2,12 +2,9 @@
 
 import numpy as np
 
-from Source.Pre_processing.BasisFunctions import basisFunctions
-
 
 from Source.enums import ElementType
 from Source.Simulation.Discretization import Discretization
-
 
 
 class Mesh:
@@ -44,7 +41,6 @@ class Mesh:
 
         for i in range(0, self.NoE):
             self.EL.append(Element(id=i, nodes=[self.NL[i], self.NL[i + 1]]))
-
 
 
     def generate2DMesh(self, dim: tuple, div: tuple, element_type):
@@ -125,13 +121,9 @@ class Mesh:
 
     def setElementShapeFunction(self, shapeFunction):
 
+        """Records the shape-function type (the reference element is chosen by `element_type`)."""
+
         self.shape_function = shapeFunction
-
-        meshBF = basisFunctions(self, shapeFunction)
-
-        for element in self.EL:
-            element.setBasisFunction(meshBF)
-            element.set_basis_function_type(shapeFunction)
 
     def defineBoundary(self, name, nodes_id):
 
@@ -182,7 +174,6 @@ class Element:
     def __init__(self, id: int =None, nodes: list = None):
         self.id = id
         self.nodes = nodes
-        self.sF = None
     def getLength(self):
         if len(self.nodes) != 2:
             raise ValueError("Element must have exactly two nodes to compute length.")
@@ -213,9 +204,5 @@ class Element:
 
         return len(self.nodes)
     
-    def setBasisFunction(self, basisFunction):
-        self.sF = basisFunction
 
 
-    def set_basis_function_type(self, basisFunction: str):
-        self.shape = basisFunction

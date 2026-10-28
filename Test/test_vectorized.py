@@ -1,7 +1,10 @@
-"""Checks that the vectorized 1D assembly reproduces the element-based one.
+"""Regression checks of the vectorized heat assembly against reference values.
 
-For each case the same model is assembled twice: with the vectorized path (default) and
-with the element-based path (switched off on the physics instance). The results must match.
+The reference values were computed with the vectorized path after verifying that it reproduced the
+old element-based assembly (matrices, vectors, mass, residual, tangent, transient and Newton solution),
+and before that path was removed. The Jacobian is also checked against finite differences, which does
+not depend on any reference.
+
 Run from the project root:  python Test/test_vectorized.py
 """
 
@@ -21,6 +24,8 @@ from Source.core import Model
 from Source.Material import material
 from Source.Physics.HeatTransfer import ht
 from Source.enums import ElementType, ShapeFunctionType, StudyType, ProblemType, SolverType, DirectSolvers
+
+REFERENCE = {'linear_0_dirichlet_newton': {'A': [[1.0, 0.0, 0.0, 0.0, 0.0], [-1.4, 2.8, -1.4, 0.0, 0.0], [0.0, -1.4, 2.8, -1.4, 0.0], [0.0, 0.0, -1.4, 2.8, -1.4], [0.0, 0.0, 0.0, -1.4, 6.4]], 'b': [60.0, 0.0, 0.0, 0.0, 100.0]}, 'linear_0_dirichlet_neumann': {'A': [[1.0, 0.0, 0.0, 0.0, 0.0], [-1.4, 2.8, -1.4, 0.0, 0.0], [0.0, -1.4, 2.8, -1.4, 0.0], [0.0, 0.0, -1.4, 2.8, -1.4], [0.0, 0.0, 0.0, -1.4, 1.4]], 'b': [60.0, 0.0, 0.0, 0.0, -3.0]}, 'linear_1_dirichlet_newton': {'A': [[1.0, 0.0, 0.0, 0.0, 0.0], [-4.4, 2.8, 1.6, 0.0, 0.0], [0.0, -4.4, 2.8, 1.6, 0.0], [0.0, 0.0, -4.4, 2.8, 1.6], [0.0, 0.0, 0.0, -4.4, 9.4]], 'b': [60.0, 0.0, 0.0, 0.0, 100.0]}, 'linear_1_dirichlet_neumann': {'A': [[1.0, 0.0, 0.0, 0.0, 0.0], [-4.4, 2.8, 1.6, 0.0, 0.0], [0.0, -4.4, 2.8, 1.6, 0.0], [0.0, 0.0, -4.4, 2.8, 1.6], [0.0, 0.0, 0.0, -4.4, 4.4]], 'b': [60.0, 0.0, 0.0, 0.0, -3.0]}, 'mass': [[1.0, 0.5, 0.0, 0.0, 0.0], [0.5, 2.0, 0.5, 0.0, 0.0], [0.0, 0.5, 2.0, 0.5, 0.0], [0.0, 0.0, 0.5, 2.0, 0.5], [0.0, 0.0, 0.0, 0.5, 1.0]], 'radiation_state': [60.0, 53.75, 47.5, 41.25, 35.0], 'radiation_J': [[1.0, 0.0, 0.0, 0.0, 0.0], [-1.4, 2.8, -1.4, 0.0, 0.0], [0.0, -1.4, 2.8, -1.4, 0.0], [0.0, 0.0, -1.4, 2.8, -1.4], [0.0, 0.0, 0.0, -1.4, 6.045775757366]], 'radiation_R': [0.0, 0.0, 0.0, -0.0, 31.265612033057], 'transient_final': [60.0, 85.269466865097, 107.525725626455, 124.763491501244, 136.449267816168, 143.288297118472, 146.577024750477, 147.56666308003, 147.087957305837], 'radiation_solution': [60.0, 56.855623764843, 53.711247529687, 50.56687129453, 47.422495059374, 44.278118824217, 41.13374258906, 37.989366353904, 34.844990118747, 31.70061388359, 28.556237648434]}
 
 
 def make_model(NoE=10, convection=False, bc='dirichlet_newton', T0=40.0):
@@ -46,96 +51,82 @@ def make_model(NoE=10, convection=False, bc='dirichlet_newton', T0=40.0):
     return model
 
 
-def use_element_path(model):
-    model.physics.supports_vectorized_assembly = False
-
-
-def test_linear_matrices_match():
+def test_linear_matrices_match_reference():
     for convection in (False, True):
         for bc in ('dirichlet_newton', 'dirichlet_neumann'):
-            fast = make_model(convection=convection, bc=bc)
-            slow = make_model(convection=convection, bc=bc)
-            use_element_path(slow)
+            A, b = make_model(NoE=4, convection=convection, bc=bc).assembleGlobalSystem()
+            ref = REFERENCE[f"linear_{int(convection)}_{bc}"]
 
-            A_fast, b_fast = fast.assembleGlobalSystem()
-            A_slow, b_slow = slow.assembleGlobalSystem()
-
-            assert np.allclose(A_fast.toarray(), A_slow.toarray(), atol=1e-10, rtol=1e-10), (convection, bc)
-            assert np.allclose(b_fast, b_slow, atol=1e-10, rtol=1e-10), (convection, bc)
+            assert np.allclose(A.toarray(), ref["A"], atol=1e-10, rtol=1e-10), (convection, bc)
+            assert np.allclose(b, ref["b"], atol=1e-10, rtol=1e-10), (convection, bc)
 
 
-def test_mass_matrix_matches():
-    fast = make_model()
-    slow = make_model()
-    use_element_path(slow)
+def test_mass_matrix_matches_reference():
+    M = make_model(NoE=4).assembleMassMatrix().toarray()
 
-    M_fast = fast.assembleMassMatrix().toarray()
-    M_slow = slow.assembleMassMatrix().toarray()
-
-    assert np.allclose(M_fast, M_slow, atol=1e-10), "mass matrix"
+    assert np.allclose(M, REFERENCE["mass"], atol=1e-10), "mass matrix"
+    # rho * Cp * length: the total mass of the bar (length 2, rho Cp = 6)
+    assert np.isclose(M.sum(), 2.0 * 6.0)
 
 
-def test_nonlinear_residual_and_tangent_match():
-    rng = np.random.default_rng(0)
+def test_nonlinear_residual_and_tangent_match_reference():
+    model = make_model(NoE=4, bc='dirichlet_radiation')
+    model.physics.var['T'].updateField(list(REFERENCE["radiation_state"]))
 
-    for bc in ('dirichlet_radiation', 'dirichlet_newton'):
-        fast = make_model(bc=bc)
-        slow = make_model(bc=bc)
-        use_element_path(slow)
+    J, R = model.assembleGlobalSystemNonLinear()
 
-        T = 40.0 + 30.0 * rng.random(fast.mesh.getNoN())  # some state away from the solution
-        for model in (fast, slow):
-            model.physics.var['T'].updateField(list(T))
-
-        J_fast, R_fast = fast.assembleGlobalSystemNonLinear()
-        J_slow, R_slow = slow.assembleGlobalSystemNonLinear()
-
-        assert np.allclose(R_fast, R_slow, atol=1e-8, rtol=1e-10), (bc, R_fast - R_slow)
-        assert np.allclose(J_fast.toarray(), J_slow.toarray(), atol=1e-8, rtol=1e-10), bc
+    assert np.allclose(R, REFERENCE["radiation_R"], atol=1e-8, rtol=1e-10)
+    assert np.allclose(J.toarray(), REFERENCE["radiation_J"], atol=1e-8, rtol=1e-10)
 
 
-def test_nonlinear_solution_matches_and_timing():
-    """Full radiation problem (Newton). Solutions must agree; timings are printed."""
+def test_tangent_matches_finite_differences():
+    """Radiation + convection: dR/dT from the system against finite differences (no reference needed)."""
 
-    results = {}
-    for label, slow_path in (('element-based', True), ('vectorized', False)):
-        model = make_model(NoE=10, bc='dirichlet_radiation', T0=60.0)
-        model.solverConfiguration(Study=StudyType.steady_state, Type=ProblemType.nonlinear,
-                                  Method=SolverType.direct, Solver=DirectSolvers.PARDISO)
-        if slow_path:
-            use_element_path(model)
+    model = make_model(NoE=6, convection=True, bc='dirichlet_radiation')
+    system = model._system()
 
-        t0 = time.time()
-        model.solve()
-        results[label] = (np.array(model.sol['T']), time.time() - t0)
+    x = 30.0 + 40.0 * np.random.default_rng(0).random(model.layout.ndof)
+    J, R = system.residual_and_tangent(x)
 
-    T_slow, t_slow = results['element-based']
-    T_fast, t_fast = results['vectorized']
+    eps = 1e-6
+    J_fd = np.zeros(J.shape)
+    for j in range(len(x)):
+        xp = x.copy()
+        xp[j] += eps
+        J_fd[:, j] = (system.residual_and_tangent(xp)[1] - R) / eps
 
-    print(f"   nonlinear solve: element-based {t_slow:.2f} s, vectorized {t_fast:.2f} s")
-    assert np.allclose(T_fast, T_slow, atol=1e-8), np.max(np.abs(T_fast - T_slow))
+    assert np.allclose(J.toarray(), J_fd, rtol=1e-5, atol=1e-6), np.max(np.abs(J.toarray() - J_fd))
 
 
-def test_transient_matches():
-    """Short transient run (uses the mass matrix and the BDF integrator)."""
+def test_transient_matches_reference():
+    model = make_model(NoE=8, bc='dirichlet_neumann', T0=150.0)
+    model.solverConfiguration(Study=StudyType.transient, Type=ProblemType.linear,
+                              Method=SolverType.direct, Solver=DirectSolvers.PARDISO, totalTime=2)
+    model.solve()
 
-    results = {}
-    for label, slow_path in (('element-based', True), ('vectorized', False)):
-        model = make_model(NoE=8, bc='dirichlet_neumann', T0=150.0)
-        model.solverConfiguration(Study=StudyType.transient, Type=ProblemType.linear,
-                                  Method=SolverType.direct, Solver=DirectSolvers.PARDISO, totalTime=2)
-        if slow_path:
-            use_element_path(model)
-        model.solve()
-        results[label] = np.array(model.sol['T'])[:, -1]
+    assert np.allclose(np.array(model.sol['T'])[:, -1], REFERENCE["transient_final"], atol=1e-6)
 
-    assert np.allclose(results['vectorized'], results['element-based'], atol=1e-6), \
-        np.max(np.abs(results['vectorized'] - results['element-based']))
+
+def test_nonlinear_solution_matches_reference_and_is_fast():
+    """Full radiation problem (Newton)."""
+
+    model = make_model(NoE=10, bc='dirichlet_radiation', T0=60.0)
+    model.solverConfiguration(Study=StudyType.steady_state, Type=ProblemType.nonlinear,
+                              Method=SolverType.direct, Solver=DirectSolvers.PARDISO)
+
+    t0 = time.time()
+    model.solve()
+    elapsed = time.time() - t0
+
+    print(f"   nonlinear solve: {elapsed:.2f} s")
+    assert np.allclose(model.sol['T'], REFERENCE["radiation_solution"], atol=1e-8)
+    assert elapsed < 10.0  # the old element-based path needed about 15 s
 
 
 if __name__ == "__main__":
-    tests = [test_linear_matrices_match, test_mass_matrix_matches, test_transient_matches,
-             test_nonlinear_residual_and_tangent_match, test_nonlinear_solution_matches_and_timing]
+    tests = [test_linear_matrices_match_reference, test_mass_matrix_matches_reference,
+             test_nonlinear_residual_and_tangent_match_reference, test_tangent_matches_finite_differences,
+             test_transient_matches_reference, test_nonlinear_solution_matches_reference_and_is_fast]
     failed = 0
     for t in tests:
         try:

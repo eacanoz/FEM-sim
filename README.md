@@ -24,9 +24,8 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 Las versiones son las que usa el entorno `.venv` del proyecto (ver `requirements.txt`):
 
 - Python 3.13
-- numpy, scipy, sympy, matplotlib
-- jax (solo para la ruta antigua por elemento y `BasisFunctions`)
-- numba, numdifftools, progress, joblib
+- numpy, scipy, matplotlib
+- jax y jaxlib (solo para las leyes puntuales no lineales: reacciones, `h(T)` de radiación, ...)
 - pypardiso (solver directo PARDISO). Es obligatorio: `Source/Simulation/DirectSolver.py` lo importa al cargar el módulo.
 - gmsh (solo para `readMesh.py`)
 
@@ -123,7 +122,7 @@ Cada archivo de `Test/` también se ejecuta directamente y es compatible con pyt
 
 ```bash
 python Test/test_analytic.py       # 1D: soluciones analíticas (5 pruebas)
-python Test/test_vectorized.py     # ensamblado vectorizado frente a la ruta por elemento (5)
+python Test/test_vectorized.py     # calor: matrices, masa, residuo, tangente y transitorio frente a referencias (6)
 python Test/test_solvers.py        # Newton con line search y transitorio θ-método (4)
 python Test/test_2d_poisson.py     # 2D: topología, parche, BC en aristas, convección y convergencia (6)
 python Test/test_foundation.py     # elementos, facetas, DOF, operadores y leyes puntuales (11)
@@ -143,9 +142,9 @@ Source/
   Pre_processing/
     Mesh.py                    Mesh, Node, Element; generación 1D y 2D (Q4), boundary_facets
     Elements.py                registro de elementos de referencia (line2, line3, quad4)
-    BasisFunctions.py          funciones de forma 1D (jax/sympy) y Q4 (numpy)
+    BasisFunctions.py          funciones de forma Q4 (numpy)
   Physics/
-    Physics.py                 clase base de física (build_system; ruta por elemento, en retirada)
+    Physics.py                 clase base de física (campos, BC y build_system)
     HeatTransfer.py            ht: conducción, convección, radiación, BC en nodos y aristas
     MassTransfer.py            mt: especies, reacciones acopladas, BC en nodos y aristas
   Primals/                     campos escalares y vectoriales (valores nodales)
@@ -155,7 +154,6 @@ Source/
     Operators.py               operadores de forma débil vectorizados (einsum)
     PointwiseLaw.py            leyes no lineales con jacobianos automáticos (JAX)
     System.py                  matrices, términos no lineales y BC independientes de la física
-    VectorizedAssembler.py     alias de compatibilidad (LinearGeometry)
     Solvers.py                 modelSolver: lineal, Newton, θ-método transitorio
     DirectSolver.py            PARDISO / SuperLU
     IterativeSolver.py         BiCGSTAB, GMRES, CG con iLU

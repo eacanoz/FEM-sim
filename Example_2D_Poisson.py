@@ -18,7 +18,7 @@ from Source.Pre_processing.Mesh import Mesh
 from Source.core import Model
 from Source.Material import material
 from Source.Physics.HeatTransfer import ht
-from Source.Simulation.VectorizedAssembler import LinearGeometry
+from Source.Simulation.Discretization import Discretization
 from Source.enums import ElementType, StudyType, ProblemType, SolverType, DirectSolvers
 
 # ----- Parametros del problema -----
@@ -59,7 +59,7 @@ def solve_poisson(n):
     model.solve()
 
     # Error L2 con la misma cuadratura de Gauss 2x2 del ensamblador
-    geo = LinearGeometry(mesh)
+    geo = Discretization(mesh)
     T_nodal = np.asarray(model.sol['T'])
     T_gauss = np.einsum('gi,ei->eg', geo.N, T_nodal[geo.conn])
     x_gauss, y_gauss = geo.x_gp[..., 0], geo.x_gp[..., 1]

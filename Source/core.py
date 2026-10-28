@@ -7,14 +7,12 @@
 # Main Class for FEA model
 
 import numpy as np
-import scipy.sparse as sparse
 import matplotlib.pyplot as plt
 
 from Source.Pre_processing.Mesh import Mesh
 from Source.Material import material
-from Source.Pre_processing.BasisFunctions import basisFunctions
 import Source.Simulation.Solvers as Solution
-from Source.enums import ShapeFunctionType, StudyType, ProblemType, SolverType, DirectSolvers, Preconditioners
+from Source.enums import StudyType, ProblemType, SolverType, DirectSolvers, Preconditioners
 from Source.logger_config import sim_logger
 from Source.Simulation.Discretization import Discretization
 from Source.Simulation.DofLayout import DofLayout
@@ -43,8 +41,6 @@ class Model(object):
         self._PD = dim  # Model dimension
         self.name = name  # Name of the model
         self.mtype = mtype  # Type of model
-        self.w = basisFunctions(self._mesh, ShapeFunctionType.linear) # Test Function
-        self.w_shape = ShapeFunctionType.linear # Test Function
         self.mat = mat  # Material domain
         self.physics = psc(self)  # Model physics
 
@@ -104,10 +100,7 @@ class Model(object):
 
     def _system(self):
 
-        """Vectorized System for the physics that build one, or None for the element-based path."""
-
-        if not getattr(self.physics, 'supports_vectorized_assembly', False):
-            return None
+        """System of the model (built by the physics, once per solve)."""
 
         if self._system_cache is None:
 
@@ -143,151 +136,21 @@ class Model(object):
 
     def assembleGlobalSystem(self, solverOptions = None):
 
-        """Assembles the global system of equations for the model based on the physics and mesh.
+        """Linear system A x = b of the model (Newton-linearized at the current state if the physics is nonlinear)."""
 
-        Parameters
-        -----------
-        :param solverOptions: Dictionary containing solver configuration options.
-        """
-
-        system = self._system()
-        if system is not None:
-            return system.linear(self._state())
-
-        Var = self.physics.getVariables()
-        nVar = self.physics.getNumOfVar()
-        nNodes = self._mesh.getNoN()
-        nDOF = nNodes*nVar
-
-        rows_A = []
-        cols_A = []
-        values_A = []
-
-        b = np.zeros(nDOF)
-
-        for idxVar, Variable in enumerate(Var):
-            for element in self._mesh.EL:
-                K_e = self.physics.getElementMatrix(element, Variable, solverOptions)
-                f_e = self.physics.getElementVector(element, Variable, solverOptions)
-
-                g_indices = [idxVar + nVar * node.id for node in element.nodes]
-
-                for i, g_i in enumerate(g_indices):
-
-                    node_i = element.nodes[i]
-                    bc = node_i.BC.get(Variable, {}) if node_i.BC else {}
-
-                    if bc.get('type') == 'Dirichlet':
-                        rows_A.append(g_i)
-                        cols_A.append(g_i)
-                        values_A.append(1.0)
-                        b[g_i] = bc.get('value', 0.0)
-                    else:
-                        b[g_i] += f_e[i]
-
-                        for j, g_j in enumerate(g_indices):
-                            rows_A.append(g_i)
-                            cols_A.append(g_j)
-                            values_A.append(K_e[i, j])
-
-
-        A = sparse.coo_matrix((values_A, (rows_A, cols_A)), shape=(nDOF, nDOF)).tocsr()
-
-        return A, b
+        return self._system().linear(self._state())
 
     def assembleGlobalSystemNonLinear(self, solverOptions = None):
 
-        """Assembles the global system of equations for a nonlinear problem, based on the physics and mesh.
-        
-        Parameters
-        -----------
-        :param solverOptions: Dictionary containing solver configuration options.
-       
-        """
+        """Jacobian and residual of the model at the current state, for Newton-Raphson."""
 
-        system = self._system()
-        if system is not None:
-            return system.residual_and_tangent(self._state())
-
-        Var = self.physics.getVariables()
-        nVar = self.physics.getNumOfVar()
-        nNodes = self._mesh.getNoN()
-        nDOF = nNodes*nVar
-
-        rows_K = []
-        cols_K = []
-        values_K = []
-
-        self.physics.normalize_constants()
-
-        F = np.zeros(nDOF)
-
-        for element in self._mesh.EL:
-
-            nodes_id = element.getNodesId()
-
-            for idxVar, Variable in enumerate(Var):
-                K_e = self.physics.getElementTangentMatrix(element, Variable, solverOptions)
-                f_e = self.physics.getResidualVector(element, Variable, solverOptions)
-
-                x_e = self.physics.get_variable_element_values(element, Variable)
-
-                for i_local, i_global in enumerate(nodes_id):
-
-                    dof_r = i_global*nVar + idxVar
-                    node_i = element.nodes[i_local]
-                    bc = node_i.BC.get(Variable, {}) if node_i.BC else {}
-
-                    if bc.get('type') == 'Dirichlet':
-
-                        rows_K.append(dof_r)
-                        cols_K.append(dof_r)
-                        values_K.append(1.0)
-                        F[dof_r] += (x_e[i_local] - bc.get('value', 0.0))
-                    else:
-                        F[dof_r] += f_e[i_local]
-
-                        for jdxVar, Variable in enumerate(Var):
-                            K_block = np.asarray(K_e[Variable])
-
-                            for j_local, j_global in enumerate(nodes_id):
-                                dof_c = j_global*nVar + jdxVar
-                                rows_K.append(dof_r)
-                                cols_K.append(dof_c)
-                                values_K.append(K_block[i_local, j_local])
-
-        K = sparse.coo_matrix((values_K, (rows_K, cols_K)), shape=(nDOF, nDOF)).tocsr()
-
-        return K, F
+        return self._system().residual_and_tangent(self._state())
 
     def assembleMassMatrix(self, solverOptions = None):
 
-        """Assembles the global mass matrix for the model based on the physics and mesh.
-        
-        Parameters
-        -----------
-        :param solverOptions: Dictionary containing solver configuration options.
-               
-        """
+        """Global mass matrix (transient studies)."""
 
-        system = self._system()
-        if system is not None:
-            return system.mass()
-
-        M = sparse.lil_matrix((self._mesh.getNoN(), self._mesh.getNoN()))
-
-        for element in self._mesh.EL:
-
-            """Compute the element mass matrix and add its contributions to the global mass matrix."""
-
-            M_e = self.physics.getElementMassMatrix(element, solverOptions)
-
-            for idx, node_i in enumerate(element.nodes):
-                for jdx, node_j in enumerate(element.nodes):
-
-                    M[node_i.id, node_j.id] += M_e[idx, jdx]
-
-        return M
+        return self._system().mass()
 
     def solverConfiguration(self, Study=StudyType.steady_state, Type=ProblemType.linear, Method=SolverType.direct, Solver = DirectSolvers.PARDISO, 
                             timeDisc = 1, timeStep=0.05, totalTime = 3, prec = Preconditioners.iLU):

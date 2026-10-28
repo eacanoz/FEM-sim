@@ -11,9 +11,7 @@ import numpy as np
 import jax
 jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
-from jax import jit
 
-from Source.Pre_processing.BasisFunctions import shape_functions_1d
 from Source.enums import ShapeFunctionType
 
 from Source.Physics.Physics import physics
@@ -21,55 +19,6 @@ from Source.Primals.Scalar import scalarField
 from Source.Simulation.PointwiseLaw import PointwiseLaw
 from Source.Simulation.System import System
 import Source.Simulation.Operators as ops
-
-u = 0.01  # Velocity for convection term, hardcoded for now
-
-
-def build_reaction_function(param_dict: dict):
-
-    required_keys = ['stoich', 'k0', 'E_R', 'T', 'order']
-
-    try:
-        for key in required_keys:
-            if key not in param_dict or param_dict[key] is None:
-                raise KeyError(f'{key} not defined')
-    except KeyError as e:
-        print(f'Execution error: {e}')
-
-    else:
-        stoich = param_dict['stoich']
-        k0 = param_dict['k0']
-        E_R = param_dict['E_R']
-        T = param_dict['T']
-        reaction_order = param_dict['order']
-        components = tuple(stoich.keys())
-        component_order = tuple(reaction_order[comp] for comp in components)
-        k_rate = k0 * jnp.exp(-(E_R/T))
-
-
-        @jit(static_argnums=(0,3))
-        def compiled_reaction_func(element_shape:str, xi: float, state_at_p: dict, target_var: str):
-
-            nu = stoich.get(target_var, 0.0)
-
-            N_e = shape_functions_1d(element_shape, xi)
-
-            rate_vector = k_rate
-
-            for comp, order in zip(components, component_order):
-
-                c = jnp.maximum(state_at_p[comp], 1e-12)
-
-                rate_vector *= c**order
-
-            rate_vector.reshape(-1, 1)
-
-            rate = jnp.dot(N_e, rate_vector)
-
-            return nu * rate
-
-        return compiled_reaction_func
-
 
 def build_reaction_law(species, reactions, min_concentration=1e-12):
 
@@ -96,8 +45,6 @@ def build_reaction_law(species, reactions, min_concentration=1e-12):
 
 class mt(physics):
 
-    supports_vectorized_assembly = True
-
     def __init__(self, model):
         super().__init__(model)
 
@@ -106,17 +53,13 @@ class mt(physics):
         self.var = {}
 
         self.C_const = 1
-        self.K_const = 1
         self.M_const = 1
 
         self.ChemSpecies = []
-        self.stoich = {}
-   
+
         self.Pe = 1
 
         self.Diffusivities = {}
-
-        self.source = 0.0
 
         self.reactions = []      # reaction dicts, see build_reaction_law
         self.sources = {}        # species -> external source (number or function of the coordinates)
@@ -191,20 +134,6 @@ class mt(physics):
 
         return system
 
-    def initializeMatrices(self, element, Variable):
-
-        if self.Convection:
-            self.C = self.div(self.var[Variable], element, self.C_const, u)  # 1 stands for velocity (u = 1)
-
-        self.K = self.laplacian(self.Diffusivities[Variable], self.var[Variable], element)
-
-        self.B = self.addBMatrix(element, Variable)
-
-    def initializeVectors(self, element, Variable):
-
-        self.F = self.forceVector(element, Variable)
-        self.G = self.addGVector(element, Variable)        
-
 ## ------------- Source terms -------------- ##
 
     def addReaction(self, stoich: dict, k0: float, E_R: float, T: float, order: dict):
@@ -220,21 +149,8 @@ class mt(physics):
 
         order = {**{species: 0 for species in stoich}, **order}
 
-        param_dict = {'stoich': stoich, 'k0': k0, 'E_R': E_R, 'T': T, 'order': order}
-
-        reaction_func = build_reaction_function(param_dict)
-
-        self.reactions.append(dict(param_dict))
+        self.reactions.append({'stoich': stoich, 'k0': k0, 'E_R': E_R, 'T': T, 'order': order})
         self._reaction_law = None
-
-        self.source = reaction_func
-        self.F_const = reaction_func
-        self.stoich = stoich
-        self.has_reaction = True
-        self.order = order
-
-        return reaction_func
-
 
 
 ## ---------- Boundary conditions ---------- ##
