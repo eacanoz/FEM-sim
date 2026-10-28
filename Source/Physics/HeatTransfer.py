@@ -9,6 +9,7 @@
 from Source.Physics.Physics import physics
 from Source.Primals.Scalar import scalarField
 from Source.Simulation.System import System
+from Source.Simulation.PointwiseLaw import PointwiseLaw, cached_law
 import Source.Simulation.Operators as ops
 from Source.enums import ShapeFunctionType
 
@@ -46,6 +47,20 @@ class ht(physics):
 
         self.Pe = self.mat.rho * self.mat.Cp * self.vel / self.mat.k
 
+        self.conductivity_law = None  # k(T), see setConductivityLaw
+
+    def setConductivityLaw(self, k_of_T):
+
+        """Temperature-dependent conductivity k(T) [W/(m K)], T in the units of the model (°C).
+
+        k_of_T must be written with jax.numpy (it is traced and differentiated), e.g.
+        `lambda T: 1.0 + 0.002 * T` or `lambda T: 2.0 * jnp.exp(0.01 * T)`. It replaces the constant
+        conductivity of the material; the problem becomes nonlinear (use ProblemType.nonlinear).
+        Pass None to go back to the constant conductivity.
+        """
+
+        self.conductivity_law = k_of_T
+
     def build_system(self, model, disc, layout):
 
         """Heat conduction with convection, source, Dirichlet, Neumann and Robin/radiation conditions.
@@ -57,7 +72,12 @@ class ht(physics):
         system = System(disc, layout)
         rows = layout.element_dofs(disc.conn, 'T')
 
-        system.add_matrix(layout.scatter_matrix(ops.diffusion(disc, self.K_const), rows, rows))
+        if self.conductivity_law is None:
+            system.add_matrix(layout.scatter_matrix(ops.diffusion(disc, self.K_const), rows, rows))
+        else:
+            fn = self.conductivity_law
+            law = cached_law(('conductivity', fn), lambda: PointwiseLaw(lambda u: fn(u[0])))
+            system.add_diffusion_law(law, 'T')
 
         if self.Convection:
             system.add_matrix(layout.scatter_matrix(ops.convection(disc, self.C_const, self.vel), rows, rows))

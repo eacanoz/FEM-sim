@@ -19,7 +19,8 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Transporte de especies 1D y 2D (`mt`): difusión, convección, varias reacciones acopladas, BC en nodos y aristas | Operativo sobre la base multifísica, validado con soluciones analíticas y manufacturadas |
 | Calor 2D no lineal (radiación y convección `h(T)` en aristas, Newton con line search) | Operativo, validado frente a 1D y por balance de energía |
 | Calor 2D transitorio (θ-método, también con BC no lineales) | Operativo, validado con soluciones analíticas, orden temporal y conservación de energía |
-| Triángulos, mallas gmsh, convección vectorial no lineal | No implementado |
+| Conductividad dependiente de la temperatura `k(T)` (1D y 2D, estacionario y transitorio) | Operativo, validado con la solución exacta de Kirchhoff y una solución manufacturada |
+| Triángulos, mallas gmsh, `rho Cp(T)`, convección vectorial estabilizada | No implementado |
 
 ## Requisitos
 
@@ -70,6 +71,9 @@ Para el caso no lineal, use `Type=ProblemType.nonlinear` y `model.physics.addBC_
 (temperaturas en °C; la radiación se calcula internamente en Kelvin).
 Para transitorio, use `Study=StudyType.transient` con `timeDisc` (1 = Euler implícito, 0.5 = Crank-Nicolson),
 `timeStep` y `totalTime`. Ver `Simulation_time_dependent.py`.
+
+Para una conductividad que dependa de la temperatura use `model.physics.setConductivityLaw(lambda T: 2.0 * (1 + 0.01 * T))`
+(escrita con `jax.numpy`, porque se deriva automáticamente) y `ProblemType.nonlinear`.
 
 El θ-método usa un paso fijo. Euler implícito (θ = 1) es robusto y de primer orden; Crank-Nicolson (θ = 0.5) es de
 segundo orden pero no es L-estable: con estados iniciales discontinuos y pasos grandes los modos rígidos oscilan
@@ -137,6 +141,7 @@ python Test/test_2d_poisson.py     # 2D: topología, parche, BC en aristas, conv
 python Test/test_foundation.py     # elementos, facetas, DOF, operadores y leyes puntuales (11)
 python Test/test_species.py        # especies: analíticas 1D, conservación, jacobiano, 2D manufacturada (8)
 python Test/test_nonlinear_transient.py  # 2D: radiación, Newton, transitorio, orden temporal y energía (9)
+python Test/test_nonlinear_diffusion.py  # k(T): Kirchhoff exacta, manufacturada 2D, jacobiano, transitorio (8)
 ```
 
 Todas deben pasar antes de hacer un commit que toque el núcleo (`Source/`).

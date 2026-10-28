@@ -71,7 +71,10 @@ Toda física debe implementar `build_system`; la antigua ruta por elemento (JAX 
 
 ### `Source/Simulation/System.py`
 - `add_matrix`, `add_vector`, `add_mass`: partes lineales (el residuo es `A x - b`).
-- `add_volume_law(law, entradas, salidas, sign)`: término volumétrico no lineal (reacciones, k(T), ...).
+- `add_volume_law(law, entradas, salidas, sign)`: término volumétrico no lineal (reacciones, fuentes `Q(T, c)`, ...).
+- `add_diffusion_law(law, campo, entradas)`: difusión no lineal `∫ k(u) ∇campo · ∇N`, con `k` una ley puntual de los
+  campos de entrada (k(T), D(c, T), viscosidad). El jacobiano incluye la rigidez `∫ k ∇Ni·∇Nj` y la dependencia de `k`
+  respecto a cada entrada, que acopla el campo con ellas.
 - `add_flux(campo, facetas, q)` y `add_robin(campo, facetas, h, ext)`: BC sobre facetas, con `h` o `q` numéricos o
   funciones del campo (leyes puntuales de faceta).
 - `add_boundary_conditions(mesh, facet_bcs)`: lee Dirichlet de los nodos y las BC Newton/Neumann (nodos en 1D, facetas en general).
@@ -80,7 +83,8 @@ Toda física debe implementar `build_system`; la antigua ruta por elemento (JAX 
 
 ### `Source/Physics/`
 - `Physics.py`: clase base. `fields()` (un escalar por variable) y `build_system(...)` (a implementar por cada física).
-- `HeatTransfer.py` (`ht`): difusión `k`, convección `rho Cp v`, fuente, masa `rho Cp`, Dirichlet, Neumann, Newton y radiación.
+- `HeatTransfer.py` (`ht`): difusión `k` (constante, función de las coordenadas o `setConductivityLaw(k(T))`), convección
+  `rho Cp v`, fuente, masa `rho Cp`, Dirichlet, Neumann, Newton y radiación.
 - `MassTransfer.py` (`mt`): varias especies con difusividad propia (`setDiffusivity`), convección, fuentes externas
   (`setSource`), **varias reacciones** (`addReaction`, se acumulan) acopladas por una sola ley puntual, y BC por nodos
   o aristas (`addBC_Concentration`, `addBC_Outflow`, `addBC_ConcentrationEdges`, `addBC_FluxEdges`, `addBC_MassTransferEdges`).

@@ -18,6 +18,7 @@ SUITES = [
     "Test/test_foundation.py",
     "Test/test_species.py",
     "Test/test_nonlinear_transient.py",
+    "Test/test_nonlinear_diffusion.py",
 ]
 
 

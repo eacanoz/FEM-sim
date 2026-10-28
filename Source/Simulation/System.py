@@ -60,6 +60,52 @@ class VolumeLawTerm:
         return R, J
 
 
+class DiffusionLawTerm:
+
+    """R_field += integral of k(u) grad(field) . grad(N_i), with k a pointwise law of the input fields.
+
+    Nonlinear diffusion: conductivity k(T), diffusivity D(c, T), viscosity, ... The tangent has the
+    usual stiffness part, integral of k grad(N_i) . grad(N_j), plus the dependence of k on the inputs,
+    integral of (dk/du_m) (grad(field) . grad(N_i)) N_j, which couples the field with every input.
+    """
+
+    def __init__(self, system, law, field, inputs):
+        self.system = system
+        self.law = law
+        self.field = field
+        self.inputs = inputs
+
+    def contribution(self, x):
+
+        system, disc, layout = self.system, self.system.disc, self.system.layout
+        n_in = len(self.inputs)
+
+        fields = layout.split(x)
+        U = disc.interpolate(np.stack([fields[n] for n in self.inputs], axis=-1))   # (nel, ngp, nin)
+
+        k, dk = self.law(U.reshape(-1, n_in))
+        shape = disc.detJw.shape
+        k = k.reshape(shape)
+        dk = dk.reshape(shape + (n_in,))
+
+        phi = fields[self.field][disc.conn]                       # (nel, nne)
+        grad = np.einsum('egia,ei->ega', disc.B, phi)             # (nel, ngp, dim)
+
+        rows = layout.element_dofs(disc.conn, self.field)
+
+        Re = np.einsum('eg,egia,ega,eg->ei', disc.detJw, disc.B, grad, k)
+        R = layout.scatter_vector(Re, rows)
+
+        Ke = np.einsum('eg,eg,egia,egja->eij', disc.detJw, k, disc.B, disc.B)
+        J = layout.scatter_matrix(Ke, rows, rows)
+
+        for m, name in enumerate(self.inputs):
+            Km = np.einsum('eg,eg,egia,ega,gj->eij', disc.detJw, dk[..., m], disc.B, grad, disc.N)
+            J = J + layout.scatter_matrix(Km, rows, layout.element_dofs(disc.conn, name))
+
+        return R, J
+
+
 class FacetLawTerm:
 
     """R_out += sign * boundary integral of N_i f_out(u), with u the input fields on the facets."""
@@ -134,6 +180,12 @@ class System:
 
     def add_volume_law(self, law, inputs, outputs, sign=-1.0):
         self._terms.append(VolumeLawTerm(self, law, list(inputs), list(outputs), sign))
+
+    def add_diffusion_law(self, law, field, inputs=None):
+
+        """Nonlinear diffusion of `field` with coefficient k(inputs) given by a pointwise law (default input: the field)."""
+
+        self._terms.append(DiffusionLawTerm(self, law, field, list(inputs) if inputs else [field]))
 
     def add_facet_law(self, law, facets, inputs, outputs, sign=1.0):
         self._terms.append(FacetLawTerm(self, law, facets, list(inputs), list(outputs), sign))

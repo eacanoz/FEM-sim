@@ -35,6 +35,10 @@
 | 2D transitorio: orden temporal | autoconvergencia en una malla | `Test/test_nonlinear_transient.py` | Euler 1.0, Crank-Nicolson 2.0 |
 | 2D transitorio: conservación | `sum(M ΔT) = -q L t` exacto para θ = 1 y 0.5 | `Test/test_nonlinear_transient.py` | pasa (1e-9) |
 | 2D transitorio no lineal: límite de tiempo largo | tiende a la solución estacionaria de Newton | `Test/test_nonlinear_transient.py` | pasa (1e-4) |
+| k(T) estacionario 1D | solución exacta de Kirchhoff (`T + βT²/2` lineal) | `Test/test_nonlinear_diffusion.py` | exacta a 1e-9 en los nodos |
+| k(T) 2D | y-independiente = 1D; manufacturada con `k = 1 + T²` | `Test/test_nonlinear_diffusion.py` | pasa; orden 2.00 |
+| k(T) jacobiano | k(T) + convección vectorial + radiación frente a diferencias finitas | `Test/test_nonlinear_diffusion.py` | pasa |
+| k(T) transitorio | conservación exacta de energía y límite estacionario | `Test/test_nonlinear_diffusion.py` | pasa |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -88,8 +92,8 @@ Lo que sigue pendiente:
 - **Radiación:** las temperaturas de entrada son °C. La salida de `Simulation.py` cambió en la Etapa 1
   (extremo ~33 °C, antes ~59.6 °C) porque antes la radiación no usaba Kelvin.
 - **Solvers iterativos:** solo iLU como precondicionador. No hay AMG. CG solo es válido si la matriz es SPD.
-- **No linealidad en el material:** `k(T)` aún no está soportado (solo coeficientes numéricos o funciones de las
-  coordenadas). Las no linealidades admitidas son las de contorno (`h(T)`, radiación) y las reacciones.
+- **No linealidad en el material:** `k(T)` está soportado (`setConductivityLaw`). `rho Cp(T)` no: la masa es constante
+  en el θ-método. La ley de `k(T)` debe escribirse con `jax.numpy`.
 - **Aristas (2D):** `T_ext` debe ser un número (`h` puede ser un número o una función de la temperatura). Si una esquina
   pertenece a dos aristas con BC distintas, gana la última asignación de Dirichlet.
 
@@ -124,7 +128,9 @@ Lo que sigue pendiente:
 
 | `0221dc8` | `test-branch` | Etapa 6c: retirada de la ruta por elemento |
 
-La Etapa 7 (2D no lineal y transitorio) está en el árbol de trabajo y todavía no está commiteada.
+| `2effe82` | `test-branch` | Etapa 7: calor 2D no lineal y transitorio |
+
+La conductividad `k(T)` está en el árbol de trabajo y todavía no está commiteada.
 
 ## 4. Próximos pasos propuestos
 
@@ -135,8 +141,8 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
 2. ~~**Etapa 6: base multifísica y especies.**~~ Hecha (6a base, 6b especies, 6c retirada de la ruta por elemento).
    Las siguientes etapas de física (sólidos, fluidos) deben apoyarse en `System`, `DofLayout`, `Operators` y `PointwiseLaw`.
 3. ~~**2D no lineal y transitorio (Etapa 7).**~~ Hecha: radiación y `h(T)` en aristas, Newton y transitorio 2D, con
-   `Test/test_nonlinear_transient.py` y `Example_2D_Transient.py`. Siguiente en física: `k(T)` (término de difusión no
-   lineal), convección vectorial estabilizada y sólidos/fluidos sobre la base.
+   `Test/test_nonlinear_transient.py` y `Example_2D_Transient.py`. `k(T)` también está hecho (término de difusión no
+   lineal). Siguiente en física: acoplamiento calor-masa, convección vectorial estabilizada y sólidos/fluidos.
 4. **Mallas y geometría (Etapa 8).** Importar `.msh` de gmsh (grupos físicos → aristas con nombre), añadir triángulos
    T3 a `Elements.py` y permitir geometrías no rectangulares. Validar con el parche en la malla importada.
 5. **Escalado de solvers y salida.** Precondicionador AMG (`pyamg`) para problemas grandes, cache de factorizaciones
