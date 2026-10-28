@@ -48,7 +48,8 @@ def test_reference_elements_partition_of_unity():
         assert np.allclose(dN.sum(axis=1), 0.0), name
 
         if element.dim > 0:
-            assert np.isclose(weights.sum(), 2.0 ** element.dim), name  # measure of the reference domain
+            measure = 0.5 if name.startswith('tri') else 2.0 ** element.dim
+            assert np.isclose(weights.sum(), measure), name  # measure of the reference domain
 
 
 def test_volume_and_measure_1d_2d():

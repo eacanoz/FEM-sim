@@ -2,7 +2,7 @@
 
 Each ReferenceElement knows its nodes on the reference domain, how to evaluate N and dN/dxi at
 points, a Gauss rule and the local node indices of its facets (the boundary entities: points for
-lines, edges for quadrilaterals, faces for hexahedra). Adding an element (tri3, tet4, hex8, quad9,
+lines, edges for triangles and quadrilaterals, faces for hexahedra). Adding an element (tet4, hex8, quad9,
 ...) means adding one entry to ELEMENTS; the discretization and the operators are generic in the
 dimension.
 
@@ -109,12 +109,36 @@ def _quad_quadrature(order):
     return np.stack([xi.ravel(), eta.ravel()], axis=1), np.outer(w, w).ravel()
 
 
+# ----- linear triangle -----
+
+TRI3_NODES = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+
+
+def _tri3_shape(points):
+    xi, eta = points[:, 0], points[:, 1]
+    N = np.stack([1.0 - xi - eta, xi, eta], axis=1)
+    dN = np.broadcast_to(np.array([[-1.0, -1.0], [1.0, 0.0], [0.0, 1.0]]), (len(points), 3, 2)).copy()
+    return N, dN
+
+
+def _tri_quadrature(order):
+
+    """Interior Gauss rule on the reference triangle (area 1/2): 1 point for order 1, 3 points (degree 2) otherwise."""
+
+    if order <= 1:
+        return np.array([[1.0 / 3.0, 1.0 / 3.0]]), np.array([0.5])
+
+    return np.array([[1 / 6, 1 / 6], [2 / 3, 1 / 6], [1 / 6, 2 / 3]]), np.full(3, 1.0 / 6.0)
+
+
 ELEMENTS = {
     'point': ReferenceElement('point', 0, np.zeros((1, 0)), (), 'point', _point_shape, _point_quadrature),
     'line2': ReferenceElement('line2', 1, np.array([[-1.0], [1.0]]), ((0,), (1,)), 'point',
                               _line_shape([-1.0, 1.0]), _line_quadrature),
     'line3': ReferenceElement('line3', 1, np.array([[-1.0], [0.0], [1.0]]), ((0,), (2,)), 'point',
                               _line_shape([-1.0, 0.0, 1.0]), _line_quadrature),
+    'tri3': ReferenceElement('tri3', 2, TRI3_NODES.copy(), ((0, 1), (1, 2), (2, 0)), 'line2',
+                             _tri3_shape, _tri_quadrature),
     'quad4': ReferenceElement('quad4', 2, Q4_NODES.copy(), ((0, 1), (1, 2), (2, 3), (3, 0)), 'line2',
                               _quad4_shape, _quad_quadrature),
 }

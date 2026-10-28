@@ -15,6 +15,8 @@ class Mesh:
         self.EL = None
 
         self.boundaries = {}
+        self.groups = {}     # name -> boundary facets (node tuples), from imported meshes
+        self.regions = {}    # name -> gmsh element tags, from imported meshes
 
     def Generate_Mesh(self, PD, L, NoE, MeshType):
 
@@ -45,11 +47,12 @@ class Mesh:
 
     def generate2DMesh(self, dim: tuple, div: tuple, element_type):
 
-        """Rectangular mesh of bilinear quadrilaterals (Q4).
+        """Rectangular mesh of bilinear quadrilaterals (Q4), or of linear triangles (T3) with ElementType.triangle.
 
         dim = (Lx, Ly) size of the domain, div = (nx, ny) number of elements in each direction.
         Node numbering runs along x first (as in 2DFEM.py); each element lists its nodes
-        counter-clockwise: bottom-left, bottom-right, top-right, top-left.
+        counter-clockwise: bottom-left, bottom-right, top-right, top-left. Triangles split every
+        cell along the bottom-left / top-right diagonal into (bl, br, tr) and (bl, tr, tl).
         """
 
         Lx, Ly = dim
@@ -57,7 +60,7 @@ class Mesh:
 
         self.PD = 2
         self.meshType = element_type
-        self.element_type = 'quad4'
+        self.element_type = 'tri3' if element_type == ElementType.triangle else 'quad4'
 
         self.NL = []
         for j in range(ny + 1):
@@ -68,9 +71,13 @@ class Mesh:
         for j in range(ny):
             for i in range(nx):
                 bl = j * (nx + 1) + i
-                self.EL.append(Element(id=len(self.EL),
-                                       nodes=[self.NL[bl], self.NL[bl + 1],
-                                              self.NL[bl + nx + 2], self.NL[bl + nx + 1]]))
+                corners = [self.NL[bl], self.NL[bl + 1], self.NL[bl + nx + 2], self.NL[bl + nx + 1]]
+
+                if self.element_type == 'tri3':
+                    self.EL.append(Element(id=len(self.EL), nodes=[corners[0], corners[1], corners[2]]))
+                    self.EL.append(Element(id=len(self.EL), nodes=[corners[0], corners[2], corners[3]]))
+                else:
+                    self.EL.append(Element(id=len(self.EL), nodes=corners))
 
         self.NoN = len(self.NL)
         self.NoE = len(self.EL)
@@ -81,10 +88,99 @@ class Mesh:
         """Outer-boundary facets (points in 1D, edges in 2D) whose midpoint satisfies selector(*coords).
 
         Returns a list of node-id tuples, one per facet. selector(x) in 1D, selector(x, y) in 2D;
-        None selects the whole boundary.
+        None selects the whole boundary. A string selects a named group of an imported mesh
+        (the physical groups of a gmsh file, see `read_msh`).
         """
 
+        if isinstance(selector, str):
+            if selector not in self.groups:
+                raise KeyError(f"El grupo '{selector}' no existe en la malla (grupos: {sorted(self.groups)}).")
+            return list(self.groups[selector])
+
         return Discretization(self).boundary_facet_nodes(selector)
+
+    # ----- meshes from gmsh -----
+
+    @classmethod
+    def read_msh(cls, path):
+
+        """Reads a 2D gmsh mesh (.msh) made of triangles (T3) or quadrilaterals (Q4).
+
+        The physical groups of dimension 1 become named boundary groups, available as
+        `mesh.boundary_edges('name')` and in `mesh.groups`; the 2D ones are kept in `mesh.regions`
+        (name -> gmsh element tags). Needs the gmsh package.
+        """
+
+        import gmsh
+
+        gmsh.initialize()
+        gmsh.option.setNumber("General.Terminal", 0)
+
+        try:
+            gmsh.open(str(path))
+            return cls.from_gmsh_model()
+        finally:
+            gmsh.finalize()
+
+    @classmethod
+    def from_gmsh_model(cls):
+
+        """Mesh from the gmsh model that is currently open (mesh it first with gmsh.model.mesh.generate(2))."""
+
+        import gmsh
+
+        types, _, node_lists = gmsh.model.mesh.getElements(2)
+        supported = {2: ('tri3', 3), 3: ('quad4', 4)}
+
+        if len(types) != 1 or types[0] not in supported:
+            raise ValueError("La malla debe tener un solo tipo de elemento 2D (triangulos o cuadrilateros).")
+
+        element_type, nne = supported[types[0]]
+
+        tags = np.array(node_lists[0], dtype=int).reshape(-1, nne)
+        all_tags, all_xyz, _ = gmsh.model.mesh.getNodes()
+        coords = dict(zip((int(t) for t in all_tags), np.asarray(all_xyz).reshape(-1, 3)[:, :2]))
+
+        used = sorted(set(tags.ravel().tolist()))
+        index = {tag: i for i, tag in enumerate(used)}
+
+        mesh = cls()
+        mesh.PD = 2
+        mesh.element_type = element_type
+        mesh.meshType = ElementType.triangle if element_type == 'tri3' else ElementType.quadrilateral
+        mesh.NL = [Node(id=i, coor=tuple(float(c) for c in coords[tag])) for i, tag in enumerate(used)]
+        mesh.EL = []
+
+        for row in tags:
+            nodes = [mesh.NL[index[int(t)]] for t in row]
+            xy = np.array([n.coor for n in nodes])
+            twice_area = np.sum(xy[:, 0] * np.roll(xy[:, 1], -1) - np.roll(xy[:, 0], -1) * xy[:, 1])
+            if twice_area < 0:
+                nodes = nodes[::-1]                      # counter-clockwise
+            mesh.EL.append(Element(id=len(mesh.EL), nodes=nodes))
+
+        mesh.NoN, mesh.NoE = len(mesh.NL), len(mesh.EL)
+
+        for dim, tag in gmsh.model.getPhysicalGroups():
+            name = gmsh.model.getPhysicalName(dim, tag) or f"group_{dim}_{tag}"
+
+            if dim == 1:
+                edges = []
+                for entity in gmsh.model.getEntitiesForPhysicalGroup(dim, tag):
+                    etypes, _, enodes = gmsh.model.mesh.getElements(1, entity)
+                    for et, nl in zip(etypes, enodes):
+                        if et == 1:
+                            edges += [tuple(index[int(t)] for t in pair) for pair in np.asarray(nl).reshape(-1, 2)]
+                mesh.groups[name] = edges
+
+            elif dim == 2:
+                ids = []
+                for entity in gmsh.model.getEntitiesForPhysicalGroup(dim, tag):
+                    _, etags, _ = gmsh.model.mesh.getElements(2, entity)
+                    ids += [int(t) for chunk in etags for t in chunk]
+                mesh.regions[name] = ids
+
+        return mesh
 
     def boundary_edges(self, selector=None):
 

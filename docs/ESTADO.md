@@ -50,6 +50,10 @@
 | SUPG 1D | solución nodalmente exacta de convección-difusión con Pe = 20, 50, 500; Galerkin oscila | `Test/test_convection_supg.py` | error < 1e-8 |
 | SUPG 2D y fuente | 2D con flujo en x = 1D; manufacturada con fuente consistente | `Test/test_convection_supg.py` | orden 2 |
 | Velocidad compartida | calor y especie con una sola `setVelocity` siguen el mismo perfil exacto; transitorio llega al estacionario estabilizado | `Test/test_convection_supg.py` | pasa |
+| T3: elemento de referencia y geometría | partición de la unidad, regla de Gauss, áreas, perímetro y normales (identidades de superficie cerrada) | `Test/test_triangles_gmsh.py` | pasa (1e-12) |
+| T3: parche | `T = 2x + 3y` exacto con Dirichlet y flujo | `Test/test_triangles_gmsh.py` | pasa (1e-10) |
+| T3: manufacturada y reacción-difusión | Poisson `sin sin`; `cosh` analítica con reacción de primer orden | `Test/test_triangles_gmsh.py` | orden 2 |
+| gmsh: anillo y grupos | solución logarítmica en un cuarto de anillo; grupos físicos cubren el contorno; Q4 de gmsh exacto | `Test/test_triangles_gmsh.py` | pasa |
 | Newton ante una reacción desbocada | nunca deja NaN: se detiene con aviso y conserva el último estado finito | `Test/test_coupling.py` | pasa |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
@@ -122,9 +126,12 @@ Lo que sigue pendiente:
   pertenece a dos aristas con BC distintas, gana la última asignación de Dirichlet.
 
 ### 2D y mallas
-- Solo cuadriláteros Q4 en rectángulo, generados internamente.
-- No hay importación de gmsh (`readMesh.py` solo imprime información). `t1.msh` no se usa.
-- Triángulos T3: no implementados.
+- Elementos: Q4 y T3 (lineales). T3 usa una regla de Gauss de 3 puntos (grado 2), suficiente para masa y términos lineales.
+- Mallas de gmsh: `Mesh.read_msh` / `Mesh.from_gmsh_model` admiten un solo tipo de elemento 2D (T3 o Q4); las mallas mixtas se rechazan.
+  Los bordes son rectos (sin elementos curvos), de modo que los arcos se aproximan por polígonos (error geométrico O(h²)).
+- Sin elementos de orden superior (T6, Q8/Q9), sin tetraedros/hexaedros ni 3D. La región física 2D (`mesh.regions`) se guarda
+  pero aún no asigna materiales distintos por región.
+- SUPG sobre triángulos reduce mucho las oscilaciones pero no las elimina (no es monótono con flujo oblicuo a la malla).
 
 ### Entorno y archivos
 - `Logs/`: cada importación de `Source` crea un archivo de log nuevo. Con muchas ejecuciones la carpeta crece.
@@ -170,8 +177,9 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
    `Test/test_nonlinear_transient.py` y `Example_2D_Transient.py`. `k(T)` también está hecho (término de difusión no
    lineal). El acoplamiento calor-masa también está hecho (primer paso: Arrhenius con la T del campo y calor de reacción). Siguiente en
    física: sólidos/fluidos (la convección compartida y estabilizada ya está) (`D(T)` y `k(c)` ya están).
-4. **Mallas y geometría (Etapa 8).** Importar `.msh` de gmsh (grupos físicos → aristas con nombre), añadir triángulos
-   T3 a `Elements.py` y permitir geometrías no rectangulares. Validar con el parche en la malla importada.
+4. ~~**Mallas y geometría (Etapa 8).**~~ Hecha: T3 en `Elements.py`, `generate2DMesh` con triángulos, importación de gmsh con
+   grupos físicos por nombre, `Test/test_triangles_gmsh.py` y `Example_Gmsh_Geometry.py`. Pendiente: materiales por región,
+   elementos de orden superior y 3D.
 5. **Escalado de solvers y salida.** Precondicionador AMG (`pyamg`) para problemas grandes, cache de factorizaciones
    en el estacionario, y exportar a VTK/XDMF para ParaView.
 6. **Estabilización de convección.** Petrov-Galerkin o SUPG en 1D (y 2D cuando exista convección vectorial). Validar con

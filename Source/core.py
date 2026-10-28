@@ -220,7 +220,7 @@ class Model(object):
 
     def postProcess2D(self, variable=None, levels=30, step=None, ax=None, vmin=None, vmax=None):
 
-        """Filled contour of the nodal solution on a 2D mesh (each Q4 is split into two triangles).
+        """Filled contour of the nodal solution on a 2D mesh (a Q4 is split into two triangles; T3 are drawn as they are).
 
         step: index of a time step of a transient solution (default: the final state). ax: draw on an
         existing axes instead of opening a figure. vmin, vmax: fixed color range (to compare steps).
@@ -234,8 +234,8 @@ class Model(object):
 
         triangles = []
         for element in self._mesh.EL:
-            a, b, c, d = element.getNodesId()
-            triangles += [[a, b, c], [a, c, d]]
+            ids = element.getNodesId()
+            triangles += [ids] if len(ids) == 3 else [[ids[0], ids[1], ids[2]], [ids[0], ids[2], ids[3]]]
 
         triang = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles)
 

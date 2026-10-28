@@ -21,7 +21,7 @@ Mesh ─► Elements ─► Discretization ─► Operators ─► System ─►
 
 | Capa | Módulo | Qué hace | Depende de la física |
 |---|---|---|---|
-| Elementos | `Pre_processing/Elements.py` | Registro de elementos de referencia (`line2`, `line3`, `quad4`): funciones de forma, Gauss y facetas | no |
+| Elementos | `Pre_processing/Elements.py` | Registro de elementos de referencia (`line2`, `line3`, `tri3`, `quad4`): funciones de forma, Gauss y facetas | no |
 | Geometría | `Simulation/Discretization.py` | `N`, `B = dN/dx`, `detJw`, `x_gp` en los puntos de Gauss; `FacetSet` (puntos en 1D, aristas en 2D) con medida y normales salientes | no |
 | Grados de libertad | `Simulation/DofLayout.py` | Campos con `ncomp` componentes, numeración intercalada por nodo, reparto por bloques | no |
 | Operadores | `Simulation/Operators.py` | `diffusion`, `diffusion_tensor`, `convection`, `mass`, `source`, `facet_mass`, `facet_source` con coeficientes por punto de Gauss | no |
@@ -33,7 +33,9 @@ Mesh ─► Elements ─► Discretization ─► Operators ─► System ─►
 
 ## 2. Flujo de una simulación
 
-1. **Malla.** `Mesh` contiene `NL` (`Node` con `id`, `coor`, `BC`) y `EL` (`Element`). Guarda `element_type` (`'line2'`, `'quad4'`).
+1. **Malla.** `Mesh` contiene `NL` (`Node` con `id`, `coor`, `BC`) y `EL` (`Element`). Guarda `element_type` (`'line2'`, `'tri3'`, `'quad4'`). Se genera con `generate2DMesh` (Q4 o T3) o se importa de gmsh con
+   `Mesh.read_msh(path)` / `Mesh.from_gmsh_model()`: los grupos físicos de dimensión 1 quedan en `mesh.groups` y se usan por
+   nombre en `boundary_edges('nombre')`; los de dimensión 2 en `mesh.regions`. Solo un tipo de elemento por malla.
    - 1D: `Generate_Mesh(PD, L, NoE, ElementType.line)`. 2D: `generate2DMesh((Lx, Ly), (nx, ny), ElementType.quadrilateral)`.
    - `boundary_facets(selector)` (alias `boundary_edges`) devuelve las facetas del contorno cuyo punto medio cumple el predicado.
 2. **Modelo.** `Model(name, dim, mesh, mat, psc)` crea la física, que crea los campos (`scalarField`).

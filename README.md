@@ -23,7 +23,8 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Calor + especies acopladas (`Model(psc=[ht, mt])`): Arrhenius con la T del campo y calor de reacción `dH` | Operativo, validado con una EDO independiente, invariantes exactos y jacobiano cruzado |
 | Coeficientes de difusión que dependen de otros campos: `k(T)`, `k(c)`, `D(T)`, `D(c)` (`depends_on`) | Operativo, validado con soluciones exactas, convergencia de segundo orden y jacobiano |
 | Convección con velocidad compartida entre físicas y estabilización SUPG (1D, 2D) | Operativo, nodalmente exacto en 1D a Pe alto y de segundo orden con fuente |
-| Triángulos, mallas gmsh, `rho Cp(T)` | No implementado |
+| Triángulos T3 y mallas de gmsh (geometría no rectangular, grupos físicos con nombre) | Operativo: parche exacto, orden 2, anillo frente a solución logarítmica |
+| `rho Cp(T)`, elementos de orden superior, 3D | No implementado |
 
 ## Requisitos
 
@@ -33,7 +34,7 @@ Las versiones son las que usa el entorno `.venv` del proyecto (ver `requirements
 - numpy, scipy, matplotlib
 - jax y jaxlib (solo para las leyes puntuales no lineales: reacciones, `h(T)` de radiación, ...)
 - pypardiso (solver directo PARDISO). Es obligatorio: `Source/Simulation/DirectSolver.py` lo importa al cargar el módulo.
-- gmsh (solo para `readMesh.py`)
+- gmsh (importar mallas y construir geometrías; opcional si solo se usan las mallas internas)
 
 Instalación en Windows (PowerShell):
 
@@ -82,6 +83,17 @@ El θ-método usa un paso fijo. Euler implícito (θ = 1) es robusto y de primer
 segundo orden pero no es L-estable: con estados iniciales discontinuos y pasos grandes los modos rígidos oscilan
 durante bastante tiempo (use un paso menor o Euler). Con BC no lineales, cada paso se linealiza con Newton al inicio
 del paso. El estado inicial puede ser un número o una función de las coordenadas: `initField('T', lambda x, y: ...)`.
+
+### Triángulos y mallas de gmsh
+
+```python
+mesh = Mesh(); mesh.generate2DMesh((2.0, 1.0), (20, 10), ElementType.triangle)   # T3 estructurados, sin gmsh
+mesh = Mesh.read_msh('pieza.msh')            # archivo de gmsh (T3 o Q4)
+mesh = Mesh.from_gmsh_model()                # modelo de gmsh abierto y ya mallado
+physics.addBC_TemperatureEdges(mesh.boundary_edges('inner'), 100.0)     # grupo físico de dimensión 1, por nombre
+```
+
+La malla debe tener un solo tipo de elemento 2D. Ver `Example_Gmsh_Geometry.py`.
 
 ### Calor y especies acopladas
 
@@ -162,6 +174,7 @@ Las aristas se seleccionan con un predicado sobre su punto medio: `mesh.boundary
 | `Example_Reactive_Heat.py` | Reacción exotérmica acoplada con el calor: verificación frente a una EDO, barrido del calor de reacción y arranque transitorio |
 | `Ejemplo_Fisicas_Acopladas.ipynb` | **Cuaderno guiado** del caso reactivo: monta el modelo paso a paso, explica cada función y parámetro, muestra qué ocurre dentro del solver (geometría, DOF, jacobiano, Newton), los resultados, la verificación y el transitorio |
 | `2DFEM.py` | Generación de malla 2D (referencia de numeración) |
+| `Example_Gmsh_Geometry.py` | Cuarto de anillo (convergencia frente a la solución logarítmica) y placa con orificio, con mallas T3 de gmsh |
 | `readMesh.py` | Lectura de información de un archivo `.msh` con gmsh |
 
 Algunos ejemplos abren ventanas de Matplotlib (`plt.show()`). Para ejecutarlos sin ventanas use `MPLBACKEND=Agg`.
@@ -187,6 +200,7 @@ python Test/test_nonlinear_transient.py  # 2D: radiación, Newton, transitorio, 
 python Test/test_nonlinear_diffusion.py  # k(T): Kirchhoff exacta, manufacturada 2D, jacobiano, transitorio (8)
 python Test/test_coupling.py       # calor + especies: EDO adiabática, conservación, invariantes, jacobiano cruzado, API (12)
 python Test/test_multifield_diffusion.py  # D(c), D(T), k(c): soluciones exactas, jacobiano, conservación, errores (8)
+python Test/test_triangles_gmsh.py        # triángulos T3 y gmsh: parche, manufacturada, anillo, grupos, Q4 de gmsh (10)
 python Test/test_convection_supg.py       # velocidad compartida y SUPG: exactitud 1D, 2D = 1D, manufacturada, transitorio (9)
 ```
 
@@ -202,7 +216,7 @@ Source/
   logger_config.py             registro en Logs/ (un archivo por ejecución)
   Pre_processing/
     Mesh.py                    Mesh, Node, Element; generación 1D y 2D (Q4), boundary_facets
-    Elements.py                registro de elementos de referencia (line2, line3, quad4)
+    Elements.py                registro de elementos de referencia (line2, line3, tri3, quad4)
     BasisFunctions.py          funciones de forma Q4 (numpy)
   Physics/
     Physics.py                 clase base de física (campos, BC, add_terms y build_system)
