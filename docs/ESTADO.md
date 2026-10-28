@@ -18,6 +18,16 @@
 | 2D Neumann en arista | T = 2x + 1 exacto | `Test/test_2d_poisson.py` | pasa |
 | 2D Newton en arista | T = 2x + 1 exacto | `Test/test_2d_poisson.py` | pasa |
 | 2D convergencia (fuente) | Poisson con sin·sin, mallas 4 a 32 | `Test/test_2d_poisson.py`, `Example_2D_Poisson.py` | orden 2.00 |
+| 2D convección = 1D | flujo en x con Dirichlet izquierda/derecha no depende de y | `Test/test_2d_poisson.py` | pasa (1e-9) |
+| Base: elementos, facetas, normales, DOF, operadores | partición de la unidad, áreas, normales salientes, matrices 1D conocidas | `Test/test_foundation.py` | pasa (11) |
+| Leyes puntuales | derivadas frente a diferencias finitas; se compilan una sola vez | `Test/test_foundation.py` | pasa |
+| Especies: difusión + reacción de primer orden | `c = sinh(m(L-x))/sinh(mL)`, mallas 8 a 64 | `Test/test_species.py` | orden 2.00 |
+| Especies: convección-difusión-reacción | exponenciales exactas, Pe moderado | `Test/test_species.py` | error < 5e-4 |
+| Especies: A + B → C (segundo orden) | `A + C` y `B + C` deben ser lineales (estequiometría, acoplo, Newton) | `Test/test_species.py` | pasa (1e-7) |
+| Especies: jacobiano con derivadas cruzadas | 3 especies, 2 reacciones, convección, frente a diferencias finitas | `Test/test_species.py` | pasa |
+| Especies: transitorio | decaimiento de sin(πx) con difusividades distintas | `Test/test_species.py` | pasa (< 2e-3) |
+| Especies 2D: reacción no lineal manufacturada | `c = 1 + sin·sin`, `k c²`, mallas 4 a 16 | `Test/test_species.py` | orden 2.0 |
+| Especies 2D: flujo y transferencia en aristas | campo lineal exacto | `Test/test_species.py` | pasa (1e-10) |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -33,11 +43,15 @@ Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
   cuenta una sola vez.
 
 ### Transporte de especies (`MassTransfer.py`, clase `mt`)
-- **Sin validar.** No tiene pruebas. `MassTransferSimulation.py` y `Test/mass_transfer_reaction.ipynb` no se han
-  ejecutado en esta revisión.
-- `setDiffusivity` hace `raise "texto"`, lo que produce `TypeError`.
-- `build_reaction_function` tiene un `rate_vector.reshape(-1, 1)` sin asignar (no hace nada).
-- Usa la ruta antigua por elemento.
+- Ahora usa la base multifísica (`build_system`, `System`, `PointwiseLaw`) y está validado (ver sección 1).
+  `MassTransferSimulation.py` pasó de ~49 s a ~0.3 s.
+- Corrección de comportamiento: la ruta antigua no lineal **ignoraba `setDiffusivity`** (usaba difusividad 1 para todas
+  las especies). La nueva respeta la de cada especie, así que los resultados del ejemplo cambian. Con difusividades
+  iguales a 1 la diferencia con la ruta antigua es de 0.09 sobre valores de ~20 (10 elementos), por evaluar la reacción
+  en los puntos de Gauss en lugar de interpolar tasas nodales.
+- La velocidad de convección es `physics.vel` (antes había una constante `u = 0.01` en la ruta lineal y `vel = 1` en la
+  no lineal).
+- Pendiente: acoplar la temperatura como campo en la ley de Arrhenius (hoy `T` es un número).
 
 ### Limpieza hecha en la Etapa 5 y lo que queda
 Se eliminó el código muerto y los imports sin uso (`Source/` pasó de 3463 a 2763 líneas, -20 %):
@@ -95,7 +109,9 @@ Lo que sigue pendiente:
 
 | `d8b1740` | `test-branch` | Documentación, `requirements.txt` y `Example_2D_Poisson.py` |
 
-La limpieza de la Etapa 5 (`run_tests.py` incluido) está en el árbol de trabajo y todavía no está commiteada.
+| `9e295c7` | `test-branch` | Etapa 5: limpieza de código muerto y `run_tests.py` |
+
+La Etapa 6 (6a y 6b) está en el árbol de trabajo y todavía no está commiteada.
 
 ## 4. Próximos pasos propuestos
 
@@ -103,14 +119,14 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
 
 1. ~~**Limpieza (Etapa 5).**~~ Hecha: código muerto e imports eliminados y `run_tests.py` añadido. Las 19 pruebas
    siguen en verde y `Physics.py` pasó de 980 a 660 líneas.
-2. **Transporte de especies vectorizado (Etapa 6).** Llevar `mt` a `HeatSystem` (o una clase genérica) con reacción
-   dependiente del estado vía `residual_and_tangent`. Validar con difusión-reacción 1D con solución analítica
-   (decaimiento lineal de primer orden) y con la ruta antigua.
+2. **Etapa 6: base multifísica y especies.** 6a (capas de elementos, DOF, operadores, leyes puntuales, `System`) y
+   6b (especies) están hechas. Queda **6c**: retirar la ruta por elemento (`Physics.py`, ramas de `core.py`, `basisFunctions`
+   con sympy) y sustituir en `test_vectorized.py` la comparación con la ruta antigua por valores de referencia.
 3. **2D no lineal y transitorio (Etapa 7).** Radiación en aristas (Newton con h(T) y su derivada) y transitorio 2D
-   reutilizando `HeatSystem.linear()` dentro del θ-método. Validar con el caso 2D de convergencia en transitorio
+   reutilizando `System.linear()` dentro del θ-método. Validar con el caso 2D de convergencia en transitorio
    (solución exacta del decaimiento de la primera autofunción).
 4. **Mallas y geometría (Etapa 8).** Importar `.msh` de gmsh (grupos físicos → aristas con nombre), añadir triángulos
-   T3 a `LinearGeometry` y permitir geometrías no rectangulares. Validar con el parche en la malla importada.
+   T3 a `Elements.py` y permitir geometrías no rectangulares. Validar con el parche en la malla importada.
 5. **Escalado de solvers y salida.** Precondicionador AMG (`pyamg`) para problemas grandes, cache de factorizaciones
    en el estacionario, y exportar a VTK/XDMF para ParaView.
 6. **Estabilización de convección.** Petrov-Galerkin o SUPG en 1D (y 2D cuando exista convección vectorial). Validar con
@@ -118,6 +134,6 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
 
 ## 5. Criterio para cerrar una etapa
 
-- Las cuatro suites de `Test/` pasan (y las que se añadan).
+- Todas las suites de `Test/` pasan (`python run_tests.py`).
 - Un caso de referencia reproduce el resultado anterior o explica la diferencia.
 - La documentación de `README.md`, `docs/ARQUITECTURA.md` y esta página se actualiza en el mismo commit.

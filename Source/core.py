@@ -16,7 +16,8 @@ from Source.Pre_processing.BasisFunctions import basisFunctions
 import Source.Simulation.Solvers as Solution
 from Source.enums import ShapeFunctionType, StudyType, ProblemType, SolverType, DirectSolvers, Preconditioners
 from Source.logger_config import sim_logger
-from Source.Simulation.VectorizedAssembler import LinearGeometry, HeatSystem
+from Source.Simulation.Discretization import Discretization
+from Source.Simulation.DofLayout import DofLayout
 
 
 class Model(object):
@@ -62,7 +63,9 @@ class Model(object):
 
         self.timeVector = None
 
-        self._geometry = None  # LinearGeometry, built on first use by the vectorized path
+        self._geometry = None      # Discretization, built on first use by the vectorized path
+        self._layout = None        # DofLayout of the physics fields
+        self._system_cache = None  # System, rebuilt at the start of every solve()
 
     @property
     def mesh(self):
@@ -89,42 +92,54 @@ class Model(object):
 
         return custom_str
 
-    def _heat_system(self):
+    @property
+    def layout(self):
 
-        """Vectorized system for single-variable physics that support it, or None for the element-based path."""
+        """Degrees of freedom of the model (fields and components)."""
+
+        if self._layout is None:
+            self._layout = DofLayout(self.physics.fields(), self._mesh.getNoN())
+
+        return self._layout
+
+    def _system(self):
+
+        """Vectorized System for the physics that build one, or None for the element-based path."""
 
         if not getattr(self.physics, 'supports_vectorized_assembly', False):
             return None
 
-        if self.physics.getNumOfVar() != 1:
-            return None
+        if self._system_cache is None:
 
-        if self._geometry is None:
-            self._geometry = LinearGeometry(self._mesh)
+            if self._geometry is None:
+                self._geometry = Discretization(self._mesh)
 
-        return HeatSystem(self, self._geometry)
+            self._system_cache = self.physics.build_system(self, self._geometry, self.layout)
 
-    def dirichletMask(self, variable=None):
+        return self._system_cache
 
-        """Boolean array over the nodes: True where `variable` has a Dirichlet condition."""
+    def dirichletDofs(self):
 
-        variable = variable or next(iter(self.physics.var))
+        """Boolean mask over all dofs: True where a field has a Dirichlet condition."""
 
-        mask = np.zeros(self._mesh.getNoN(), dtype=bool)
+        layout = self.layout
+        mask = np.zeros(layout.ndof, dtype=bool)
 
         for node in self._mesh.NL:
-            if node.BC and node.BC.get(variable, {}).get('type') == 'Dirichlet':
-                mask[node.id] = True
+            if not node.BC:
+                continue
+
+            for name in layout.names:
+                if node.BC.get(name, {}).get('type') == 'Dirichlet':
+                    mask[layout.node_dofs(name, node.id)] = True
 
         return mask
 
-    def _nodal_state(self):
+    def _state(self):
 
-        """Nodal values of the (single) field variable."""
+        """Solution vector with the current values of every field."""
 
-        variable = next(iter(self.physics.var))
-
-        return np.asarray(self.physics.var[variable].values, dtype=float)
+        return self.layout.join({name: self.physics.var[name].values for name in self.layout.names})
 
     def assembleGlobalSystem(self, solverOptions = None):
 
@@ -135,9 +150,9 @@ class Model(object):
         :param solverOptions: Dictionary containing solver configuration options.
         """
 
-        system = self._heat_system()
+        system = self._system()
         if system is not None:
-            return system.linear(self._nodal_state())
+            return system.linear(self._state())
 
         Var = self.physics.getVariables()
         nVar = self.physics.getNumOfVar()
@@ -190,9 +205,9 @@ class Model(object):
        
         """
 
-        system = self._heat_system()
+        system = self._system()
         if system is not None:
-            return system.residual_and_tangent(self._nodal_state())
+            return system.residual_and_tangent(self._state())
 
         Var = self.physics.getVariables()
         nVar = self.physics.getNumOfVar()
@@ -255,9 +270,9 @@ class Model(object):
                
         """
 
-        system = self._heat_system()
+        system = self._system()
         if system is not None:
-            return system.geo.mass(self.physics.M_const)
+            return system.mass()
 
         M = sparse.lil_matrix((self._mesh.getNoN(), self._mesh.getNoN()))
 
@@ -294,6 +309,8 @@ class Model(object):
     def solve(self):
 
         """Solves the model based on the configured solver options."""
+
+        self._system_cache = None  # boundary conditions and coefficients may have changed
 
         if self.solverOptions is None:
             self.solverConfiguration()

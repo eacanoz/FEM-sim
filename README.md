@@ -16,7 +16,7 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Calor 1D no lineal (radiación, Newton-Raphson con line search) | Operativo |
 | Calor 1D transitorio (θ-método, paso fijo) | Operativo |
 | Calor 2D estacionario lineal (Q4, BC en aristas) | Operativo, validado con soluciones manufacturadas (orden 2) |
-| Transporte de especies (`mt`, `MassTransferSimulation.py`) | Ruta antigua por elemento, **sin validar** |
+| Transporte de especies 1D y 2D (`mt`): difusión, convección, varias reacciones acopladas, BC en nodos y aristas | Operativo sobre la base multifísica, validado con soluciones analíticas y manufacturadas |
 | 2D no lineal, 2D transitorio, triángulos, mallas gmsh | No implementado |
 
 ## Requisitos
@@ -125,7 +125,9 @@ Cada archivo de `Test/` también se ejecuta directamente y es compatible con pyt
 python Test/test_analytic.py       # 1D: soluciones analíticas (5 pruebas)
 python Test/test_vectorized.py     # ensamblado vectorizado frente a la ruta por elemento (5)
 python Test/test_solvers.py        # Newton con line search y transitorio θ-método (4)
-python Test/test_2d_poisson.py     # 2D: topología, parche, BC en aristas y convergencia (5)
+python Test/test_2d_poisson.py     # 2D: topología, parche, BC en aristas, convección y convergencia (6)
+python Test/test_foundation.py     # elementos, facetas, DOF, operadores y leyes puntuales (11)
+python Test/test_species.py        # especies: analíticas 1D, conservación, jacobiano, 2D manufacturada (8)
 ```
 
 Todas deben pasar antes de hacer un commit que toque el núcleo (`Source/`).
@@ -139,15 +141,21 @@ Source/
   enums.py                     tipos de elemento, solvers, estudios
   logger_config.py             registro en Logs/ (un archivo por ejecución)
   Pre_processing/
-    Mesh.py                    Mesh, Node, Element; generación 1D y 2D (Q4), boundary_edges
+    Mesh.py                    Mesh, Node, Element; generación 1D y 2D (Q4), boundary_facets
+    Elements.py                registro de elementos de referencia (line2, line3, quad4)
     BasisFunctions.py          funciones de forma 1D (jax/sympy) y Q4 (numpy)
   Physics/
-    Physics.py                 clase base de física (ruta por elemento con jax)
+    Physics.py                 clase base de física (build_system; ruta por elemento, en retirada)
     HeatTransfer.py            ht: conducción, convección, radiación, BC en nodos y aristas
-    MassTransfer.py            mt: transporte de especies (sin validar)
+    MassTransfer.py            mt: especies, reacciones acopladas, BC en nodos y aristas
   Primals/                     campos escalares y vectoriales (valores nodales)
   Simulation/
-    VectorizedAssembler.py     geometría 1D/2D y ensamblado vectorizado (NumPy/einsum)
+    Discretization.py          geometría en los puntos de Gauss y facetas (cualquier dimensión)
+    DofLayout.py               campos, componentes y numeración de DOF
+    Operators.py               operadores de forma débil vectorizados (einsum)
+    PointwiseLaw.py            leyes no lineales con jacobianos automáticos (JAX)
+    System.py                  matrices, términos no lineales y BC independientes de la física
+    VectorizedAssembler.py     alias de compatibilidad (LinearGeometry)
     Solvers.py                 modelSolver: lineal, Newton, θ-método transitorio
     DirectSolver.py            PARDISO / SuperLU
     IterativeSolver.py         BiCGSTAB, GMRES, CG con iLU

@@ -8,6 +8,8 @@
 
 from Source.Physics.Physics import physics
 from Source.Primals.Scalar import scalarField
+from Source.Simulation.System import System
+import Source.Simulation.Operators as ops
 from Source.enums import ShapeFunctionType
 
 import jax
@@ -49,6 +51,29 @@ class ht(physics):
 
 
         self.Pe = self.mat.rho * self.mat.Cp * u / self.mat.k
+
+    def build_system(self, model, disc, layout):
+
+        """Heat conduction with convection, source, Dirichlet, Neumann and Robin/radiation conditions.
+
+        K and F can be numbers or functions of the coordinates; Newton h and Neumann flux can be
+        numbers or functions of the temperature (radiation).
+        """
+
+        system = System(disc, layout)
+        rows = layout.element_dofs(disc.conn, 'T')
+
+        system.add_matrix(layout.scatter_matrix(ops.diffusion(disc, self.K_const), rows, rows))
+
+        if self.Convection:
+            system.add_matrix(layout.scatter_matrix(ops.convection(disc, self.C_const, self.vel), rows, rows))
+
+        system.add_vector(layout.scatter_vector(ops.source(disc, self.F_const), rows))
+        system.add_mass(layout.scatter_matrix(ops.mass(disc, self.M_const), rows, rows))
+
+        system.add_boundary_conditions(model.mesh, self.facet_bcs)
+
+        return system
 
     def initializeMatrices(self, element, Variable):
 
@@ -115,13 +140,13 @@ class ht(physics):
         has q = -2 at that edge.
         """
 
-        self.edge_bcs.append({'type': 'Neumann', 'edges': list(edges), 'flux': q_flux})
+        self.facet_bcs.append({'type': 'Neumann', 'field': 'T', 'facets': list(edges), 'flux': q_flux})
 
     def addBC_ConvectionEdges(self, edges, h_c: float, T_ext: float):
 
         """Convection h_c (T_ext - T) through the edges [W/m2]. h_c must be a number."""
 
-        self.edge_bcs.append({'type': 'Newton', 'edges': list(edges), 'h': h_c, 'var_ext': T_ext})
+        self.facet_bcs.append({'type': 'Newton', 'field': 'T', 'facets': list(edges), 'h': h_c, 'var_ext': T_ext})
 
     def addBC_Radiation(self, id: int, epsilon: float, T_ext: float):
 

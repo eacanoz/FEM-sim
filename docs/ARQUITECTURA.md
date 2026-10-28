@@ -1,141 +1,133 @@
 # Arquitectura de FEM-sim
 
 Este documento explica cómo fluye un problema desde la malla hasta la solución, qué responsabilidad tiene cada módulo
-y cómo añadir nuevas piezas sin romper las existentes.
+y cómo añadir nuevas piezas (otras físicas, condiciones de contorno, elementos o dimensiones) sin romper las existentes.
 
-## 1. Flujo de una simulación
+La base de cálculo es **independiente de la física y de la dimensión**: calor y transporte de especies ya la usan, y
+fluidos o mecánica de sólidos (1D, 2D y 3D) se construirán sobre las mismas capas.
+
+## 1. Capas
 
 ```
-Mesh  ──►  Model (core.py)  ──►  physics (ht, mt)  ──►  ensamblado  ──►  modelSolver  ──►  sol / timeVector
- nodos,      solverConfiguration    variables, BC,        vectorizado      lineal, Newton,     nodal (sol['T'])
- elementos   solve() / postProcess  constantes            (1D/2D)          θ-método
+Mesh ─► Elements ─► Discretization ─► Operators ─► System ─► Solvers (modelSolver)
+ nodos,   registro     N, B, detJw,      forma débil   matrices,    lineal, Newton,
+ elementos de elementos facetas con      por punto     leyes,       θ-método
+                        normales          de Gauss      BC
+                          │                  ▲            ▲
+                          └── DofLayout ─────┴── PointwiseLaw (JAX, jacobianos automáticos)
+                                   ▲
+                    Physics.build_system()  (ht, mt, ...)
 ```
 
-1. **Malla.** `Mesh` contiene `NL` (lista de `Node`, con `id`, `coor` y `BC`) y `EL` (lista de `Element`, con `nodes`).
-   - 1D: `Generate_Mesh(PD, L, NoE, ElementType.line)` y `setElementShapeFunction(...)`.
-   - 2D: `generate2DMesh((Lx, Ly), (nx, ny), ElementType.quadrilateral)`. Elementos Q4 antihorarios.
-2. **Modelo.** `Model(name, dim, mesh, mat, psc)` crea la física (`psc`), que a su vez crea los campos (`scalarField`).
-3. **Condiciones.** Los métodos `physics.addBC_*` escriben en `node.BC[variable]` (BC de nodo) o en
-   `physics.edge_bcs` (BC de arista, solo 2D).
-4. **Configuración.** `solverConfiguration(...)` guarda `model.solverOptions` (estudio, tipo, método, solver, θ, paso, tiempo).
-5. **Solve.** `Model.solve()` crea un `modelSolver`, que decide la ruta según el estudio y el tipo de problema.
-   Al final guarda `model.sol[variable]` (nodal en estacionario, `(nodos, tiempos)` en transitorio).
+| Capa | Módulo | Qué hace | Depende de la física |
+|---|---|---|---|
+| Elementos | `Pre_processing/Elements.py` | Registro de elementos de referencia (`line2`, `line3`, `quad4`): funciones de forma, Gauss y facetas | no |
+| Geometría | `Simulation/Discretization.py` | `N`, `B = dN/dx`, `detJw`, `x_gp` en los puntos de Gauss; `FacetSet` (puntos en 1D, aristas en 2D) con medida y normales salientes | no |
+| Grados de libertad | `Simulation/DofLayout.py` | Campos con `ncomp` componentes, numeración intercalada por nodo, reparto por bloques | no |
+| Operadores | `Simulation/Operators.py` | `diffusion`, `diffusion_tensor`, `convection`, `mass`, `source`, `facet_mass`, `facet_source` con coeficientes por punto de Gauss | no |
+| Leyes puntuales | `Simulation/PointwiseLaw.py` | Función JAX → `vmap` + `jacfwd` compilados una vez, aplicados a todos los puntos | no |
+| Sistema | `Simulation/System.py` | Acumula matrices, términos no lineales y BC; da `linear(x)`, `residual_and_tangent(x)`, `mass()` | no |
+| Física | `Physics/HeatTransfer.py`, `Physics/MassTransfer.py` | Construye el `System` con sus operadores y leyes | sí |
+| Solvers | `Simulation/Solvers.py` | Lineal, Newton con line search, θ-método transitorio, todo sobre vectores de DOF | no |
 
-## 2. Módulos
+## 2. Flujo de una simulación
 
-### `Source/core.py` — `Model`
-
-- `solve()`, `postProcess()` (1D), `postProcess2D()` (2D, contorno con `tricontourf`).
-- `assembleGlobalSystem`, `assembleGlobalSystemNonLinear`, `assembleMassMatrix`: **cada uno comprueba primero
-  `_heat_system()`**. Si la física declara `supports_vectorized_assembly = True` y tiene una sola variable, usa el
-  ensamblador vectorizado. Si no, sigue con la ruta antigua por elemento (`physics.getElementMatrix`, etc.).
-- `dirichletMask(variable)`: máscara booleana de nodos con Dirichlet.
-- `_geometry` es un caché de `LinearGeometry`, que se construye la primera vez.
-
-### `Source/Pre_processing/`
-
-- `Mesh.py`: generación 1D y 2D, `boundary_edges(selector)`, `Element.getCoor()` (escalares en 1D, `(x, y)` en 2D).
-- `BasisFunctions.py`:
-  - Funciones de forma 1D Lagrange (jax y sympy, usadas por la ruta antigua).
-  - `q4_shape_functions(xi, eta)`: Q4 en numpy, usada por el ensamblador 2D.
-
-### `Source/Simulation/`
-
-- `VectorizedAssembler.py` (**el núcleo de cálculo actual**):
-  - `LinearGeometry(mesh)`: precalcula, una vez por malla, las funciones de forma y gradientes en los puntos de Gauss,
-    `detJw`, `B = dN/dx` y las coordenadas de Gauss. Sirve para 1D y 2D (`mesh.PD`).
-  - Matrices y vectores por elemento con `einsum`, después `_scatter` a `scipy.sparse`:
-    `stiffness(k)`, `mass(c)`, `convection(c, vel)` (solo 1D), `load(f)` (f número o función de (x, y)).
-  - Aristas (2D): `edge_lengths`, `edge_mass`.
-  - `HeatSystem(model, geometry)`: ensambla el problema de calor.
-    - `linear(T)` → `(A, b)`, con filas identidad en Dirichlet.
-    - `residual_and_tangent(T)` → `(J, R)` para Newton (solo 1D).
-- `Solvers.py`: `modelSolver`.
-  - `linearSolver`: ensamblado + `DirectSolver` o `IterativeSolver`.
-  - `newtonSolver`: tolerancia relativa sobre `||R||`, búsqueda de línea por *backtracking*.
-  - `transientSolver`: θ-método con paso fijo, LU reutilizada si la matriz no cambia.
-- `DirectSolver.py`: PARDISO (`pypardiso`) o SuperLU.
-- `IterativeSolver.py`: BiCGSTAB, GMRES y CG, con precondicionador iLU. Registra un aviso si `info != 0`.
-
-### `Source/Physics/`
-
-- `Physics.py` — clase base `physics`:
-  - Constantes (`K_const`, `C_const`, `M_const`, `F_const`), flag `Convection`, velocidad `vel`.
-  - `edge_bcs`: lista de BC de arista.
-  - `supports_vectorized_assembly = False` por defecto.
-  - Ruta antigua por elemento, basada en JAX (`_calc_*`, `getElementMatrix`, `getResidualVector`, ...).
-- `HeatTransfer.py` — `ht`:
-  - `supports_vectorized_assembly = True`.
-  - BC de nodo: `addBC_Temperature`, `addBC_Convection`, `addBC_HeatFlux`, `addBC_Radiation`.
-  - BC de arista (2D): `addBC_TemperatureEdges`, `addBC_HeatFluxEdges`, `addBC_ConvectionEdges`.
-- `MassTransfer.py` — `mt`: transporte de especies con reacción. Usa la ruta antigua. **Sin validar.**
-
-### `Source/Primals/`, `Source/Material.py`, `Source/enums.py`, `Source/logger_config.py`
-
-- `scalarField`: valores nodales, `timeValues` (transitorio), `getFieldValues(study)`.
-- `material(name, **kwargs)`: atributos arbitrarios (`k`, `rho`, `Cp`, ...).
-- `enums.py`: `ElementType`, `ShapeFunctionType`, `StudyType`, `ProblemType`, `SolverType`, `DirectSolvers`, `IterativeSolvers`, `Preconditioners`.
-- `logger_config.py`: crea un archivo `Logs/sim_<fecha>.log` por ejecución. Cada importación de `Source` crea uno nuevo.
+1. **Malla.** `Mesh` contiene `NL` (`Node` con `id`, `coor`, `BC`) y `EL` (`Element`). Guarda `element_type` (`'line2'`, `'quad4'`).
+   - 1D: `Generate_Mesh(PD, L, NoE, ElementType.line)`. 2D: `generate2DMesh((Lx, Ly), (nx, ny), ElementType.quadrilateral)`.
+   - `boundary_facets(selector)` (alias `boundary_edges`) devuelve las facetas del contorno cuyo punto medio cumple el predicado.
+2. **Modelo.** `Model(name, dim, mesh, mat, psc)` crea la física, que crea los campos (`scalarField`).
+3. **Condiciones.** `physics.addBC_*` escribe en `node.BC[campo]` (Dirichlet, y Newton/Neumann en un nodo en 1D) o en
+   `physics.facet_bcs` (Newton/Neumann sobre facetas: aristas en 2D).
+4. **Configuración.** `solverConfiguration(...)` guarda `model.solverOptions`.
+5. **Solve.** `Model.solve()` reinicia el caché del sistema y crea un `modelSolver`. Éste pide a `Model` el `System`
+   (`physics.build_system(model, disc, layout)`, construido una sola vez por solve) y lo resuelve.
+   El resultado queda en `model.sol[campo]` (nodal en estacionario, `(nodos, tiempos)` en transitorio).
 
 ## 3. Convenciones
 
 | Tema | Convención |
 |---|---|
-| Ecuación | `-∇·(k ∇T) = Q` (conducción), `ρ Cp ∂T/∂t` en transitorio |
-| Forma débil | `K T + C T + h T = F + ...`; el residuo es `R = (K + C) T - F + flujos` |
-| Dirichlet | fila identidad en `A` y valor prescrito en `b` (las columnas no se modifican) |
-| Newton | calor que sale `q = h (T - T_ext)`. Término `+ h (T - T_ext)` en el residuo |
-| Neumann | flujo que sale `q = -k ∂T/∂n`. Término `+ q` en el residuo |
-| Radiación | `h(T)` con temperaturas en Kelvin; `T` de entrada en °C |
-| Nodos | `node.id` es el índice global de la variable (`nVar = 1` en calor) |
-| Elementos | Q4 en orden antihorario: BL, BR, TR, TL. Lineales: de menor a mayor coordenada |
-| Puntos de Gauss | 2 en 1D, 2×2 en 2D (`GAUSS_XI`, `GAUSS_W` en `VectorizedAssembler.py`) |
+| Residuo | `R = A x - b + términos no lineales`; el solver de Newton resuelve `J dx = -R` |
+| Dirichlet | fila identidad en `A`, `b = valor` (las columnas no se modifican); residuo `x - valor` |
+| Flujo de contorno | siempre **saliente**: Neumann `q = -k ∂T/∂n`; Newton/Robin `q = h (T - T_ext)` |
+| Fuentes | `F` positivo produce el campo: el residuo lleva `- ∫ N F` |
+| Reacciones | `r_s = Σ_k ν_{s,k} k_k(T) Π c_j^{n_j}` con `ν < 0` en reactivos; el residuo lleva `- ∫ N r_s` |
+| Radiación | `h(T)` con Kelvin internamente; las temperaturas de entrada son °C |
+| DOF | `dof = nodo * n_total + desplazamiento_del_campo + componente` (intercalado) |
+| Elementos | Q4 antihorarios: BL, BR, TR, TL. Líneas de menor a mayor coordenada |
+| Gauss | 2 puntos por dirección (`Discretization(mesh, order=2)`) |
+| Coeficientes | número, array en puntos de Gauss, o función de las coordenadas `f(x)`, `f(x, y)` |
+| `h` y `flux` como función | en una BC, una función recibe el **valor del campo** (p. ej. `h(T)` de radiación) |
 
-## 4. Cómo extender el proyecto
+## 4. Módulos en detalle
 
-### 4.1 Añadir una física con coeficientes constantes
+### `Source/core.py` — `Model`
+`solve()`, `postProcess()` (1D), `postProcess2D()`, `layout` (el `DofLayout` de los campos de la física), `_system()`
+(construye y guarda el `System`), `dirichletDofs()`, `_state()` (vector de DOF con los valores de los campos).
+Sigue existiendo la ruta antigua por elemento para físicas sin `build_system`; se retira en la Etapa 6c.
 
-1. Crear una clase que herede de `physics` (como `ht`), con sus constantes y variables (`scalarField`).
-2. Si la forma débil es lineal en la variable y los coeficientes son números, activar
-   `supports_vectorized_assembly = True` y usar `HeatSystem` como modelo. Para una física nueva, lo habitual es
-   generalizar `HeatSystem` (hoy está especializado en calor).
-3. Si la física tiene coeficientes dependientes del estado (como las reacciones de `mt`), seguir por la ruta antigua
-   o implementar `residual_and_tangent` sin contar con la ruta por elemento.
-4. Escribir un test con solución analítica (ver `Test/test_analytic.py`) y, si hay dos rutas, un test de equivalencia
-   (ver `Test/test_vectorized.py`).
+### `Source/Simulation/System.py`
+- `add_matrix`, `add_vector`, `add_mass`: partes lineales (el residuo es `A x - b`).
+- `add_volume_law(law, entradas, salidas, sign)`: término volumétrico no lineal (reacciones, k(T), ...).
+- `add_flux(campo, facetas, q)` y `add_robin(campo, facetas, h, ext)`: BC sobre facetas, con `h` o `q` numéricos o
+  funciones del campo (leyes puntuales de faceta).
+- `add_boundary_conditions(mesh, facet_bcs)`: lee Dirichlet de los nodos y las BC Newton/Neumann (nodos en 1D, facetas en general).
+- `linear(x)`: `(A, b)`. Con términos no lineales devuelve la linealización de Newton en `x` (`A = J`, `b = J x - R`).
+- `residual_and_tangent(x)`, `mass()`, `is_dirichlet`, `dirichlet_value`.
 
-### 4.2 Añadir un tipo de condición de contorno
+### `Source/Physics/`
+- `Physics.py`: clase base. `fields()` (un escalar por variable) y `build_system(...)` (a implementar por cada física).
+- `HeatTransfer.py` (`ht`): difusión `k`, convección `rho Cp v`, fuente, masa `rho Cp`, Dirichlet, Neumann, Newton y radiación.
+- `MassTransfer.py` (`mt`): varias especies con difusividad propia (`setDiffusivity`), convección, fuentes externas
+  (`setSource`), **varias reacciones** (`addReaction`, se acumulan) acopladas por una sola ley puntual, y BC por nodos
+  o aristas (`addBC_Concentration`, `addBC_Outflow`, `addBC_ConcentrationEdges`, `addBC_FluxEdges`, `addBC_MassTransferEdges`).
+  La velocidad `physics.vel` es un escalar en 1D y un vector en 2D.
 
-- **Nodo (1D):** en `HeatSystem.__init__`, leer el nuevo tipo de `node.BC[variable]` y aplicarlo en `linear()` y
-  `residual_and_tangent()`.
-- **Arista (2D):** añadir una rama en `HeatSystem.__init__` (lista `edge_*`) y su contribución en `linear()`.
-  Las integrales de arista están en `LinearGeometry.edge_mass` y en el reparto `L/2` por nodo.
-- Exponer el método en la física (`addBC_*Edges`) que añade la entrada a `edge_bcs`.
+### `Source/Simulation/Solvers.py`
+- `linearSolver`: ensamblado + `DirectSolver` o `IterativeSolver`.
+- `newtonSolver`: tolerancia relativa sobre `||R||`, búsqueda de línea por *backtracking*.
+- `transientSolver`: θ-método con paso fijo, LU reutilizada si la matriz no cambia, DOF fijados por Dirichlet,
+  `timeValues` guardados por campo.
 
-### 4.3 Añadir un elemento o una dimensión
+## 5. Cómo extender el proyecto
 
-- Crear la referencia del elemento (funciones de forma y gradientes en los puntos de Gauss) y añadir su rama en
-  `LinearGeometry.__init__` (hoy: `dim == 1` y `dim == 2`).
-- El resto del ensamblado (`stiffness`, `mass`, `load`, `_scatter`) es genérico en `dim` mientras `B` tenga forma
-  `(nel, ngp, nne, dim)`.
-- Añadir el generador de malla en `Mesh` y verificar que `Element.getCoor()` devuelve la forma esperada.
-- Test de parche (un campo lineal debe reproducirse exacto) y test de convergencia (`Test/test_2d_poisson.py`).
+### 5.1 Añadir una física
+1. Crear una clase que herede de `physics`, con sus variables (`scalarField`) y constantes.
+2. Implementar `build_system(model, disc, layout)`: crear un `System`, añadir los operadores (`ops.diffusion`, ...)
+   repartidos con `layout.scatter_matrix`, y llamar a `system.add_boundary_conditions(model.mesh, self.facet_bcs)`.
+3. Para términos no lineales, definir una función JAX `f(u)` y envolverla con `PointwiseLaw`; añadirla con
+   `system.add_volume_law(...)`. El jacobiano sale por autodiff (conserve el objeto `PointwiseLaw` entre ensamblados).
+4. Añadir métodos `addBC_*` que escriban en `node.BC` o en `facet_bcs` (`{'type', 'field', 'facets', ...}`).
+5. Probar con soluciones analíticas y manufacturadas (ver `Test/test_species.py`) y un chequeo de jacobiano por
+   diferencias finitas.
 
-### 4.4 Añadir un solver o un precondicionador
+### 5.2 Fluidos y mecánica de sólidos (lo que ya está y lo que falta)
+- **Ya está:** campos con varias componentes en `DofLayout` (`FieldSpec('u', ncomp=dim)`), reparto por bloques entre
+  campos distintos, facetas con normales salientes (presiones y tracciones), leyes puntuales con jacobianos automáticos
+  (viscosidad, tensión-deformación), Newton y transitorio por DOF.
+- **Falta:** operadores vectoriales en `Operators.py` (deformación-desplazamiento `BᵀCB`, divergencia-presión),
+  elementos de orden mixto para velocidad-presión (`quad9`, `tri6`) en `Elements.py`, estabilización de convección,
+  y estado interno para plasticidad.
 
-- Solver directo: nuevo valor en `DirectSolvers` y rama en `DirectSolver.solve()`.
-- Iterativo: nuevo valor en `IterativeSolvers`, método en `IterativeSolver` y rama en `solve()`.
-  Si `solve()` no reconoce el valor, lanza `ValueError`.
-- Nuevo estudio o tipo de problema: rama en `modelSolver.solve()` (`steadyStateSolver`, `transientSolver`).
+### 5.3 Añadir un elemento o una dimensión
+- Añadir una entrada a `ELEMENTS` en `Elements.py` (nodos de referencia, `shape`, `quadrature`, facetas locales y
+  elemento de faceta). `Discretization` y los operadores son genéricos en `dim`.
+- Añadir el generador de malla (y `element_type`) en `Mesh.py`. Las normales de faceta en 3D se completan en
+  `Discretization.facets`.
+- Pruebas: partición de la unidad (`Test/test_foundation.py`), parche lineal y convergencia (`Test/test_2d_poisson.py`).
 
-### 4.5 Añadir una prueba
+### 5.4 Añadir un tipo de condición de contorno
+- Sobre facetas: método en `System` (como `add_flux` o `add_robin`) y rama en `add_boundary_conditions`.
+- Dirichlet por componente: `System.set_dirichlet(dofs, valores)`.
 
-- Todas las pruebas están en `Test/` y son scripts ejecutables con `if __name__ == "__main__"`.
-- Usar `matplotlib.use("Agg")` al principio para no abrir ventanas.
-- Cada prueba debe comparar con un valor analítico, un valor de referencia documentado o con la ruta antigua.
+### 5.5 Añadir un solver o un precondicionador
+- Directo: valor en `DirectSolvers` y rama en `DirectSolver.solve()`. Iterativo: valor en `IterativeSolvers`, método en
+  `IterativeSolver` y rama en `solve()` (lanza `ValueError` si no la reconoce).
 
-## 5. Dónde está cada cosa en el historial
+### 5.6 Añadir una prueba
+- Scripts ejecutables en `Test/` con `matplotlib.use("Agg")`; registrarlos en `run_tests.py`.
+- Comparar con valores analíticos, soluciones manufacturadas, equivalencias entre rutas o diferencias finitas del jacobiano.
 
-- `backup/vmap-wip`: intento de ensamblado por lotes con `jax.vmap` (`Physics.get_batched_*`). Ese código ya no existe
-  en `test-branch` (se eliminó en la Etapa 5); la rama se conserva solo como respaldo.
-- `test-branch`: rama de trabajo. Las etapas 1 a 4 están commiteadas en orden (`d464fa9`, `d7388e3`, `141d15e`, `fa50dbe`).
+## 6. Historial relevante
+- `backup/vmap-wip`: intento de ensamblado por lotes con `jax.vmap`. Ese código ya no existe en `test-branch`.
+- `test-branch`: etapas 1 a 5 commiteadas; la Etapa 6 (base multifísica y especies) está en curso.

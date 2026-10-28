@@ -130,9 +130,45 @@ def test_poisson_manufactured_order_two():
     assert all(r > 1.9 for r in rates[1:]), rates
 
 
+def test_convection_2d_matches_1d():
+    """Convection-diffusion with a flow along x and Dirichlet left/right does not depend on y.
+
+    The Q4 result must equal the 1D result on the same x nodes.
+    """
+
+    from Source.enums import ShapeFunctionType
+
+    nx = 8
+
+    model2d, mesh2d = make_model(1.0, 1.0, nx, 3, k=0.5)
+    model2d.physics.Convection = True
+    model2d.physics.vel = [2.0, 0.0]
+    model2d.physics.addBC_TemperatureEdges(mesh2d.boundary_edges(lambda x, y: x < 1e-12), 100.0)
+    model2d.physics.addBC_TemperatureEdges(mesh2d.boundary_edges(lambda x, y: x > 1 - 1e-12), 20.0)
+    model2d.solve()
+
+    mesh1d = Mesh()
+    mesh1d.Generate_Mesh(1, 1.0, nx, ElementType.line)
+    mesh1d.setElementShapeFunction(ShapeFunctionType.linear)
+    model1d = Model(name='1d', dim=1, mesh=mesh1d, mat=material('X', k=0.5, rho=1, Cp=1), psc=ht)
+    model1d.physics.Convection = True
+    model1d.physics.vel = 2.0
+    model1d.physics.addBC_Temperature(id=0, T=100.0)
+    model1d.physics.addBC_Temperature(id=nx, T=20.0)
+    model1d.solverConfiguration(Study=StudyType.steady_state, Type=ProblemType.linear,
+                                Method=SolverType.direct, Solver=DirectSolvers.PARDISO)
+    model1d.solve()
+
+    T2 = np.asarray(model2d.sol['T']).reshape(4, nx + 1)   # rows are y levels
+    T1 = np.asarray(model1d.sol['T'])
+
+    assert np.allclose(T2, T1[None, :], atol=1e-9), np.max(np.abs(T2 - T1[None, :]))
+
+
 if __name__ == "__main__":
     tests = [test_mesh_topology, test_patch_dirichlet_linear_field, test_neumann_edge_patch,
-             test_newton_edge_patch, test_poisson_manufactured_order_two]
+             test_newton_edge_patch, test_poisson_manufactured_order_two,
+             test_convection_2d_matches_1d]
     failed = 0
     for t in tests:
         try:

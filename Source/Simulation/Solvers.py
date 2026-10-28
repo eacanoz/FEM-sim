@@ -121,8 +121,7 @@ class modelSolver():
 
         self.getInitialField()
 
-        variable = next(iter(self.model.physics.var))
-        dirichlet = self.model.dirichletMask(variable)
+        dirichlet = self.model.dirichletDofs()
 
         # Initial state satisfies the Dirichlet conditions
         A, b = self.model.assembleGlobalSystem(self.solverOptions)
@@ -157,7 +156,9 @@ class modelSolver():
 
         self.timeVector = np.linspace(0.0, total_time, n_steps + 1)
 
-        self.model.physics.var[variable].updateTimeValues(Y)
+        layout = self.model.layout
+        for name in layout.names:
+            self.model.physics.var[name].updateTimeValues(Y[layout.dofs(name)[:, 0], :])
 
     def linearSolver(self):
 
@@ -275,19 +276,10 @@ class modelSolver():
 
     def updateSolution(self, x):
 
-        """Updates the solution in the model based on the current solution vector x.
-        It extracts the values for each field variable from the solution vector and updates the corresponding fields in"""
+        """Writes the solution vector x into the fields of the model."""
 
-        # nVar = self.model.physics.getNumOfVar()
-
-        for i, fieldVar in enumerate(self.fieldVariables):
-
-            sol = [x[i + self.nVar*j] for j in range(self.model._mesh.getNoN())]
-
-            self.model.physics.var[fieldVar].updateField(sol)
-
-
-        
+        for name, values in self.model.layout.split(x).items():
+            self.model.physics.var[name].updateField(values)
 
     def getFieldVariables(self):
 
@@ -299,21 +291,6 @@ class modelSolver():
 
     def getInitialField(self):
 
-        """Collects the initial field values for each variable from the model's physics and stores them in a single solution vector x0 for use in the solvers."""
+        """Collects the current values of every field into the solution vector x0 used by the solvers."""
 
-        # print('\nCollecting Initial field\n')
-
-        self.x0 = np.zeros(self.model._mesh.getNoN()*self.nVar)
-
-        for idxVar, fieldVar in enumerate(self.fieldVariables):
-
-            for idxValue, value in enumerate(self.model.physics.var[fieldVar].values):
-
-                self.x0[idxVar + self.nVar * idxValue] = value
-
-            #self.x0 = np.append(self.x0, self.model.physics.var[fieldVar].values)
-#------------------------------------------------------------------------------
-
-
-        
-
+        self.x0 = self.model._state()

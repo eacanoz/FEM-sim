@@ -20,6 +20,7 @@ from Source.Pre_processing.BasisFunctions import basisFunctions, shape_functions
 
 from Source.Pre_processing.Mesh import Element
 from Source.Primals.Scalar import scalarField
+from Source.Simulation.DofLayout import FieldSpec
 
 u = 1
 
@@ -333,7 +334,7 @@ class physics:
 
         self.Pe = 0  # Peclet number
 
-        self.edge_bcs = []  # Newton/Neumann conditions on edges (2D): dicts with 'type', 'edges', ...
+        self.facet_bcs = []  # Newton/Neumann conditions on boundary facets: dicts with 'type', 'field', 'facets', ...
 
 
     
@@ -361,6 +362,18 @@ class physics:
         """
 
         return self.C_const if self.Convection else _zero_const
+
+    def fields(self):
+
+        """Field specifications (name and number of components) for the vectorized path: one scalar per variable."""
+
+        return [FieldSpec(name) for name in self.var]
+
+    def build_system(self, model, disc, layout):
+
+        """Builds the Source.Simulation.System of the model. Physics that support it override this."""
+
+        raise NotImplementedError(f"{type(self).__name__} no implementa build_system.")
 
     def getVariables(self):
         return self.var.keys()

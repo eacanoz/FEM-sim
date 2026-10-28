@@ -39,8 +39,9 @@ Model1.physics.setDiffusivity('A', 1)
 Model1.physics.setDiffusivity('B', 0.5)
 Model1.physics.setDiffusivity('C', 2)
 
-# Neglecting convection term
+# Convection along x with velocity vel [m/s] (set Convection = False for pure diffusion-reaction)
 Model1.physics.Convection = True
+Model1.physics.vel = 1.0
 Model1.physics.Stab = None
 
 # Add Boundary condition

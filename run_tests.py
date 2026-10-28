@@ -15,6 +15,8 @@ SUITES = [
     "Test/test_vectorized.py",
     "Test/test_solvers.py",
     "Test/test_2d_poisson.py",
+    "Test/test_foundation.py",
+    "Test/test_species.py",
 ]
 
 

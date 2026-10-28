@@ -6,6 +6,7 @@ from Source.Pre_processing.BasisFunctions import basisFunctions
 
 
 from Source.enums import ElementType
+from Source.Simulation.Discretization import Discretization
 
 
 
@@ -23,6 +24,7 @@ class Mesh:
         self.NoE = NoE
         self.meshType = MeshType
         self.PD = PD
+        self.element_type = 'line2'  # reference element used by the discretization
 
         if PD == 1:
             if self.meshType == ElementType.line:
@@ -59,6 +61,7 @@ class Mesh:
 
         self.PD = 2
         self.meshType = element_type
+        self.element_type = 'quad4'
 
         self.NL = []
         for j in range(ny + 1):
@@ -76,31 +79,22 @@ class Mesh:
         self.NoN = len(self.NL)
         self.NoE = len(self.EL)
 
-    def boundary_edges(self, selector):
 
-        """Outer-boundary edges whose midpoint (x, y) satisfies selector(x, y).
+    def boundary_facets(self, selector=None):
 
-        Returns a list of (node_id_a, node_id_b). An edge is on the boundary when only one
-        element uses it.
+        """Outer-boundary facets (points in 1D, edges in 2D) whose midpoint satisfies selector(*coords).
+
+        Returns a list of node-id tuples, one per facet. selector(x) in 1D, selector(x, y) in 2D;
+        None selects the whole boundary.
         """
 
-        count = {}
-        for element in self.EL:
-            ids = element.getNodesId()
-            for a, b in zip(ids, ids[1:] + ids[:1]):
-                key = (min(a, b), max(a, b))
-                count[key] = count.get(key, 0) + 1
+        return Discretization(self).boundary_facet_nodes(selector)
 
-        edges = []
-        for (a, b), n_uses in count.items():
-            if n_uses != 1:
-                continue
-            xa, ya = self.NL[a].coor[:2]
-            xb, yb = self.NL[b].coor[:2]
-            if selector((xa + xb) / 2, (ya + yb) / 2):
-                edges.append((a, b))
+    def boundary_edges(self, selector=None):
 
-        return sorted(edges)
+        """Same as boundary_facets (name used for 2D meshes)."""
+
+        return self.boundary_facets(selector)
 
     def getNoN(self):
 
