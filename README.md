@@ -20,7 +20,8 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Calor 2D no lineal (radiación y convección `h(T)` en aristas, Newton con line search) | Operativo, validado frente a 1D y por balance de energía |
 | Calor 2D transitorio (θ-método, también con BC no lineales) | Operativo, validado con soluciones analíticas, orden temporal y conservación de energía |
 | Conductividad dependiente de la temperatura `k(T)` (1D y 2D, estacionario y transitorio) | Operativo, validado con la solución exacta de Kirchhoff y una solución manufacturada |
-| Triángulos, mallas gmsh, `rho Cp(T)`, convección vectorial estabilizada | No implementado |
+| Calor + especies acopladas (`Model(psc=[ht, mt])`): Arrhenius con la T del campo y calor de reacción `dH` | Operativo, validado con una EDO independiente, invariantes exactos y jacobiano cruzado |
+| Triángulos, mallas gmsh, `rho Cp(T)`, `D(T)`, convección vectorial estabilizada | No implementado |
 
 ## Requisitos
 
@@ -80,6 +81,30 @@ segundo orden pero no es L-estable: con estados iniciales discontinuos y pasos g
 durante bastante tiempo (use un paso menor o Euler). Con BC no lineales, cada paso se linealiza con Newton al inicio
 del paso. El estado inicial puede ser un número o una función de las coordenadas: `initField('T', lambda x, y: ...)`.
 
+### Calor y especies acopladas
+
+Varias físicas pueden resolverse juntas en un modelo: comparten malla y campos, y un término de una puede depender de
+los campos de la otra.
+
+```python
+model = Model(name='reactor', dim=1, mesh=mesh, mat=material('Medio', k=2, rho=5, Cp=1), psc=[ht, mt])
+heat, mass = model.physics.heat, model.physics.mass          # cada física, por nombre
+
+for especie in ('A', 'C'):
+    mass.setChemSpecies(especie, especie)
+    mass.setDiffusivity(especie, 1.0)
+# T='T': la velocidad de reacción usa la temperatura del campo (en °C); dH < 0: exotérmica [J/mol]
+mass.addReaction({'A': -1, 'C': 1}, k0=3e4, E_R=2000.0, T='T', order={'A': 1}, dH=-40.0)
+
+model.physics.addBC_Temperature(0, 25.0)                      # los métodos de cada parte se delegan
+model.physics.addBC_Concentration(0, 'A', 1.0)
+heat.Convection = False                                       # los atributos se asignan en la parte
+```
+
+Con `T` numérico (Kelvin) la reacción es isotérmica y no depende del calor. Con campo de temperatura puede haber varios
+estados estacionarios (ignición): si Newton no converge o cae en otra rama, marche en el tiempo hasta el estacionario y
+use ese estado como inicial. Ver `Example_Reactive_Heat.py`.
+
 ### Problema 2D
 
 ```python
@@ -118,6 +143,7 @@ Las aristas se seleccionan con un predicado sobre su punto medio: `mesh.boundary
 | `Simulation_time_dependent.py` | Barra 1D transitoria |
 | `Example_2D_Poisson.py` | Poisson 2D con solución exacta, tabla de convergencia y gráficos |
 | `Example_2D_Transient.py` | Placa 2D con punto caliente, radiación y convección: transitorio no lineal, convergencia en el tiempo y gráficos |
+| `Example_Reactive_Heat.py` | Reacción exotérmica acoplada con el calor: verificación frente a una EDO, barrido del calor de reacción y arranque transitorio |
 | `2DFEM.py` | Generación de malla 2D (referencia de numeración) |
 | `readMesh.py` | Lectura de información de un archivo `.msh` con gmsh |
 
@@ -142,6 +168,7 @@ python Test/test_foundation.py     # elementos, facetas, DOF, operadores y leyes
 python Test/test_species.py        # especies: analíticas 1D, conservación, jacobiano, 2D manufacturada (8)
 python Test/test_nonlinear_transient.py  # 2D: radiación, Newton, transitorio, orden temporal y energía (9)
 python Test/test_nonlinear_diffusion.py  # k(T): Kirchhoff exacta, manufacturada 2D, jacobiano, transitorio (8)
+python Test/test_coupling.py       # calor + especies: EDO adiabática, conservación, invariantes, jacobiano cruzado, API (12)
 ```
 
 Todas deben pasar antes de hacer un commit que toque el núcleo (`Source/`).
@@ -159,7 +186,8 @@ Source/
     Elements.py                registro de elementos de referencia (line2, line3, quad4)
     BasisFunctions.py          funciones de forma Q4 (numpy)
   Physics/
-    Physics.py                 clase base de física (campos, BC y build_system)
+    Physics.py                 clase base de física (campos, BC, add_terms y build_system)
+    Coupled.py                 CoupledPhysics: varias físicas en un modelo (Model(psc=[ht, mt]))
     HeatTransfer.py            ht: conducción, convección, radiación, BC en nodos y aristas
     MassTransfer.py            mt: especies, reacciones acopladas, BC en nodos y aristas
   Primals/                     campos escalares y vectoriales (valores nodales)

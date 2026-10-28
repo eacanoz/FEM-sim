@@ -11,6 +11,9 @@
 import numpy as np
 
 from Source.Simulation.DofLayout import FieldSpec
+from Source.Simulation.System import System
+
+KELVIN_OFFSET = 273.15  # Temperatures are stored in °C; Arrhenius kinetics and radiation need K
 
 
 class physics:
@@ -43,11 +46,22 @@ class physics:
 
         return [FieldSpec(name) for name in self.var]
 
+    def add_terms(self, system, model, disc, layout):
+
+        """Adds the operators and laws of this physics to `system` (no boundary conditions). Every physics overrides this."""
+
+        raise NotImplementedError(f"{type(self).__name__} no implementa add_terms.")
+
     def build_system(self, model, disc, layout):
 
-        """Builds the Source.Simulation.System of the model. Every physics overrides this."""
+        """Builds the Source.Simulation.System of the model: the terms of this physics plus its boundary conditions."""
 
-        raise NotImplementedError(f"{type(self).__name__} no implementa build_system.")
+        system = System(disc, layout)
+
+        self.add_terms(system, model, disc, layout)
+        system.add_boundary_conditions(model.mesh, self.facet_bcs)
+
+        return system
 
     def getVariables(self):
         return self.var.keys()

@@ -14,36 +14,72 @@ import jax.numpy as jnp
 
 from Source.enums import ShapeFunctionType
 
-from Source.Physics.Physics import physics
+from Source.Physics.Physics import physics, KELVIN_OFFSET
 from Source.Primals.Scalar import scalarField
 from Source.Simulation.PointwiseLaw import PointwiseLaw
-from Source.Simulation.System import System
 import Source.Simulation.Operators as ops
 
 def build_reaction_law(species, reactions, min_concentration=1e-12):
 
-    """Pointwise law c -> production rate of every species, for a list of reactions.
+    """Pointwise law of the reactions: (concentrations[, temperature]) -> (species production[, heat]).
 
-    Each reaction is a dict with 'stoich' {species: nu}, 'order' {species: n}, 'k0', 'E_R' and 'T':
-    rate_k = k0 exp(-E_R / T) * prod_j c_j^n_j and r_s = sum_k nu_{s,k} rate_k.
+    Each reaction is a dict with 'stoich' {species: nu}, 'order' {species: n}, 'k0', 'E_R', 'T' and 'dH':
+    rate_k = k0 exp(-E_R / T_k) * prod_j c_j^n_j,  production of s = sum_k nu_{s,k} rate_k,
+    heat released = sum_k (-dH_k) rate_k  [W/m3, dH in J/mol; negative dH = exothermic].
+    T_k is a number in Kelvin, or the name of a temperature field (in °C, converted to Kelvin here).
     Concentrations are clamped to `min_concentration` before the power, so that non-integer orders
     never see negative values (the derivative is zero where the clamp is active).
+
+    Returns (law, inputs, outputs): the field names that the law reads and writes. The inputs are the
+    species plus the temperature field when some reaction uses one; the outputs are the species plus
+    the temperature field when some reaction releases heat.
     """
 
+    fields = {r['T'] for r in reactions if isinstance(r['T'], str)}
+
+    if len(fields) > 1:
+        raise ValueError(f"Las reacciones usan varios campos de temperatura: {sorted(fields)}.")
+
+    T_field = fields.pop() if fields else None
+    releases_heat = any(r['dH'] is not None for r in reactions)
+
+    if releases_heat and T_field is None:
+        raise ValueError("Una reaccion con dH necesita T como nombre del campo de temperatura (por ejemplo T='T').")
+
+    n_species = len(species)
     nu = np.array([[r['stoich'].get(s, 0.0) for s in species] for r in reactions])   # (n_reactions, n_species)
     order = np.array([[r['order'].get(s, 0.0) for s in species] for r in reactions])
-    k_rate = np.array([r['k0'] * np.exp(-r['E_R'] / r['T']) for r in reactions])
+    k0 = np.array([r['k0'] for r in reactions])
+    E_R = np.array([r['E_R'] for r in reactions])
+    uses_field = np.array([isinstance(r['T'], str) for r in reactions])
+    T_fixed = np.array([1.0 if isinstance(r['T'], str) else r['T'] for r in reactions])
+    heat = np.array([-(r['dH'] or 0.0) for r in reactions])
 
-    def rates(c):
-        c = jnp.maximum(c, min_concentration)
-        rate = k_rate * jnp.prod(c[None, :] ** order, axis=1)
+    def reactions_law(u):
+        c = jnp.maximum(u[:n_species], min_concentration)
 
-        return nu.T @ rate
+        if T_field is None:
+            T_k = T_fixed
+        else:
+            T_k = jnp.where(uses_field, u[n_species] + KELVIN_OFFSET, T_fixed)
 
-    return PointwiseLaw(rates)
+        rate = k0 * jnp.exp(-E_R / T_k) * jnp.prod(c[None, :] ** order, axis=1)
+        production = nu.T @ rate
+
+        if releases_heat:
+            return jnp.concatenate([production, jnp.sum(heat * rate)[None]])
+
+        return production
+
+    inputs = list(species) + ([T_field] if T_field else [])
+    outputs = list(species) + ([T_field] if releases_heat else [])
+
+    return PointwiseLaw(reactions_law), inputs, outputs
 
 
 class mt(physics):
+
+    part_name = 'mass'  # name used when this physics is combined with others (CoupledPhysics)
 
     def __init__(self, model):
         super().__init__(model)
@@ -93,22 +129,20 @@ class mt(physics):
 
     def reaction_law(self):
 
-        """The reaction law of the current species and reactions, compiled once and reused."""
+        """(law, inputs, outputs) of the current species and reactions, compiled once and reused."""
 
         if self._reaction_law is None:
             self._reaction_law = build_reaction_law(list(self.var), self.reactions)
 
         return self._reaction_law
 
-    def build_system(self, model, disc, layout):
+    def add_terms(self, system, model, disc, layout):
 
-        """Convection-diffusion-reaction of every species, with their sources and boundary conditions.
+        """Convection-diffusion-reaction of every species, with their sources (conditions are added by build_system).
 
         R_s = K_s c_s + C c_s - integral(N nu_s r(c)) - external source, with the reactions coupling
         all the species through one pointwise law (automatic Jacobian).
         """
-
-        system = System(disc, layout)
 
         for name in self.var:
 
@@ -128,20 +162,27 @@ class mt(physics):
             system.add_mass(layout.scatter_matrix(ops.mass(disc, self.M_const), rows, rows))
 
         if self.reactions:
-            system.add_volume_law(self.reaction_law(), list(self.var), list(self.var), sign=-1.0)
+            law, inputs, outputs = self.reaction_law()
 
-        system.add_boundary_conditions(model.mesh, self.facet_bcs)
+            for name in inputs + outputs:
+                if name not in layout.names:
+                    raise ValueError(f"Las reacciones usan el campo '{name}', que no existe en el modelo "
+                                     "(combine esta fisica con la de calor: Model(psc=[ht, mt])).")
 
-        return system
+            system.add_volume_law(law, inputs, outputs, sign=-1.0)
 
 ## ------------- Source terms -------------- ##
 
-    def addReaction(self, stoich: dict, k0: float, E_R: float, T: float, order: dict):
+    def addReaction(self, stoich: dict, k0: float, E_R: float, T, order: dict, dH: float = None):
 
         """Adds a reaction rate = k0 exp(-E_R/T) prod(c^order). Can be called several times.
 
         stoich {species: nu} (negative for reactants), order {species: n}; species missing in
-        `order` have order 0.
+        `order` have order 0. E_R is E/R in Kelvin.
+        T: a temperature in Kelvin (isothermal kinetics), or the name of the temperature field
+           (for example 'T'), whose values are in °C. The model must then include the heat physics.
+        dH: heat of reaction [J/mol], negative if exothermic. It releases (-dH) * rate [W/m3] into the
+            temperature field, so it needs T given as a field name.
         """
 
         for species in list(stoich) + list(order):
@@ -149,7 +190,7 @@ class mt(physics):
 
         order = {**{species: 0 for species in stoich}, **order}
 
-        self.reactions.append({'stoich': stoich, 'k0': k0, 'E_R': E_R, 'T': T, 'order': order})
+        self.reactions.append({'stoich': stoich, 'k0': k0, 'E_R': E_R, 'T': T, 'order': order, 'dH': dH})
         self._reaction_law = None
 
 

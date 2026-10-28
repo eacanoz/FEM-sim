@@ -16,7 +16,7 @@ Mesh ─► Elements ─► Discretization ─► Operators ─► System ─►
                           │                  ▲            ▲
                           └── DofLayout ─────┴── PointwiseLaw (JAX, jacobianos automáticos)
                                    ▲
-                    Physics.build_system()  (ht, mt, ...)
+                    Physics.add_terms() / build_system()  (ht, mt, CoupledPhysics)
 ```
 
 | Capa | Módulo | Qué hace | Depende de la física |
@@ -27,7 +27,8 @@ Mesh ─► Elements ─► Discretization ─► Operators ─► System ─►
 | Operadores | `Simulation/Operators.py` | `diffusion`, `diffusion_tensor`, `convection`, `mass`, `source`, `facet_mass`, `facet_source` con coeficientes por punto de Gauss | no |
 | Leyes puntuales | `Simulation/PointwiseLaw.py` | Función JAX → `vmap` + `jacfwd` compilados una vez, aplicados a todos los puntos | no |
 | Sistema | `Simulation/System.py` | Acumula matrices, términos no lineales y BC; da `linear(x)`, `residual_and_tangent(x)`, `mass()` | no |
-| Física | `Physics/HeatTransfer.py`, `Physics/MassTransfer.py` | Construye el `System` con sus operadores y leyes | sí |
+| Física | `Physics/HeatTransfer.py`, `Physics/MassTransfer.py` | Añade sus operadores y leyes a un `System` (`add_terms`) | sí |
+| Composición | `Physics/Coupled.py` | Reúne varias físicas en un modelo: un `DofLayout` y un `System` compartidos | no |
 | Solvers | `Simulation/Solvers.py` | Lineal, Newton con line search, θ-método transitorio, todo sobre vectores de DOF | no |
 
 ## 2. Flujo de una simulación
@@ -82,17 +83,30 @@ Toda física debe implementar `build_system`; la antigua ruta por elemento (JAX 
 - `residual_and_tangent(x)`, `mass()`, `is_dirichlet`, `dirichlet_value`.
 
 ### `Source/Physics/`
-- `Physics.py`: clase base. `fields()` (un escalar por variable) y `build_system(...)` (a implementar por cada física).
+- `Physics.py`: clase base. `fields()` (un escalar por variable), `add_terms(system, model, disc, layout)` (a implementar por
+  cada física: operadores y leyes, sin condiciones de contorno) y `build_system(...)` (crea el `System`, llama a
+  `add_terms` y añade las BC). `KELVIN_OFFSET` es la constante de conversión °C → K compartida.
+- `Coupled.py` (`CoupledPhysics`): `Model(psc=[ht, mt])` instancia cada física y las expone por nombre (`part_name`:
+  `model.physics.heat`, `model.physics.mass`). Une las variables (error si dos físicas repiten una), concatena los campos
+  y llama a `add_terms` de cada parte sobre **un solo** `System`; las BC se añaden una vez con las de todas. Los métodos
+  de las partes se delegan (`model.physics.addBC_Temperature`), pero **asignar** un atributo de una parte en la
+  combinación se rechaza con un error que indica la parte (`model.physics.heat.Convection = ...`).
 - `HeatTransfer.py` (`ht`): difusión `k` (constante, función de las coordenadas o `setConductivityLaw(k(T))`), convección
   `rho Cp v`, fuente, masa `rho Cp`, Dirichlet, Neumann, Newton y radiación.
 - `MassTransfer.py` (`mt`): varias especies con difusividad propia (`setDiffusivity`), convección, fuentes externas
   (`setSource`), **varias reacciones** (`addReaction`, se acumulan) acopladas por una sola ley puntual, y BC por nodos
   o aristas (`addBC_Concentration`, `addBC_Outflow`, `addBC_ConcentrationEdges`, `addBC_FluxEdges`, `addBC_MassTransferEdges`).
   La velocidad `physics.vel` es un escalar en 1D y un vector en 2D.
+  `addReaction(..., T, ..., dH)`: `T` es un número en Kelvin (isotérmica) o el nombre del campo de temperatura (`'T'`, en
+  °C, convertido a Kelvin dentro de la ley); `dH` [J/mol] (negativo = exotérmica) libera `-dH * rate` [W/m³] en ese
+  campo. Una sola ley puntual tiene como entradas las especies y la temperatura y como salidas la producción de cada
+  especie y el calor, de modo que los bloques cruzados del jacobiano salen por autodiff.
 
 ### `Source/Simulation/Solvers.py`
 - `linearSolver`: ensamblado + `DirectSolver` o `IterativeSolver`.
-- `newtonSolver`: tolerancia relativa sobre `||R||`, búsqueda de línea por *backtracking*.
+- `newtonSolver`: tolerancia relativa sobre `||R||` escalada fila a fila con la diagonal del jacobiano inicial (cada ecuación
+  queda en las unidades de su incógnita, de modo que T ~ 300 no domina sobre c ~ 1), búsqueda de línea por *backtracking*.
+  Si el residuo deja de ser finito con el paso mínimo, se detiene con un aviso y conserva el último estado finito.
 - `transientSolver`: θ-método con paso fijo, LU reutilizada si la matriz no cambia, DOF fijados por Dirichlet,
   `timeValues` guardados por campo.
 
@@ -100,13 +114,22 @@ Toda física debe implementar `build_system`; la antigua ruta por elemento (JAX 
 
 ### 5.1 Añadir una física
 1. Crear una clase que herede de `physics`, con sus variables (`scalarField`) y constantes.
-2. Implementar `build_system(model, disc, layout)`: crear un `System`, añadir los operadores (`ops.diffusion`, ...)
+2. Implementar `add_terms(system, model, disc, layout)`: añadir al `System` los operadores (`ops.diffusion`, ...)
    repartidos con `layout.scatter_matrix`, y llamar a `system.add_boundary_conditions(model.mesh, self.facet_bcs)`.
 3. Para términos no lineales, definir una función JAX `f(u)` y envolverla con `PointwiseLaw`; añadirla con
    `system.add_volume_law(...)`. El jacobiano sale por autodiff (conserve el objeto `PointwiseLaw` entre ensamblados).
 4. Añadir métodos `addBC_*` que escriban en `node.BC` o en `facet_bcs` (`{'type', 'field', 'facets', ...}`).
 5. Probar con soluciones analíticas y manufacturadas (ver `Test/test_species.py`) y un chequeo de jacobiano por
    diferencias finitas.
+
+### 5.1b Acoplar físicas
+- Declarar el modelo con varias físicas: `Model(psc=[ht, mt, ...])`. Cada una debe tener `part_name` y `add_terms`.
+- El acoplamiento es un término cuya ley puntual lee campos de varias físicas y escribe en las de otras: se añade con
+  `system.add_volume_law(ley, entradas, salidas)` desde la física que posee la ley (como las reacciones de `mt`, que
+  escriben en el campo de temperatura) o con `system.add_diffusion_law(ley, campo, entradas)` si lo que depende de otros
+  campos es un coeficiente de difusión (`D(T)`, `k(c)`).
+- Probar con una referencia independiente (una EDO del caso uniforme), con invariantes exactos del sistema acoplado y con
+  el jacobiano frente a diferencias finitas, incluidos los bloques cruzados (ver `Test/test_coupling.py`).
 
 ### 5.2 Fluidos y mecánica de sólidos (lo que ya está y lo que falta)
 - **Ya está:** campos con varias componentes en `DofLayout` (`FieldSpec('u', ncomp=dim)`), reparto por bloques entre

@@ -6,9 +6,8 @@
 
 # Class Definition for Heat transfer physics
 
-from Source.Physics.Physics import physics
+from Source.Physics.Physics import physics, KELVIN_OFFSET
 from Source.Primals.Scalar import scalarField
-from Source.Simulation.System import System
 from Source.Simulation.PointwiseLaw import PointwiseLaw, cached_law
 import Source.Simulation.Operators as ops
 from Source.enums import ShapeFunctionType
@@ -18,7 +17,6 @@ jax.config.update("jax_enable_x64", True)
 from jax import jit
 
 
-KELVIN_OFFSET = 273.15  # Temperatures are stored in °C; radiation needs K
 
 @jit
 def _calculate_radiative_heat_coef(epsilon, T_ext, T_surface):
@@ -29,6 +27,8 @@ def _calculate_radiative_heat_coef(epsilon, T_ext, T_surface):
 
 
 class ht(physics):
+
+    part_name = 'heat'  # name used when this physics is combined with others (CoupledPhysics)
     ConstRel = '∇.(k * ∇T) + Q == 0'
 
     # Set material properties.
@@ -61,15 +61,15 @@ class ht(physics):
 
         self.conductivity_law = k_of_T
 
-    def build_system(self, model, disc, layout):
+    def add_terms(self, system, model, disc, layout):
 
-        """Heat conduction with convection, source, Dirichlet, Neumann and Robin/radiation conditions.
+        """Heat conduction with convection, source and mass. The conditions (Dirichlet, Neumann, Robin,
+        radiation) are added by build_system.
 
         K and F can be numbers or functions of the coordinates; Newton h and Neumann flux can be
         numbers or functions of the temperature (radiation).
         """
 
-        system = System(disc, layout)
         rows = layout.element_dofs(disc.conn, 'T')
 
         if self.conductivity_law is None:
@@ -84,10 +84,6 @@ class ht(physics):
 
         system.add_vector(layout.scatter_vector(ops.source(disc, self.F_const), rows))
         system.add_mass(layout.scatter_matrix(ops.mass(disc, self.M_const), rows, rows))
-
-        system.add_boundary_conditions(model.mesh, self.facet_bcs)
-
-        return system
 
 ## ---------- Boundary conditions ---------- ##
 

@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 from Source.Pre_processing.Mesh import Mesh
 from Source.Material import material
+from Source.Physics.Coupled import CoupledPhysics
 import Source.Simulation.Solvers as Solution
 from Source.enums import StudyType, ProblemType, SolverType, DirectSolvers, Preconditioners
 from Source.logger_config import sim_logger
@@ -42,7 +43,8 @@ class Model(object):
         self.name = name  # Name of the model
         self.mtype = mtype  # Type of model
         self.mat = mat  # Material domain
-        self.physics = psc(self)  # Model physics
+        # Model physics: one physics class, or a list of classes solved together (CoupledPhysics)
+        self.physics = CoupledPhysics(self, psc) if isinstance(psc, (list, tuple)) else psc(self)
 
         if self.physics is None:
             self.physics_status = 'Not defined'

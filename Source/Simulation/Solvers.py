@@ -207,15 +207,20 @@ class modelSolver():
 
     def newtonSolver(self):
 
-        """Newton-Raphson for the nonlinear problem, with a backtracking line search on ||R||.
+        """Newton-Raphson for the nonlinear problem, with a backtracking line search on the scaled residual.
 
-        Stops when ||R|| <= rtol * ||R0|| or ||R|| <= atol. The residual and the tangent come from the
-        model; trial states are written to the field, and the last accepted state is kept.
+        The residual is scaled row by row with the diagonal of the initial tangent (never below 1), which
+        expresses every equation in the units of its own unknown. Without it, a field with large
+        numbers (a temperature of 300) would dominate the norm over a field of order 1 (a concentration).
+        Only the norm is scaled: the Newton step is computed with the unscaled system.
+
+        Stops when ||R|| <= rtol * ||R0|| or ||R|| <= atol (scaled norms). The residual and the tangent come
+        from the model; trial states are written to the field, and the last accepted state is kept.
         """
 
         sim_logger.info("------- Starting Newton-Raphson nonlinear solver -------")
 
-        rtol = 1e-8
+        rtol = 1e-10
         atol = 1e-10
         max_iterations = 200
         lam_min = 1.0 / 1024.0
@@ -223,7 +228,7 @@ class modelSolver():
         sim_logger.info(f"Relative tolerance: {rtol:.1e}, Absolute tolerance: {atol:.1e}, "
                         f"Max Number of Iterations: {max_iterations}")
 
-        header = f"| {'Iter':^6} | {'||R||':^15} | {'||R||/||R0||':^15} | {'Alpha (Step)':^12}"
+        header = f"| {'Iter':^6} | {'||R|| scaled':^15} | {'||R||/||R0||':^15} | {'Alpha (Step)':^12}"
         separator = "-" * len(header)
 
         sim_logger.info(separator)
@@ -233,10 +238,17 @@ class modelSolver():
         x = self.x0.copy()
 
         J, R = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
-        norm_R0 = np.linalg.norm(R)
+
+        scale = np.maximum(np.abs(J.diagonal()), 1.0)
+
+        def scaled_norm(residual):
+            return np.linalg.norm(residual / scale)
+
+        norm_R0 = scaled_norm(R)
         norm_R = norm_R0
 
         iteration = 0
+        diverged = False
 
         while norm_R > atol and norm_R > rtol * norm_R0 and iteration < max_iterations:
 
@@ -251,12 +263,21 @@ class modelSolver():
                 self.updateSolution(x_try)
 
                 J_try, R_try = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
-                norm_try = np.linalg.norm(R_try)
+                norm_try = scaled_norm(R_try)
 
-                if norm_try < (1.0 - 1e-4 * lam) * norm_R or lam <= lam_min:
+                finite = np.isfinite(norm_try)
+
+                if finite and (norm_try < (1.0 - 1e-4 * lam) * norm_R or lam <= lam_min):
+                    break
+
+                if not finite and lam <= lam_min:
+                    diverged = True
                     break
 
                 lam *= 0.5
+
+            if diverged:
+                break
 
             x, J, R, norm_R = x_try, J_try, R_try, norm_try
 
@@ -266,6 +287,9 @@ class modelSolver():
 
         if norm_R <= atol or norm_R <= rtol * norm_R0:
             sim_logger.info(f"Succefully converged in {iteration} iterations.")
+        elif diverged:
+            sim_logger.warning("Newton stopped: the residual is not finite even with the smallest step. "
+                               "The last finite state is kept.")
         else:
             sim_logger.warning("Solver did not converge at the specified tolerance and number of iterations.")
 

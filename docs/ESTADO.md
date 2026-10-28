@@ -39,6 +39,12 @@
 | k(T) 2D | y-independiente = 1D; manufacturada con `k = 1 + T²` | `Test/test_nonlinear_diffusion.py` | pasa; orden 2.00 |
 | k(T) jacobiano | k(T) + convección vectorial + radiación frente a diferencias finitas | `Test/test_nonlinear_diffusion.py` | pasa |
 | k(T) transitorio | conservación exacta de energía y límite estacionario | `Test/test_nonlinear_diffusion.py` | pasa |
+| Calor + especies: reactor adiabático | `T`, `A`, `C` uniformes frente a `scipy.integrate.solve_ivp` | `Test/test_coupling.py` | orden temporal 2.00 (Crank-Nicolson), ~1.1 (Euler) |
+| Calor + especies: conservación | `rho Cp T + Q A` y `A + C` constantes en el sistema discreto, θ = 1 y 0.5 | `Test/test_coupling.py` | pasa (1e-8) |
+| Calor + especies: invariantes estacionarios | `k T - Q D C` y `k T + Q D A` lineales con la solución de Newton | `Test/test_coupling.py` | pasa (1e-8) |
+| Calor + especies: 2D = 1D, jacobiano cruzado | datos independientes de y; J frente a diferencias finitas con bloques T-especie | `Test/test_coupling.py` | pasa |
+| Composición de físicas | delegación, errores por física o variable repetida, campo `T` ausente, `dH` sin campo | `Test/test_coupling.py` | pasa |
+| Newton ante una reacción desbocada | nunca deja NaN: se detiene con aviso y conserva el último estado finito | `Test/test_coupling.py` | pasa |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -60,7 +66,7 @@ lanza `ValueError` en lugar de contarse varias veces.
   en los puntos de Gauss en lugar de interpolar tasas nodales.
 - La velocidad de convección es `physics.vel` (antes había una constante `u = 0.01` en la ruta lineal y `vel = 1` en la
   no lineal).
-- Pendiente: acoplar la temperatura como campo en la ley de Arrhenius (hoy `T` es un número).
+- La temperatura como campo en la ley de Arrhenius y el calor de reacción ya están (ver «Acoplamiento calor-masa»).
 
 ### Limpieza hecha en la Etapa 5 y lo que queda
 Se eliminó el código muerto y los imports sin uso (`Source/` pasó de 3463 a 2763 líneas, -20 %):
@@ -76,6 +82,17 @@ Lo que sigue pendiente:
 - `Mesh.setElementShapeFunction` solo registra el tipo de función de forma (se mantiene por compatibilidad con los ejemplos).
 - Los archivos `test_ilu.py`, `test_lagrange.py`, `test_lambda.py`, `test_pardiso.py` y `testNumDiffTools.py` son
   scripts exploratorios, no pruebas automáticas.
+
+### Acoplamiento calor-masa
+- Operativo con `Model(psc=[ht, mt])`: Arrhenius con la T del campo y calor de reacción `dH`. No incluye todavía `D(T)`,
+  `k(c)`, velocidad compartida entre calor y especies (`heat.vel` y `mass.vel` son independientes) ni `rho Cp(T)`.
+  `add_diffusion_law` ya admite varias entradas, así que `D(T)` y `k(c)` son el siguiente paso natural.
+- **Varios estados estacionarios (ignición):** con exotermia fuerte puede haber más de una solución. Newton puede caer en
+  otra rama o tardar muchas iteraciones cerca de la ignición (con `Q = 300` y `k0 = 3e4` el caso de prueba necesita
+  unas 160 iteraciones). Recomendación: marchar en el tiempo hasta el estacionario y usar ese estado como inicial.
+- **Escalado en Newton:** el residuo se escala fila a fila con la diagonal del jacobiano inicial (cada ecuación en las
+  unidades de su incógnita). La tolerancia relativa pasó de 1e-8 a 1e-10 para conservar la exactitud de los casos 1D.
+- `heat.Convection = True` etc. deben asignarse en la parte (`model.physics.heat`), no en la combinación.
 
 ### Física y numérica
 - **Convección:** diferencias centradas sin estabilización. Para Pe alto habrá oscilaciones. `Pe` se calcula pero no se
@@ -130,7 +147,9 @@ Lo que sigue pendiente:
 
 | `2effe82` | `test-branch` | Etapa 7: calor 2D no lineal y transitorio |
 
-La conductividad `k(T)` está en el árbol de trabajo y todavía no está commiteada.
+| `675e5b4` | `test-branch` | `k(T)`: difusión no lineal con conductividad dependiente de la temperatura |
+
+El acoplamiento calor-masa está en el árbol de trabajo y todavía no está commiteado.
 
 ## 4. Próximos pasos propuestos
 
@@ -142,7 +161,8 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
    Las siguientes etapas de física (sólidos, fluidos) deben apoyarse en `System`, `DofLayout`, `Operators` y `PointwiseLaw`.
 3. ~~**2D no lineal y transitorio (Etapa 7).**~~ Hecha: radiación y `h(T)` en aristas, Newton y transitorio 2D, con
    `Test/test_nonlinear_transient.py` y `Example_2D_Transient.py`. `k(T)` también está hecho (término de difusión no
-   lineal). Siguiente en física: acoplamiento calor-masa, convección vectorial estabilizada y sólidos/fluidos.
+   lineal). El acoplamiento calor-masa también está hecho (primer paso: Arrhenius con la T del campo y calor de reacción). Siguiente en
+   física: `D(T)` y `k(c)`, convección compartida y estabilizada, y sólidos/fluidos.
 4. **Mallas y geometría (Etapa 8).** Importar `.msh` de gmsh (grupos físicos → aristas con nombre), añadir triángulos
    T3 a `Elements.py` y permitir geometrías no rectangulares. Validar con el parche en la malla importada.
 5. **Escalado de solvers y salida.** Precondicionador AMG (`pyamg`) para problemas grandes, cache de factorizaciones
