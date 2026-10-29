@@ -1,0 +1,386 @@
+2026-10-28 21:04:40 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:40 - INFO - Model: 2d
+2026-10-28 21:04:40 - INFO - Dimension: 2D
+2026-10-28 21:04:40 - INFO - Nodes: 36
+2026-10-28 21:04:40 - INFO - Elements: 24
+2026-10-28 21:04:40 - INFO - Physics: Heat transfer
+2026-10-28 21:04:40 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:40 - INFO - Study: Steady state
+2026-10-28 21:04:40 - INFO - Type: Nonlinear
+2026-10-28 21:04:40 - INFO - Method: Direct
+2026-10-28 21:04:40 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:40 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 21:04:40 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 21:04:40 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:40 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 21:04:40 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:41 - INFO - |   1    |   4.4693e+00    |   1.0555e-01    |    1.0000   
+2026-10-28 21:04:41 - INFO - |   2    |   6.9812e-02    |   1.6487e-03    |    1.0000   
+2026-10-28 21:04:41 - INFO - |   3    |   1.7862e-05    |   4.2184e-07    |    1.0000   
+2026-10-28 21:04:41 - INFO - |   4    |   1.1644e-12    |   2.7501e-14    |    1.0000   
+2026-10-28 21:04:41 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:41 - INFO - Succefully converged in 4 iterations.
+2026-10-28 21:04:41 - INFO - method finished on 0.521 seconds
+2026-10-28 21:04:41 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:41 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:41 - INFO - Model: 1d
+2026-10-28 21:04:41 - INFO - Dimension: 1D
+2026-10-28 21:04:41 - INFO - Nodes: 9
+2026-10-28 21:04:41 - INFO - Elements: 8
+2026-10-28 21:04:41 - INFO - Physics: Heat transfer
+2026-10-28 21:04:41 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:41 - INFO - Study: Steady state
+2026-10-28 21:04:41 - INFO - Type: Nonlinear
+2026-10-28 21:04:41 - INFO - Method: Direct
+2026-10-28 21:04:41 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:41 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 21:04:41 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 21:04:41 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:41 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 21:04:41 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:41 - INFO - |   1    |   1.8293e+00    |   1.0555e-01    |    1.0000   
+2026-10-28 21:04:41 - INFO - |   2    |   2.8575e-02    |   1.6487e-03    |    1.0000   
+2026-10-28 21:04:41 - INFO - |   3    |   7.3110e-06    |   4.2184e-07    |    1.0000   
+2026-10-28 21:04:41 - INFO - |   4    |   4.7981e-13    |   2.7684e-14    |    1.0000   
+2026-10-28 21:04:41 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:41 - INFO - Succefully converged in 4 iterations.
+2026-10-28 21:04:41 - INFO - method finished on 0.398 seconds
+2026-10-28 21:04:41 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:41 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:41 - INFO - Model: 2d
+2026-10-28 21:04:41 - INFO - Dimension: 2D
+2026-10-28 21:04:41 - INFO - Nodes: 36
+2026-10-28 21:04:41 - INFO - Elements: 24
+2026-10-28 21:04:41 - INFO - Physics: Heat transfer
+2026-10-28 21:04:41 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:41 - INFO - Study: Steady state
+2026-10-28 21:04:41 - INFO - Type: Nonlinear
+2026-10-28 21:04:41 - INFO - Method: Direct
+2026-10-28 21:04:41 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:41 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 21:04:41 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 21:04:41 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:41 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 21:04:41 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:42 - INFO - |   1    |   4.4693e+00    |   1.0555e-01    |    1.0000   
+2026-10-28 21:04:42 - INFO - |   2    |   6.9812e-02    |   1.6487e-03    |    1.0000   
+2026-10-28 21:04:42 - INFO - |   3    |   1.7862e-05    |   4.2184e-07    |    1.0000   
+2026-10-28 21:04:42 - INFO - |   4    |   1.1644e-12    |   2.7501e-14    |    1.0000   
+2026-10-28 21:04:42 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:42 - INFO - Succefully converged in 4 iterations.
+2026-10-28 21:04:42 - INFO - method finished on 0.357 seconds
+2026-10-28 21:04:42 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:42 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:42 - INFO - Model: 2d
+2026-10-28 21:04:42 - INFO - Dimension: 2D
+2026-10-28 21:04:42 - INFO - Nodes: 35
+2026-10-28 21:04:42 - INFO - Elements: 24
+2026-10-28 21:04:42 - INFO - Physics: Heat transfer
+2026-10-28 21:04:42 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:42 - INFO - Study: Steady state
+2026-10-28 21:04:42 - INFO - Type: Nonlinear
+2026-10-28 21:04:42 - INFO - Method: Direct
+2026-10-28 21:04:42 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:42 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 21:04:42 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 21:04:42 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:42 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 21:04:42 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:42 - INFO - |   1    |   4.2639e+00    |   1.0555e-01    |    1.0000   
+2026-10-28 21:04:42 - INFO - |   2    |   6.6604e-02    |   1.6487e-03    |    1.0000   
+2026-10-28 21:04:42 - INFO - |   3    |   1.7041e-05    |   4.2184e-07    |    1.0000   
+2026-10-28 21:04:42 - INFO - |   4    |   1.1144e-12    |   2.7587e-14    |    1.0000   
+2026-10-28 21:04:42 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:42 - INFO - Succefully converged in 4 iterations.
+2026-10-28 21:04:42 - INFO - method finished on 0.337 seconds
+2026-10-28 21:04:42 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:42 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:42 - INFO - Model: 2d
+2026-10-28 21:04:42 - INFO - Dimension: 2D
+2026-10-28 21:04:42 - INFO - Nodes: 35
+2026-10-28 21:04:42 - INFO - Elements: 24
+2026-10-28 21:04:42 - INFO - Physics: Heat transfer
+2026-10-28 21:04:42 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:42 - INFO - Study: Steady state
+2026-10-28 21:04:42 - INFO - Type: Nonlinear
+2026-10-28 21:04:42 - INFO - Method: Direct
+2026-10-28 21:04:42 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:42 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 21:04:42 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 21:04:42 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:42 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 21:04:42 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:42 - INFO - |   1    |   1.4461e+02    |   1.6248e-01    |    1.0000   
+2026-10-28 21:04:42 - INFO - |   2    |   4.0653e+01    |   4.5675e-02    |    1.0000   
+2026-10-28 21:04:42 - INFO - |   3    |   8.7018e+00    |   9.7768e-03    |    1.0000   
+2026-10-28 21:04:42 - INFO - |   4    |   8.2776e-01    |   9.3001e-04    |    1.0000   
+2026-10-28 21:04:42 - INFO - |   5    |   1.0138e-02    |   1.1390e-05    |    1.0000   
+2026-10-28 21:04:42 - INFO - |   6    |   1.5782e-06    |   1.7732e-09    |    1.0000   
+2026-10-28 21:04:42 - INFO - |   7    |   5.4082e-14    |   6.0763e-17    |    1.0000   
+2026-10-28 21:04:42 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:42 - INFO - Succefully converged in 7 iterations.
+2026-10-28 21:04:42 - INFO - method finished on 0.353 seconds
+2026-10-28 21:04:42 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:42 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:42 - INFO - Model: 2d
+2026-10-28 21:04:42 - INFO - Dimension: 2D
+2026-10-28 21:04:42 - INFO - Nodes: 289
+2026-10-28 21:04:42 - INFO - Elements: 256
+2026-10-28 21:04:42 - INFO - Physics: Heat transfer
+2026-10-28 21:04:42 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:42 - INFO - Study: Transient
+2026-10-28 21:04:42 - INFO - Type: Linear
+2026-10-28 21:04:42 - INFO - Method: Direct
+2026-10-28 21:04:42 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:42 - INFO - Time Discretization: 0.5
+2026-10-28 21:04:42 - INFO - Time Step: 0.0025
+2026-10-28 21:04:42 - INFO - Total Time: 0.05
+2026-10-28 21:04:42 - INFO - Theta = 0.5, steps = 20, dt = 0.0025
+2026-10-28 21:04:43 - INFO - method finished on 0.283 seconds
+2026-10-28 21:04:43 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:43 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:43 - INFO - Model: 2d
+2026-10-28 21:04:43 - INFO - Dimension: 2D
+2026-10-28 21:04:43 - INFO - Nodes: 289
+2026-10-28 21:04:43 - INFO - Elements: 256
+2026-10-28 21:04:43 - INFO - Physics: Heat transfer
+2026-10-28 21:04:43 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:43 - INFO - Study: Transient
+2026-10-28 21:04:43 - INFO - Type: Linear
+2026-10-28 21:04:43 - INFO - Method: Direct
+2026-10-28 21:04:43 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:43 - INFO - Time Discretization: 1.0
+2026-10-28 21:04:43 - INFO - Time Step: 0.0025
+2026-10-28 21:04:43 - INFO - Total Time: 0.05
+2026-10-28 21:04:43 - INFO - Theta = 1.0, steps = 20, dt = 0.0025
+2026-10-28 21:04:43 - INFO - method finished on 0.305 seconds
+2026-10-28 21:04:43 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:43 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:43 - INFO - Model: 2d
+2026-10-28 21:04:43 - INFO - Dimension: 2D
+2026-10-28 21:04:43 - INFO - Nodes: 81
+2026-10-28 21:04:43 - INFO - Elements: 64
+2026-10-28 21:04:43 - INFO - Physics: Heat transfer
+2026-10-28 21:04:43 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:43 - INFO - Study: Transient
+2026-10-28 21:04:43 - INFO - Type: Linear
+2026-10-28 21:04:43 - INFO - Method: Direct
+2026-10-28 21:04:43 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:43 - INFO - Time Discretization: 0.5
+2026-10-28 21:04:43 - INFO - Time Step: 0.0003125
+2026-10-28 21:04:43 - INFO - Total Time: 0.04
+2026-10-28 21:04:43 - INFO - Theta = 0.5, steps = 128, dt = 0.0003125
+2026-10-28 21:04:43 - INFO - method finished on 0.323 seconds
+2026-10-28 21:04:43 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:43 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:43 - INFO - Model: 2d
+2026-10-28 21:04:43 - INFO - Dimension: 2D
+2026-10-28 21:04:43 - INFO - Nodes: 81
+2026-10-28 21:04:43 - INFO - Elements: 64
+2026-10-28 21:04:43 - INFO - Physics: Heat transfer
+2026-10-28 21:04:43 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:43 - INFO - Study: Transient
+2026-10-28 21:04:43 - INFO - Type: Linear
+2026-10-28 21:04:43 - INFO - Method: Direct
+2026-10-28 21:04:43 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:43 - INFO - Time Discretization: 1.0
+2026-10-28 21:04:43 - INFO - Time Step: 0.01
+2026-10-28 21:04:43 - INFO - Total Time: 0.04
+2026-10-28 21:04:43 - INFO - Theta = 1.0, steps = 4, dt = 0.01
+2026-10-28 21:04:44 - INFO - method finished on 0.294 seconds
+2026-10-28 21:04:44 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:44 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:44 - INFO - Model: 2d
+2026-10-28 21:04:44 - INFO - Dimension: 2D
+2026-10-28 21:04:44 - INFO - Nodes: 81
+2026-10-28 21:04:44 - INFO - Elements: 64
+2026-10-28 21:04:44 - INFO - Physics: Heat transfer
+2026-10-28 21:04:44 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:44 - INFO - Study: Transient
+2026-10-28 21:04:44 - INFO - Type: Linear
+2026-10-28 21:04:44 - INFO - Method: Direct
+2026-10-28 21:04:44 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:44 - INFO - Time Discretization: 1.0
+2026-10-28 21:04:44 - INFO - Time Step: 0.005
+2026-10-28 21:04:44 - INFO - Total Time: 0.04
+2026-10-28 21:04:44 - INFO - Theta = 1.0, steps = 8, dt = 0.005
+2026-10-28 21:04:44 - INFO - method finished on 0.306 seconds
+2026-10-28 21:04:44 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:44 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:44 - INFO - Model: 2d
+2026-10-28 21:04:44 - INFO - Dimension: 2D
+2026-10-28 21:04:44 - INFO - Nodes: 81
+2026-10-28 21:04:44 - INFO - Elements: 64
+2026-10-28 21:04:44 - INFO - Physics: Heat transfer
+2026-10-28 21:04:44 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:44 - INFO - Study: Transient
+2026-10-28 21:04:44 - INFO - Type: Linear
+2026-10-28 21:04:44 - INFO - Method: Direct
+2026-10-28 21:04:44 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:44 - INFO - Time Discretization: 1.0
+2026-10-28 21:04:44 - INFO - Time Step: 0.0025
+2026-10-28 21:04:44 - INFO - Total Time: 0.04
+2026-10-28 21:04:44 - INFO - Theta = 1.0, steps = 16, dt = 0.0025
+2026-10-28 21:04:44 - INFO - method finished on 0.294 seconds
+2026-10-28 21:04:44 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:44 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:44 - INFO - Model: 2d
+2026-10-28 21:04:44 - INFO - Dimension: 2D
+2026-10-28 21:04:44 - INFO - Nodes: 81
+2026-10-28 21:04:44 - INFO - Elements: 64
+2026-10-28 21:04:44 - INFO - Physics: Heat transfer
+2026-10-28 21:04:44 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:44 - INFO - Study: Transient
+2026-10-28 21:04:44 - INFO - Type: Linear
+2026-10-28 21:04:44 - INFO - Method: Direct
+2026-10-28 21:04:44 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:44 - INFO - Time Discretization: 0.5
+2026-10-28 21:04:44 - INFO - Time Step: 0.01
+2026-10-28 21:04:44 - INFO - Total Time: 0.04
+2026-10-28 21:04:44 - INFO - Theta = 0.5, steps = 4, dt = 0.01
+2026-10-28 21:04:45 - INFO - method finished on 0.292 seconds
+2026-10-28 21:04:45 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:45 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:45 - INFO - Model: 2d
+2026-10-28 21:04:45 - INFO - Dimension: 2D
+2026-10-28 21:04:45 - INFO - Nodes: 81
+2026-10-28 21:04:45 - INFO - Elements: 64
+2026-10-28 21:04:45 - INFO - Physics: Heat transfer
+2026-10-28 21:04:45 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:45 - INFO - Study: Transient
+2026-10-28 21:04:45 - INFO - Type: Linear
+2026-10-28 21:04:45 - INFO - Method: Direct
+2026-10-28 21:04:45 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:45 - INFO - Time Discretization: 0.5
+2026-10-28 21:04:45 - INFO - Time Step: 0.005
+2026-10-28 21:04:45 - INFO - Total Time: 0.04
+2026-10-28 21:04:45 - INFO - Theta = 0.5, steps = 8, dt = 0.005
+2026-10-28 21:04:45 - INFO - method finished on 0.282 seconds
+2026-10-28 21:04:45 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:45 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:45 - INFO - Model: 2d
+2026-10-28 21:04:45 - INFO - Dimension: 2D
+2026-10-28 21:04:45 - INFO - Nodes: 81
+2026-10-28 21:04:45 - INFO - Elements: 64
+2026-10-28 21:04:45 - INFO - Physics: Heat transfer
+2026-10-28 21:04:45 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:45 - INFO - Study: Transient
+2026-10-28 21:04:45 - INFO - Type: Linear
+2026-10-28 21:04:45 - INFO - Method: Direct
+2026-10-28 21:04:45 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:45 - INFO - Time Discretization: 0.5
+2026-10-28 21:04:45 - INFO - Time Step: 0.0025
+2026-10-28 21:04:45 - INFO - Total Time: 0.04
+2026-10-28 21:04:45 - INFO - Theta = 0.5, steps = 16, dt = 0.0025
+2026-10-28 21:04:45 - INFO - method finished on 0.374 seconds
+2026-10-28 21:04:45 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:45 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:45 - INFO - Model: 2d
+2026-10-28 21:04:45 - INFO - Dimension: 2D
+2026-10-28 21:04:45 - INFO - Nodes: 49
+2026-10-28 21:04:45 - INFO - Elements: 36
+2026-10-28 21:04:45 - INFO - Physics: Heat transfer
+2026-10-28 21:04:45 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:45 - INFO - Study: Transient
+2026-10-28 21:04:45 - INFO - Type: Linear
+2026-10-28 21:04:45 - INFO - Method: Direct
+2026-10-28 21:04:45 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:45 - INFO - Time Discretization: 1.0
+2026-10-28 21:04:45 - INFO - Time Step: 0.05
+2026-10-28 21:04:45 - INFO - Total Time: 0.5
+2026-10-28 21:04:45 - INFO - Theta = 1.0, steps = 10, dt = 0.05
+2026-10-28 21:04:46 - INFO - method finished on 0.29 seconds
+2026-10-28 21:04:46 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:46 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:46 - INFO - Model: 2d
+2026-10-28 21:04:46 - INFO - Dimension: 2D
+2026-10-28 21:04:46 - INFO - Nodes: 49
+2026-10-28 21:04:46 - INFO - Elements: 36
+2026-10-28 21:04:46 - INFO - Physics: Heat transfer
+2026-10-28 21:04:46 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:46 - INFO - Study: Transient
+2026-10-28 21:04:46 - INFO - Type: Linear
+2026-10-28 21:04:46 - INFO - Method: Direct
+2026-10-28 21:04:46 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:46 - INFO - Time Discretization: 0.5
+2026-10-28 21:04:46 - INFO - Time Step: 0.05
+2026-10-28 21:04:46 - INFO - Total Time: 0.5
+2026-10-28 21:04:46 - INFO - Theta = 0.5, steps = 10, dt = 0.05
+2026-10-28 21:04:46 - INFO - method finished on 0.29 seconds
+2026-10-28 21:04:46 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:46 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:46 - INFO - Model: 2d
+2026-10-28 21:04:46 - INFO - Dimension: 2D
+2026-10-28 21:04:46 - INFO - Nodes: 45
+2026-10-28 21:04:46 - INFO - Elements: 32
+2026-10-28 21:04:46 - INFO - Physics: Heat transfer
+2026-10-28 21:04:46 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:46 - INFO - Study: Steady state
+2026-10-28 21:04:46 - INFO - Type: Nonlinear
+2026-10-28 21:04:46 - INFO - Method: Direct
+2026-10-28 21:04:46 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:46 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 21:04:46 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 21:04:46 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:46 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 21:04:46 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:46 - INFO - |   1    |   4.2289e+01    |   1.1443e-01    |    1.0000   
+2026-10-28 21:04:46 - INFO - |   2    |   5.0934e+00    |   1.3782e-02    |    1.0000   
+2026-10-28 21:04:46 - INFO - |   3    |   1.1190e-01    |   3.0279e-04    |    1.0000   
+2026-10-28 21:04:46 - INFO - |   4    |   5.8900e-05    |   1.5937e-07    |    1.0000   
+2026-10-28 21:04:46 - INFO - |   5    |   1.6274e-11    |   4.4035e-14    |    1.0000   
+2026-10-28 21:04:46 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:46 - INFO - Succefully converged in 5 iterations.
+2026-10-28 21:04:46 - INFO - method finished on 0.399 seconds
+2026-10-28 21:04:46 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:46 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:46 - INFO - Model: 2d
+2026-10-28 21:04:46 - INFO - Dimension: 2D
+2026-10-28 21:04:46 - INFO - Nodes: 45
+2026-10-28 21:04:46 - INFO - Elements: 32
+2026-10-28 21:04:46 - INFO - Physics: Heat transfer
+2026-10-28 21:04:46 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:46 - INFO - Study: Transient
+2026-10-28 21:04:46 - INFO - Type: Linear
+2026-10-28 21:04:46 - INFO - Method: Direct
+2026-10-28 21:04:46 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:46 - INFO - Time Discretization: 1.0
+2026-10-28 21:04:46 - INFO - Time Step: 0.05
+2026-10-28 21:04:46 - INFO - Total Time: 6.0
+2026-10-28 21:04:46 - INFO - Theta = 1.0, steps = 120, dt = 0.05
+2026-10-28 21:04:47 - INFO - method finished on 0.58 seconds
+2026-10-28 21:04:47 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:47 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:47 - INFO - Model: 2d
+2026-10-28 21:04:47 - INFO - Dimension: 2D
+2026-10-28 21:04:47 - INFO - Nodes: 45
+2026-10-28 21:04:47 - INFO - Elements: 32
+2026-10-28 21:04:47 - INFO - Physics: Heat transfer
+2026-10-28 21:04:47 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:47 - INFO - Study: Transient
+2026-10-28 21:04:47 - INFO - Type: Linear
+2026-10-28 21:04:47 - INFO - Method: Direct
+2026-10-28 21:04:47 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:47 - INFO - Time Discretization: 0.5
+2026-10-28 21:04:47 - INFO - Time Step: 0.02
+2026-10-28 21:04:47 - INFO - Total Time: 6.0
+2026-10-28 21:04:47 - INFO - Theta = 0.5, steps = 300, dt = 0.02
+2026-10-28 21:04:48 - INFO - method finished on 0.882 seconds
+2026-10-28 21:04:48 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:48 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:48 - INFO - Model: 2d
+2026-10-28 21:04:48 - INFO - Dimension: 2D
+2026-10-28 21:04:48 - INFO - Nodes: 25
+2026-10-28 21:04:48 - INFO - Elements: 16
+2026-10-28 21:04:48 - INFO - Physics: Heat transfer
+2026-10-28 21:04:48 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:48 - INFO - Study: Transient
+2026-10-28 21:04:48 - INFO - Type: Linear
+2026-10-28 21:04:48 - INFO - Method: Direct
+2026-10-28 21:04:48 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:48 - INFO - Time Discretization: 1.0
+2026-10-28 21:04:48 - INFO - Time Step: 0.1
+2026-10-28 21:04:48 - INFO - Total Time: 0.3
+2026-10-28 21:04:48 - INFO - Theta = 1.0, steps = 3, dt = 0.1
+2026-10-28 21:04:48 - INFO - method finished on 0.3 seconds
+2026-10-28 21:04:48 - INFO - ------- Simulation finished -------

@@ -1,0 +1,26 @@
+2026-10-28 19:40:09 - INFO - ------- Starting simulation -------
+2026-10-28 19:40:09 - INFO - Model: contraccion
+2026-10-28 19:40:09 - INFO - Dimension: 2D
+2026-10-28 19:40:09 - INFO - Nodes: 2317
+2026-10-28 19:40:09 - INFO - Elements: 4250
+2026-10-28 19:40:09 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 19:40:09 - INFO - ------- Solver configuration -------
+2026-10-28 19:40:09 - INFO - Study: Steady state
+2026-10-28 19:40:09 - INFO - Type: Linear
+2026-10-28 19:40:09 - INFO - Method: Direct
+2026-10-28 19:40:09 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:40:10 - INFO - method finished on 0.845 seconds
+2026-10-28 19:40:10 - INFO - ------- Simulation finished -------
+2026-10-28 19:40:10 - INFO - ------- Starting simulation -------
+2026-10-28 19:40:10 - INFO - Model: contraccion
+2026-10-28 19:40:10 - INFO - Dimension: 2D
+2026-10-28 19:40:10 - INFO - Nodes: 8686
+2026-10-28 19:40:10 - INFO - Elements: 16606
+2026-10-28 19:40:10 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 19:40:10 - INFO - ------- Solver configuration -------
+2026-10-28 19:40:10 - INFO - Study: Steady state
+2026-10-28 19:40:10 - INFO - Type: Linear
+2026-10-28 19:40:10 - INFO - Method: Direct
+2026-10-28 19:40:10 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:40:12 - INFO - method finished on 1.723 seconds
+2026-10-28 19:40:12 - INFO - ------- Simulation finished -------

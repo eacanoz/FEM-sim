@@ -1,0 +1,291 @@
+2026-10-28 19:15:33 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:33 - INFO - Model: mms
+2026-10-28 19:15:33 - INFO - Dimension: 2D
+2026-10-28 19:15:33 - INFO - Nodes: 25
+2026-10-28 19:15:33 - INFO - Elements: 16
+2026-10-28 19:15:33 - INFO - Physics: Vector test physics
+2026-10-28 19:15:33 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:33 - INFO - Study: Steady state
+2026-10-28 19:15:33 - INFO - Type: Linear
+2026-10-28 19:15:33 - INFO - Method: Direct
+2026-10-28 19:15:33 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:34 - INFO - method finished on 0.402 seconds
+2026-10-28 19:15:34 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:34 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:34 - INFO - Model: mms
+2026-10-28 19:15:34 - INFO - Dimension: 2D
+2026-10-28 19:15:34 - INFO - Nodes: 81
+2026-10-28 19:15:34 - INFO - Elements: 64
+2026-10-28 19:15:34 - INFO - Physics: Vector test physics
+2026-10-28 19:15:34 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:34 - INFO - Study: Steady state
+2026-10-28 19:15:34 - INFO - Type: Linear
+2026-10-28 19:15:34 - INFO - Method: Direct
+2026-10-28 19:15:34 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:34 - INFO - method finished on 0.307 seconds
+2026-10-28 19:15:34 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:34 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:34 - INFO - Model: mms
+2026-10-28 19:15:34 - INFO - Dimension: 2D
+2026-10-28 19:15:34 - INFO - Nodes: 289
+2026-10-28 19:15:34 - INFO - Elements: 256
+2026-10-28 19:15:34 - INFO - Physics: Vector test physics
+2026-10-28 19:15:34 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:34 - INFO - Study: Steady state
+2026-10-28 19:15:34 - INFO - Type: Linear
+2026-10-28 19:15:34 - INFO - Method: Direct
+2026-10-28 19:15:34 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:34 - INFO - method finished on 0.311 seconds
+2026-10-28 19:15:34 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:34 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:34 - INFO - Model: mms
+2026-10-28 19:15:34 - INFO - Dimension: 2D
+2026-10-28 19:15:34 - INFO - Nodes: 1089
+2026-10-28 19:15:34 - INFO - Elements: 1024
+2026-10-28 19:15:34 - INFO - Physics: Vector test physics
+2026-10-28 19:15:34 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:34 - INFO - Study: Steady state
+2026-10-28 19:15:34 - INFO - Type: Linear
+2026-10-28 19:15:34 - INFO - Method: Direct
+2026-10-28 19:15:34 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:35 - INFO - method finished on 0.323 seconds
+2026-10-28 19:15:35 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:35 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:35 - INFO - Model: mms
+2026-10-28 19:15:35 - INFO - Dimension: 2D
+2026-10-28 19:15:35 - INFO - Nodes: 25
+2026-10-28 19:15:35 - INFO - Elements: 32
+2026-10-28 19:15:35 - INFO - Physics: Vector test physics
+2026-10-28 19:15:35 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:35 - INFO - Study: Steady state
+2026-10-28 19:15:35 - INFO - Type: Linear
+2026-10-28 19:15:35 - INFO - Method: Direct
+2026-10-28 19:15:35 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:35 - INFO - method finished on 0.289 seconds
+2026-10-28 19:15:35 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:35 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:35 - INFO - Model: mms
+2026-10-28 19:15:35 - INFO - Dimension: 2D
+2026-10-28 19:15:35 - INFO - Nodes: 81
+2026-10-28 19:15:35 - INFO - Elements: 128
+2026-10-28 19:15:35 - INFO - Physics: Vector test physics
+2026-10-28 19:15:35 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:35 - INFO - Study: Steady state
+2026-10-28 19:15:35 - INFO - Type: Linear
+2026-10-28 19:15:35 - INFO - Method: Direct
+2026-10-28 19:15:35 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:35 - INFO - method finished on 0.299 seconds
+2026-10-28 19:15:35 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:35 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:35 - INFO - Model: mms
+2026-10-28 19:15:35 - INFO - Dimension: 2D
+2026-10-28 19:15:35 - INFO - Nodes: 289
+2026-10-28 19:15:35 - INFO - Elements: 512
+2026-10-28 19:15:35 - INFO - Physics: Vector test physics
+2026-10-28 19:15:35 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:35 - INFO - Study: Steady state
+2026-10-28 19:15:35 - INFO - Type: Linear
+2026-10-28 19:15:35 - INFO - Method: Direct
+2026-10-28 19:15:35 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:36 - INFO - method finished on 0.309 seconds
+2026-10-28 19:15:36 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:36 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:36 - INFO - Model: mms
+2026-10-28 19:15:36 - INFO - Dimension: 2D
+2026-10-28 19:15:36 - INFO - Nodes: 1089
+2026-10-28 19:15:36 - INFO - Elements: 2048
+2026-10-28 19:15:36 - INFO - Physics: Vector test physics
+2026-10-28 19:15:36 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:36 - INFO - Study: Steady state
+2026-10-28 19:15:36 - INFO - Type: Linear
+2026-10-28 19:15:36 - INFO - Method: Direct
+2026-10-28 19:15:36 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:36 - INFO - method finished on 0.324 seconds
+2026-10-28 19:15:36 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:36 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:36 - INFO - Model: patch
+2026-10-28 19:15:36 - INFO - Dimension: 2D
+2026-10-28 19:15:36 - INFO - Nodes: 36
+2026-10-28 19:15:36 - INFO - Elements: 25
+2026-10-28 19:15:36 - INFO - Physics: Vector test physics
+2026-10-28 19:15:36 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:36 - INFO - Study: Steady state
+2026-10-28 19:15:36 - INFO - Type: Linear
+2026-10-28 19:15:36 - INFO - Method: Direct
+2026-10-28 19:15:36 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:36 - INFO - method finished on 0.303 seconds
+2026-10-28 19:15:36 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:36 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:36 - INFO - Model: patch
+2026-10-28 19:15:36 - INFO - Dimension: 2D
+2026-10-28 19:15:36 - INFO - Nodes: 36
+2026-10-28 19:15:36 - INFO - Elements: 50
+2026-10-28 19:15:36 - INFO - Physics: Vector test physics
+2026-10-28 19:15:36 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:36 - INFO - Study: Steady state
+2026-10-28 19:15:36 - INFO - Type: Linear
+2026-10-28 19:15:36 - INFO - Method: Direct
+2026-10-28 19:15:36 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:36 - INFO - method finished on 0.294 seconds
+2026-10-28 19:15:36 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:36 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:36 - INFO - Model: bad
+2026-10-28 19:15:36 - INFO - Dimension: 2D
+2026-10-28 19:15:36 - INFO - Nodes: 9
+2026-10-28 19:15:36 - INFO - Elements: 4
+2026-10-28 19:15:36 - INFO - Physics: Vector test physics
+2026-10-28 19:15:36 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:36 - INFO - Study: Steady state
+2026-10-28 19:15:36 - INFO - Type: Linear
+2026-10-28 19:15:36 - INFO - Method: Direct
+2026-10-28 19:15:36 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:36 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:36 - INFO - Model: decay
+2026-10-28 19:15:36 - INFO - Dimension: 2D
+2026-10-28 19:15:36 - INFO - Nodes: 289
+2026-10-28 19:15:36 - INFO - Elements: 256
+2026-10-28 19:15:36 - INFO - Physics: Vector test physics
+2026-10-28 19:15:36 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:36 - INFO - Study: Transient
+2026-10-28 19:15:36 - INFO - Type: Linear
+2026-10-28 19:15:36 - INFO - Method: Direct
+2026-10-28 19:15:36 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:36 - INFO - Time Discretization: 0.5
+2026-10-28 19:15:36 - INFO - Time Step: 0.01
+2026-10-28 19:15:36 - INFO - Total Time: 0.1
+2026-10-28 19:15:36 - INFO - Theta = 0.5, steps = 10, dt = 0.01
+2026-10-28 19:15:37 - INFO - method finished on 0.309 seconds
+2026-10-28 19:15:37 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:38 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:38 - INFO - Model: power
+2026-10-28 19:15:38 - INFO - Dimension: 1D
+2026-10-28 19:15:38 - INFO - Nodes: 9
+2026-10-28 19:15:38 - INFO - Elements: 8
+2026-10-28 19:15:38 - INFO - Physics: Gradient law test physics
+2026-10-28 19:15:38 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:38 - INFO - Study: Steady state
+2026-10-28 19:15:38 - INFO - Type: Nonlinear
+2026-10-28 19:15:38 - INFO - Method: Direct
+2026-10-28 19:15:38 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:38 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 19:15:38 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 19:15:38 - INFO - -----------------------------------------------------------
+2026-10-28 19:15:38 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 19:15:38 - INFO - -----------------------------------------------------------
+2026-10-28 19:15:38 - INFO - |   1    |   4.5123e-03    |   3.6156e-01    |    0.5000   
+2026-10-28 19:15:38 - INFO - |   2    |   4.5005e-03    |   3.6061e-01    |    1.0000   
+2026-10-28 19:15:38 - INFO - |   3    |   4.4879e-03    |   3.5960e-01    |    0.1250   
+2026-10-28 19:15:38 - INFO - |   4    |   4.3116e-03    |   3.4547e-01    |    1.0000   
+2026-10-28 19:15:38 - INFO - |   5    |   2.3389e-03    |   1.8741e-01    |    1.0000   
+2026-10-28 19:15:38 - INFO - |   6    |   5.5034e-04    |   4.4098e-02    |    1.0000   
+2026-10-28 19:15:38 - INFO - |   7    |   2.8945e-05    |   2.3193e-03    |    1.0000   
+2026-10-28 19:15:38 - INFO - |   8    |   7.9849e-08    |   6.3981e-06    |    1.0000   
+2026-10-28 19:15:38 - INFO - |   9    |   6.0765e-13    |   4.8690e-11    |    1.0000   
+2026-10-28 19:15:38 - INFO - -----------------------------------------------------------
+2026-10-28 19:15:38 - INFO - Succefully converged in 9 iterations.
+2026-10-28 19:15:38 - INFO - method finished on 0.382 seconds
+2026-10-28 19:15:38 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:38 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:38 - INFO - Model: darcy1d
+2026-10-28 19:15:38 - INFO - Dimension: 1D
+2026-10-28 19:15:38 - INFO - Nodes: 11
+2026-10-28 19:15:38 - INFO - Elements: 10
+2026-10-28 19:15:38 - INFO - Physics: Darcy flow
+2026-10-28 19:15:38 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:38 - INFO - Study: Steady state
+2026-10-28 19:15:38 - INFO - Type: Linear
+2026-10-28 19:15:38 - INFO - Method: Direct
+2026-10-28 19:15:38 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:38 - INFO - method finished on 0.291 seconds
+2026-10-28 19:15:38 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:38 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:38 - INFO - Model: darcy2d
+2026-10-28 19:15:38 - INFO - Dimension: 2D
+2026-10-28 19:15:38 - INFO - Nodes: 25
+2026-10-28 19:15:38 - INFO - Elements: 16
+2026-10-28 19:15:38 - INFO - Physics: Darcy flow
+2026-10-28 19:15:38 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:38 - INFO - Study: Steady state
+2026-10-28 19:15:38 - INFO - Type: Linear
+2026-10-28 19:15:38 - INFO - Method: Direct
+2026-10-28 19:15:38 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:39 - INFO - method finished on 0.31 seconds
+2026-10-28 19:15:39 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:39 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:39 - INFO - Model: darcy2d
+2026-10-28 19:15:39 - INFO - Dimension: 2D
+2026-10-28 19:15:39 - INFO - Nodes: 25
+2026-10-28 19:15:39 - INFO - Elements: 32
+2026-10-28 19:15:39 - INFO - Physics: Darcy flow
+2026-10-28 19:15:39 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:39 - INFO - Study: Steady state
+2026-10-28 19:15:39 - INFO - Type: Linear
+2026-10-28 19:15:39 - INFO - Method: Direct
+2026-10-28 19:15:39 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:39 - INFO - method finished on 0.315 seconds
+2026-10-28 19:15:39 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:39 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:39 - INFO - Model: inj
+2026-10-28 19:15:39 - INFO - Dimension: 2D
+2026-10-28 19:15:39 - INFO - Nodes: 28
+2026-10-28 19:15:39 - INFO - Elements: 36
+2026-10-28 19:15:39 - INFO - Physics: Darcy flow
+2026-10-28 19:15:39 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:39 - INFO - Study: Steady state
+2026-10-28 19:15:39 - INFO - Type: Linear
+2026-10-28 19:15:39 - INFO - Method: Direct
+2026-10-28 19:15:39 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:39 - INFO - method finished on 0.299 seconds
+2026-10-28 19:15:39 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:39 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:39 - INFO - Model: hydro
+2026-10-28 19:15:39 - INFO - Dimension: 2D
+2026-10-28 19:15:39 - INFO - Nodes: 25
+2026-10-28 19:15:39 - INFO - Elements: 16
+2026-10-28 19:15:39 - INFO - Physics: Darcy flow
+2026-10-28 19:15:39 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:39 - INFO - Study: Steady state
+2026-10-28 19:15:39 - INFO - Type: Linear
+2026-10-28 19:15:39 - INFO - Method: Direct
+2026-10-28 19:15:39 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:40 - INFO - method finished on 0.292 seconds
+2026-10-28 19:15:40 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:40 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:40 - INFO - Model: flow
+2026-10-28 19:15:40 - INFO - Dimension: 2D
+2026-10-28 19:15:40 - INFO - Nodes: 105
+2026-10-28 19:15:40 - INFO - Elements: 160
+2026-10-28 19:15:40 - INFO - Physics: Darcy flow
+2026-10-28 19:15:40 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:40 - INFO - Study: Steady state
+2026-10-28 19:15:40 - INFO - Type: Linear
+2026-10-28 19:15:40 - INFO - Method: Direct
+2026-10-28 19:15:40 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:40 - INFO - method finished on 0.292 seconds
+2026-10-28 19:15:40 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:40 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:40 - INFO - Model: tr
+2026-10-28 19:15:40 - INFO - Dimension: 2D
+2026-10-28 19:15:40 - INFO - Nodes: 105
+2026-10-28 19:15:40 - INFO - Elements: 160
+2026-10-28 19:15:40 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-28 19:15:40 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:40 - INFO - Study: Steady state
+2026-10-28 19:15:40 - INFO - Type: Linear
+2026-10-28 19:15:40 - INFO - Method: Direct
+2026-10-28 19:15:40 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:40 - INFO - method finished on 0.295 seconds
+2026-10-28 19:15:40 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:40 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:40 - INFO - Model: tr
+2026-10-28 19:15:40 - INFO - Dimension: 2D
+2026-10-28 19:15:40 - INFO - Nodes: 105
+2026-10-28 19:15:40 - INFO - Elements: 160
+2026-10-28 19:15:40 - INFO - Physics: Heat transfer + Transport of Chemical Species
+2026-10-28 19:15:40 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:40 - INFO - Study: Steady state
+2026-10-28 19:15:40 - INFO - Type: Linear
+2026-10-28 19:15:40 - INFO - Method: Direct
+2026-10-28 19:15:40 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:41 - INFO - method finished on 0.299 seconds
+2026-10-28 19:15:41 - INFO - ------- Simulation finished -------

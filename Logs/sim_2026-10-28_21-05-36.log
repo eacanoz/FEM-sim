@@ -1,0 +1,138 @@
+2026-10-28 21:05:36 - INFO - ------- Starting simulation -------
+2026-10-28 21:05:36 - INFO - Model: patch
+2026-10-28 21:05:36 - INFO - Dimension: 2D
+2026-10-28 21:05:36 - INFO - Nodes: 42
+2026-10-28 21:05:36 - INFO - Elements: 60
+2026-10-28 21:05:36 - INFO - Physics: Heat transfer
+2026-10-28 21:05:36 - INFO - ------- Solver configuration -------
+2026-10-28 21:05:36 - INFO - Study: Steady state
+2026-10-28 21:05:36 - INFO - Type: Linear
+2026-10-28 21:05:36 - INFO - Method: Direct
+2026-10-28 21:05:36 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:05:37 - INFO - method finished on 0.44 seconds
+2026-10-28 21:05:37 - INFO - ------- Simulation finished -------
+2026-10-28 21:05:37 - INFO - ------- Starting simulation -------
+2026-10-28 21:05:37 - INFO - Model: mms
+2026-10-28 21:05:37 - INFO - Dimension: 2D
+2026-10-28 21:05:37 - INFO - Nodes: 81
+2026-10-28 21:05:37 - INFO - Elements: 128
+2026-10-28 21:05:37 - INFO - Physics: Heat transfer
+2026-10-28 21:05:37 - INFO - ------- Solver configuration -------
+2026-10-28 21:05:37 - INFO - Study: Steady state
+2026-10-28 21:05:37 - INFO - Type: Linear
+2026-10-28 21:05:37 - INFO - Method: Direct
+2026-10-28 21:05:37 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:05:37 - INFO - method finished on 0.297 seconds
+2026-10-28 21:05:37 - INFO - ------- Simulation finished -------
+2026-10-28 21:05:37 - INFO - ------- Starting simulation -------
+2026-10-28 21:05:37 - INFO - Model: mms
+2026-10-28 21:05:37 - INFO - Dimension: 2D
+2026-10-28 21:05:37 - INFO - Nodes: 289
+2026-10-28 21:05:37 - INFO - Elements: 512
+2026-10-28 21:05:37 - INFO - Physics: Heat transfer
+2026-10-28 21:05:37 - INFO - ------- Solver configuration -------
+2026-10-28 21:05:37 - INFO - Study: Steady state
+2026-10-28 21:05:37 - INFO - Type: Linear
+2026-10-28 21:05:37 - INFO - Method: Direct
+2026-10-28 21:05:37 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:05:38 - INFO - method finished on 0.3 seconds
+2026-10-28 21:05:38 - INFO - ------- Simulation finished -------
+2026-10-28 21:05:38 - INFO - ------- Starting simulation -------
+2026-10-28 21:05:38 - INFO - Model: mms
+2026-10-28 21:05:38 - INFO - Dimension: 2D
+2026-10-28 21:05:38 - INFO - Nodes: 1089
+2026-10-28 21:05:38 - INFO - Elements: 2048
+2026-10-28 21:05:38 - INFO - Physics: Heat transfer
+2026-10-28 21:05:38 - INFO - ------- Solver configuration -------
+2026-10-28 21:05:38 - INFO - Study: Steady state
+2026-10-28 21:05:38 - INFO - Type: Linear
+2026-10-28 21:05:38 - INFO - Method: Direct
+2026-10-28 21:05:38 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:05:38 - INFO - method finished on 0.307 seconds
+2026-10-28 21:05:38 - INFO - ------- Simulation finished -------
+2026-10-28 21:05:38 - INFO - ------- Starting simulation -------
+2026-10-28 21:05:38 - INFO - Model: rd
+2026-10-28 21:05:38 - INFO - Dimension: 2D
+2026-10-28 21:05:38 - INFO - Nodes: 205
+2026-10-28 21:05:38 - INFO - Elements: 320
+2026-10-28 21:05:38 - INFO - Physics: Transport of Chemical Species
+2026-10-28 21:05:38 - INFO - ------- Solver configuration -------
+2026-10-28 21:05:38 - INFO - Study: Steady state
+2026-10-28 21:05:38 - INFO - Type: Nonlinear
+2026-10-28 21:05:38 - INFO - Method: Direct
+2026-10-28 21:05:38 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:05:38 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 21:05:38 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 21:05:38 - INFO - -----------------------------------------------------------
+2026-10-28 21:05:38 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 21:05:38 - INFO - -----------------------------------------------------------
+2026-10-28 21:05:38 - INFO - |   1    |   5.5953e-16    |   4.9947e-16    |    1.0000   
+2026-10-28 21:05:38 - INFO - -----------------------------------------------------------
+2026-10-28 21:05:38 - INFO - Succefully converged in 1 iterations.
+2026-10-28 21:05:38 - INFO - method finished on 0.484 seconds
+2026-10-28 21:05:38 - INFO - ------- Simulation finished -------
+2026-10-28 21:05:38 - INFO - ------- Starting simulation -------
+2026-10-28 21:05:38 - INFO - Model: cd
+2026-10-28 21:05:38 - INFO - Dimension: 2D
+2026-10-28 21:05:38 - INFO - Nodes: 52
+2026-10-28 21:05:38 - INFO - Elements: 72
+2026-10-28 21:05:38 - INFO - Physics: Heat transfer
+2026-10-28 21:05:38 - INFO - ------- Solver configuration -------
+2026-10-28 21:05:38 - INFO - Study: Steady state
+2026-10-28 21:05:38 - INFO - Type: Linear
+2026-10-28 21:05:38 - INFO - Method: Direct
+2026-10-28 21:05:38 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:05:39 - INFO - method finished on 0.31 seconds
+2026-10-28 21:05:39 - INFO - ------- Simulation finished -------
+2026-10-28 21:05:39 - INFO - ------- Starting simulation -------
+2026-10-28 21:05:39 - INFO - Model: cd
+2026-10-28 21:05:39 - INFO - Dimension: 2D
+2026-10-28 21:05:39 - INFO - Nodes: 52
+2026-10-28 21:05:39 - INFO - Elements: 72
+2026-10-28 21:05:39 - INFO - Physics: Heat transfer
+2026-10-28 21:05:39 - INFO - ------- Solver configuration -------
+2026-10-28 21:05:39 - INFO - Study: Steady state
+2026-10-28 21:05:39 - INFO - Type: Linear
+2026-10-28 21:05:39 - INFO - Method: Direct
+2026-10-28 21:05:39 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:05:39 - INFO - method finished on 0.314 seconds
+2026-10-28 21:05:39 - INFO - ------- Simulation finished -------
+2026-10-28 21:05:40 - INFO - ------- Starting simulation -------
+2026-10-28 21:05:40 - INFO - Model: annulus
+2026-10-28 21:05:40 - INFO - Dimension: 2D
+2026-10-28 21:05:40 - INFO - Nodes: 68
+2026-10-28 21:05:40 - INFO - Elements: 106
+2026-10-28 21:05:40 - INFO - Physics: Heat transfer
+2026-10-28 21:05:40 - INFO - ------- Solver configuration -------
+2026-10-28 21:05:40 - INFO - Study: Steady state
+2026-10-28 21:05:40 - INFO - Type: Linear
+2026-10-28 21:05:40 - INFO - Method: Direct
+2026-10-28 21:05:40 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:05:40 - INFO - method finished on 0.263 seconds
+2026-10-28 21:05:40 - INFO - ------- Simulation finished -------
+2026-10-28 21:05:40 - INFO - ------- Starting simulation -------
+2026-10-28 21:05:40 - INFO - Model: annulus
+2026-10-28 21:05:40 - INFO - Dimension: 2D
+2026-10-28 21:05:40 - INFO - Nodes: 226
+2026-10-28 21:05:40 - INFO - Elements: 395
+2026-10-28 21:05:40 - INFO - Physics: Heat transfer
+2026-10-28 21:05:40 - INFO - ------- Solver configuration -------
+2026-10-28 21:05:40 - INFO - Study: Steady state
+2026-10-28 21:05:40 - INFO - Type: Linear
+2026-10-28 21:05:40 - INFO - Method: Direct
+2026-10-28 21:05:40 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:05:41 - INFO - method finished on 0.281 seconds
+2026-10-28 21:05:41 - INFO - ------- Simulation finished -------
+2026-10-28 21:05:41 - INFO - ------- Starting simulation -------
+2026-10-28 21:05:41 - INFO - Model: q
+2026-10-28 21:05:41 - INFO - Dimension: 2D
+2026-10-28 21:05:41 - INFO - Nodes: 81
+2026-10-28 21:05:41 - INFO - Elements: 64
+2026-10-28 21:05:41 - INFO - Physics: Heat transfer
+2026-10-28 21:05:41 - INFO - ------- Solver configuration -------
+2026-10-28 21:05:41 - INFO - Study: Steady state
+2026-10-28 21:05:41 - INFO - Type: Linear
+2026-10-28 21:05:41 - INFO - Method: Direct
+2026-10-28 21:05:41 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:05:41 - INFO - method finished on 0.282 seconds
+2026-10-28 21:05:41 - INFO - ------- Simulation finished -------

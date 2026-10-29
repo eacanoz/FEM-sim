@@ -1,0 +1,68 @@
+2026-10-28 19:37:44 - INFO - ------- Starting simulation -------
+2026-10-28 19:37:44 - INFO - Model: s
+2026-10-28 19:37:44 - INFO - Dimension: 2D
+2026-10-28 19:37:44 - INFO - Nodes: 75
+2026-10-28 19:37:44 - INFO - Elements: 48
+2026-10-28 19:37:44 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 19:37:44 - INFO - ------- Solver configuration -------
+2026-10-28 19:37:44 - INFO - Study: Transient
+2026-10-28 19:37:44 - INFO - Type: Linear
+2026-10-28 19:37:44 - INFO - Method: Direct
+2026-10-28 19:37:44 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:37:44 - INFO - Time Discretization: 1.0
+2026-10-28 19:37:44 - INFO - Time Step: 0.0025
+2026-10-28 19:37:44 - INFO - Total Time: 0.05
+2026-10-28 19:37:44 - INFO - Theta = 1.0, steps = 20, dt = 0.0025
+2026-10-28 19:37:45 - INFO - method finished on 0.391 seconds
+2026-10-28 19:37:45 - INFO - ------- Simulation finished -------
+2026-10-28 19:37:45 - INFO - ------- Starting simulation -------
+2026-10-28 19:37:45 - INFO - Model: s
+2026-10-28 19:37:45 - INFO - Dimension: 2D
+2026-10-28 19:37:45 - INFO - Nodes: 75
+2026-10-28 19:37:45 - INFO - Elements: 48
+2026-10-28 19:37:45 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 19:37:45 - INFO - ------- Solver configuration -------
+2026-10-28 19:37:45 - INFO - Study: Transient
+2026-10-28 19:37:45 - INFO - Type: Linear
+2026-10-28 19:37:45 - INFO - Method: Direct
+2026-10-28 19:37:45 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:37:45 - INFO - Time Discretization: 1.0
+2026-10-28 19:37:45 - INFO - Time Step: 0.0025
+2026-10-28 19:37:45 - INFO - Total Time: 0.05
+2026-10-28 19:37:45 - INFO - Theta = 1.0, steps = 20, dt = 0.0025
+2026-10-28 19:37:45 - INFO - method finished on 0.277 seconds
+2026-10-28 19:37:45 - INFO - ------- Simulation finished -------
+2026-10-28 19:37:45 - INFO - ------- Starting simulation -------
+2026-10-28 19:37:45 - INFO - Model: s
+2026-10-28 19:37:45 - INFO - Dimension: 2D
+2026-10-28 19:37:45 - INFO - Nodes: 75
+2026-10-28 19:37:45 - INFO - Elements: 48
+2026-10-28 19:37:45 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 19:37:45 - INFO - ------- Solver configuration -------
+2026-10-28 19:37:45 - INFO - Study: Transient
+2026-10-28 19:37:45 - INFO - Type: Linear
+2026-10-28 19:37:45 - INFO - Method: Direct
+2026-10-28 19:37:45 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:37:45 - INFO - Time Discretization: 0.5
+2026-10-28 19:37:45 - INFO - Time Step: 0.0025
+2026-10-28 19:37:45 - INFO - Total Time: 0.05
+2026-10-28 19:37:45 - INFO - Theta = 0.5, steps = 20, dt = 0.0025
+2026-10-28 19:37:45 - INFO - method finished on 0.312 seconds
+2026-10-28 19:37:45 - INFO - ------- Simulation finished -------
+2026-10-28 19:37:45 - INFO - ------- Starting simulation -------
+2026-10-28 19:37:45 - INFO - Model: s
+2026-10-28 19:37:45 - INFO - Dimension: 2D
+2026-10-28 19:37:45 - INFO - Nodes: 75
+2026-10-28 19:37:45 - INFO - Elements: 48
+2026-10-28 19:37:45 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 19:37:45 - INFO - ------- Solver configuration -------
+2026-10-28 19:37:45 - INFO - Study: Transient
+2026-10-28 19:37:45 - INFO - Type: Linear
+2026-10-28 19:37:45 - INFO - Method: Direct
+2026-10-28 19:37:45 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:37:45 - INFO - Time Discretization: 0.5
+2026-10-28 19:37:45 - INFO - Time Step: 0.0025
+2026-10-28 19:37:45 - INFO - Total Time: 0.05
+2026-10-28 19:37:45 - INFO - Theta = 0.5, steps = 20, dt = 0.0025
+2026-10-28 19:37:46 - INFO - method finished on 0.302 seconds
+2026-10-28 19:37:46 - INFO - ------- Simulation finished -------

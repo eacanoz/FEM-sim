@@ -1,0 +1,190 @@
+2026-10-28 21:04:52 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:52 - INFO - Model: rendija
+2026-10-28 21:04:52 - INFO - Dimension: 2D
+2026-10-28 21:04:52 - INFO - Nodes: 1377
+2026-10-28 21:04:52 - INFO - Elements: 1280
+2026-10-28 21:04:52 - INFO - Physics: Creeping flow (Stokes) + Heat transfer
+2026-10-28 21:04:52 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:52 - INFO - Study: Steady state
+2026-10-28 21:04:52 - INFO - Type: Nonlinear
+2026-10-28 21:04:52 - INFO - Method: Direct
+2026-10-28 21:04:52 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:52 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 21:04:52 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 21:04:52 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:52 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 21:04:52 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:53 - INFO - |   1    |   2.7559e-11    |   3.0565e-10    |    1.0000   
+2026-10-28 21:04:53 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:53 - INFO - Succefully converged in 1 iterations.
+2026-10-28 21:04:53 - INFO - method finished on 0.697 seconds
+2026-10-28 21:04:53 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:53 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:53 - INFO - Model: rendija
+2026-10-28 21:04:53 - INFO - Dimension: 2D
+2026-10-28 21:04:53 - INFO - Nodes: 1377
+2026-10-28 21:04:53 - INFO - Elements: 1280
+2026-10-28 21:04:53 - INFO - Physics: Creeping flow (Stokes), CrossWLF viscosity + Heat transfer
+2026-10-28 21:04:53 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:53 - INFO - Study: Steady state
+2026-10-28 21:04:53 - INFO - Type: Nonlinear
+2026-10-28 21:04:53 - INFO - Method: Direct
+2026-10-28 21:04:53 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:53 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 21:04:53 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 21:04:53 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:53 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 21:04:53 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:54 - INFO - |   1    |   2.6606e-04    |   2.0786e-02    |    1.0000   
+2026-10-28 21:04:54 - INFO - |   2    |   2.6520e-06    |   2.0719e-04    |    1.0000   
+2026-10-28 21:04:54 - INFO - |   3    |   4.9429e-10    |   3.8618e-08    |    1.0000   
+2026-10-28 21:04:54 - INFO - |   4    |   5.2659e-13    |   4.1142e-11    |    1.0000   
+2026-10-28 21:04:54 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:54 - INFO - Succefully converged in 4 iterations.
+2026-10-28 21:04:54 - INFO - method finished on 0.918 seconds
+2026-10-28 21:04:54 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:54 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:54 - INFO - Model: rendija
+2026-10-28 21:04:54 - INFO - Dimension: 2D
+2026-10-28 21:04:54 - INFO - Nodes: 1377
+2026-10-28 21:04:54 - INFO - Elements: 1280
+2026-10-28 21:04:54 - INFO - Physics: Creeping flow (Stokes), CrossWLF viscosity, viscous heating + Heat transfer
+2026-10-28 21:04:54 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:54 - INFO - Study: Steady state
+2026-10-28 21:04:54 - INFO - Type: Nonlinear
+2026-10-28 21:04:54 - INFO - Method: Direct
+2026-10-28 21:04:54 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:54 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 21:04:54 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 21:04:54 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:54 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 21:04:54 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:55 - INFO - |   1    |   4.7295e-06    |   2.2441e-05    |    1.0000   
+2026-10-28 21:04:55 - INFO - |   2    |   4.7577e-10    |   2.2575e-09    |    1.0000   
+2026-10-28 21:04:55 - INFO - |   3    |   8.4318e-13    |   4.0008e-12    |    1.0000   
+2026-10-28 21:04:55 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:55 - INFO - Succefully converged in 3 iterations.
+2026-10-28 21:04:55 - INFO - method finished on 0.583 seconds
+2026-10-28 21:04:55 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:55 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:55 - INFO - Model: rendija
+2026-10-28 21:04:55 - INFO - Dimension: 2D
+2026-10-28 21:04:55 - INFO - Nodes: 1377
+2026-10-28 21:04:55 - INFO - Elements: 1280
+2026-10-28 21:04:55 - INFO - Physics: Creeping flow (Stokes), CrossWLF viscosity, viscous heating + Heat transfer
+2026-10-28 21:04:55 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:55 - INFO - Study: Steady state
+2026-10-28 21:04:55 - INFO - Type: Nonlinear
+2026-10-28 21:04:55 - INFO - Method: Direct
+2026-10-28 21:04:55 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:55 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 21:04:55 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 21:04:55 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:55 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 21:04:55 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:55 - INFO - |   1    |   5.1302e-02    |   7.5863e-01    |    1.0000   
+2026-10-28 21:04:55 - INFO - |   2    |   3.0454e-04    |   4.5034e-03    |    1.0000   
+2026-10-28 21:04:56 - INFO - |   3    |   2.1002e-07    |   3.1057e-06    |    1.0000   
+2026-10-28 21:04:56 - INFO - |   4    |   3.3526e-11    |   4.9576e-10    |    1.0000   
+2026-10-28 21:04:56 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:56 - INFO - Succefully converged in 4 iterations.
+2026-10-28 21:04:56 - INFO - method finished on 0.754 seconds
+2026-10-28 21:04:56 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:56 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:56 - INFO - Model: rendija
+2026-10-28 21:04:56 - INFO - Dimension: 2D
+2026-10-28 21:04:56 - INFO - Nodes: 1377
+2026-10-28 21:04:56 - INFO - Elements: 1280
+2026-10-28 21:04:56 - INFO - Physics: Creeping flow (Stokes), CrossWLF viscosity, viscous heating + Heat transfer
+2026-10-28 21:04:56 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:56 - INFO - Study: Steady state
+2026-10-28 21:04:56 - INFO - Type: Nonlinear
+2026-10-28 21:04:56 - INFO - Method: Direct
+2026-10-28 21:04:56 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:56 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 21:04:56 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 21:04:56 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:56 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 21:04:56 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:56 - INFO - |   1    |   1.3576e-02    |   6.0225e-01    |    1.0000   
+2026-10-28 21:04:56 - INFO - |   2    |   2.0688e-05    |   9.1778e-04    |    1.0000   
+2026-10-28 21:04:56 - INFO - |   3    |   2.0153e-08    |   8.9402e-07    |    1.0000   
+2026-10-28 21:04:56 - INFO - |   4    |   2.9402e-12    |   1.3043e-10    |    1.0000   
+2026-10-28 21:04:56 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:56 - INFO - Succefully converged in 4 iterations.
+2026-10-28 21:04:56 - INFO - method finished on 0.765 seconds
+2026-10-28 21:04:57 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:57 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:57 - INFO - Model: rendija
+2026-10-28 21:04:57 - INFO - Dimension: 2D
+2026-10-28 21:04:57 - INFO - Nodes: 1377
+2026-10-28 21:04:57 - INFO - Elements: 1280
+2026-10-28 21:04:57 - INFO - Physics: Creeping flow (Stokes), CrossWLF viscosity, viscous heating + Heat transfer
+2026-10-28 21:04:57 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:57 - INFO - Study: Steady state
+2026-10-28 21:04:57 - INFO - Type: Nonlinear
+2026-10-28 21:04:57 - INFO - Method: Direct
+2026-10-28 21:04:57 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:57 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 21:04:57 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 21:04:57 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:57 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 21:04:57 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:57 - INFO - |   1    |   2.9572e-02    |   6.5595e-01    |    1.0000   
+2026-10-28 21:04:57 - INFO - |   2    |   6.7121e-05    |   1.4888e-03    |    1.0000   
+2026-10-28 21:04:57 - INFO - |   3    |   1.1298e-07    |   2.5061e-06    |    1.0000   
+2026-10-28 21:04:57 - INFO - |   4    |   1.9925e-11    |   4.4195e-10    |    1.0000   
+2026-10-28 21:04:57 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:57 - INFO - Succefully converged in 4 iterations.
+2026-10-28 21:04:57 - INFO - method finished on 0.759 seconds
+2026-10-28 21:04:57 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:57 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:57 - INFO - Model: rendija
+2026-10-28 21:04:57 - INFO - Dimension: 2D
+2026-10-28 21:04:57 - INFO - Nodes: 1377
+2026-10-28 21:04:57 - INFO - Elements: 1280
+2026-10-28 21:04:57 - INFO - Physics: Creeping flow (Stokes), CrossWLF viscosity, viscous heating + Heat transfer
+2026-10-28 21:04:57 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:57 - INFO - Study: Steady state
+2026-10-28 21:04:57 - INFO - Type: Nonlinear
+2026-10-28 21:04:57 - INFO - Method: Direct
+2026-10-28 21:04:57 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:57 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 21:04:57 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 21:04:57 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:57 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 21:04:57 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:58 - INFO - |   1    |   5.8276e-02    |   6.4631e-01    |    1.0000   
+2026-10-28 21:04:58 - INFO - |   2    |   1.8065e-04    |   2.0035e-03    |    1.0000   
+2026-10-28 21:04:58 - INFO - |   3    |   4.0716e-07    |   4.5156e-06    |    1.0000   
+2026-10-28 21:04:58 - INFO - |   4    |   1.5115e-10    |   1.6763e-09    |    1.0000   
+2026-10-28 21:04:58 - INFO - |   5    |   1.6353e-12    |   1.8137e-11    |    1.0000   
+2026-10-28 21:04:58 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:58 - INFO - Succefully converged in 5 iterations.
+2026-10-28 21:04:58 - INFO - method finished on 0.849 seconds
+2026-10-28 21:04:58 - INFO - ------- Simulation finished -------
+2026-10-28 21:04:58 - INFO - ------- Starting simulation -------
+2026-10-28 21:04:58 - INFO - Model: rendija
+2026-10-28 21:04:58 - INFO - Dimension: 2D
+2026-10-28 21:04:58 - INFO - Nodes: 1377
+2026-10-28 21:04:58 - INFO - Elements: 1280
+2026-10-28 21:04:58 - INFO - Physics: Creeping flow (Stokes), CrossWLF viscosity, viscous heating + Heat transfer
+2026-10-28 21:04:58 - INFO - ------- Solver configuration -------
+2026-10-28 21:04:58 - INFO - Study: Steady state
+2026-10-28 21:04:58 - INFO - Type: Nonlinear
+2026-10-28 21:04:58 - INFO - Method: Direct
+2026-10-28 21:04:58 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 21:04:58 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 21:04:58 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 21:04:58 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:58 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 21:04:58 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:58 - INFO - |   1    |   1.0252e-01    |   5.6850e-01    |    1.0000   
+2026-10-28 21:04:59 - INFO - |   2    |   4.3607e-04    |   2.4181e-03    |    1.0000   
+2026-10-28 21:04:59 - INFO - |   3    |   9.8661e-07    |   5.4711e-06    |    1.0000   
+2026-10-28 21:04:59 - INFO - |   4    |   1.0220e-09    |   5.6671e-09    |    1.0000   
+2026-10-28 21:04:59 - INFO - |   5    |   7.4401e-12    |   4.1258e-11    |    1.0000   
+2026-10-28 21:04:59 - INFO - -----------------------------------------------------------
+2026-10-28 21:04:59 - INFO - Succefully converged in 5 iterations.
+2026-10-28 21:04:59 - INFO - method finished on 0.805 seconds
+2026-10-28 21:04:59 - INFO - ------- Simulation finished -------

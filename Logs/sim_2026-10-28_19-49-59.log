@@ -1,0 +1,104 @@
+2026-10-28 19:49:59 - INFO - ------- Starting simulation -------
+2026-10-28 19:49:59 - INFO - Model: cav
+2026-10-28 19:49:59 - INFO - Dimension: 2D
+2026-10-28 19:49:59 - INFO - Nodes: 1089
+2026-10-28 19:49:59 - INFO - Elements: 1024
+2026-10-28 19:49:59 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 19:49:59 - INFO - ------- Solver configuration -------
+2026-10-28 19:49:59 - INFO - Study: Steady state
+2026-10-28 19:49:59 - INFO - Type: Nonlinear
+2026-10-28 19:49:59 - INFO - Method: Direct
+2026-10-28 19:49:59 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:49:59 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 19:49:59 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 19:49:59 - INFO - -----------------------------------------------------------
+2026-10-28 19:49:59 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 19:49:59 - INFO - -----------------------------------------------------------
+2026-10-28 19:49:59 - INFO - Ningun contorno fija la presion: p = 0 en el nodo 0 (use setPressureReference).
+2026-10-28 19:50:00 - INFO - |   1    |   1.5188e-02    |   2.7279e-03    |    1.0000   
+2026-10-28 19:50:00 - INFO - |   2    |   1.6561e-03    |   2.9744e-04    |    1.0000   
+2026-10-28 19:50:00 - INFO - |   3    |   2.3670e-05    |   4.2512e-06    |    1.0000   
+2026-10-28 19:50:00 - INFO - |   4    |   1.8522e-08    |   3.3267e-09    |    1.0000   
+2026-10-28 19:50:00 - INFO - |   5    |   2.6849e-11    |   4.8222e-12    |    1.0000   
+2026-10-28 19:50:00 - INFO - -----------------------------------------------------------
+2026-10-28 19:50:00 - INFO - Succefully converged in 5 iterations.
+2026-10-28 19:50:00 - INFO - method finished on 0.905 seconds
+2026-10-28 19:50:00 - INFO - ------- Simulation finished -------
+2026-10-28 19:50:00 - INFO - ------- Starting simulation -------
+2026-10-28 19:50:00 - INFO - Model: cav
+2026-10-28 19:50:00 - INFO - Dimension: 2D
+2026-10-28 19:50:00 - INFO - Nodes: 1089
+2026-10-28 19:50:00 - INFO - Elements: 2048
+2026-10-28 19:50:00 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 19:50:00 - INFO - ------- Solver configuration -------
+2026-10-28 19:50:00 - INFO - Study: Steady state
+2026-10-28 19:50:00 - INFO - Type: Nonlinear
+2026-10-28 19:50:00 - INFO - Method: Direct
+2026-10-28 19:50:00 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:50:00 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 19:50:00 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 19:50:00 - INFO - -----------------------------------------------------------
+2026-10-28 19:50:00 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 19:50:00 - INFO - -----------------------------------------------------------
+2026-10-28 19:50:00 - INFO - Ningun contorno fija la presion: p = 0 en el nodo 0 (use setPressureReference).
+2026-10-28 19:50:01 - INFO - |   1    |   1.5156e-02    |   2.7221e-03    |    1.0000   
+2026-10-28 19:50:01 - INFO - |   2    |   1.5984e-03    |   2.8707e-04    |    1.0000   
+2026-10-28 19:50:01 - INFO - |   3    |   2.2157e-05    |   3.9796e-06    |    1.0000   
+2026-10-28 19:50:01 - INFO - |   4    |   2.5787e-08    |   4.6314e-09    |    1.0000   
+2026-10-28 19:50:01 - INFO - |   5    |   1.1545e-10    |   2.0735e-11    |    1.0000   
+2026-10-28 19:50:01 - INFO - -----------------------------------------------------------
+2026-10-28 19:50:01 - INFO - Succefully converged in 5 iterations.
+2026-10-28 19:50:01 - INFO - method finished on 0.763 seconds
+2026-10-28 19:50:01 - INFO - ------- Simulation finished -------
+2026-10-28 19:50:01 - INFO - ------- Starting simulation -------
+2026-10-28 19:50:01 - INFO - Model: cav
+2026-10-28 19:50:01 - INFO - Dimension: 2D
+2026-10-28 19:50:01 - INFO - Nodes: 4225
+2026-10-28 19:50:01 - INFO - Elements: 4096
+2026-10-28 19:50:01 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 19:50:01 - INFO - ------- Solver configuration -------
+2026-10-28 19:50:01 - INFO - Study: Steady state
+2026-10-28 19:50:01 - INFO - Type: Nonlinear
+2026-10-28 19:50:01 - INFO - Method: Direct
+2026-10-28 19:50:01 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:50:01 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 19:50:01 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 19:50:01 - INFO - -----------------------------------------------------------
+2026-10-28 19:50:01 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 19:50:01 - INFO - -----------------------------------------------------------
+2026-10-28 19:50:02 - INFO - Ningun contorno fija la presion: p = 0 en el nodo 0 (use setPressureReference).
+2026-10-28 19:50:02 - INFO - |   1    |   8.6716e-03    |   1.0925e-03    |    1.0000   
+2026-10-28 19:50:02 - INFO - |   2    |   8.7248e-04    |   1.0992e-04    |    1.0000   
+2026-10-28 19:50:03 - INFO - |   3    |   1.3327e-05    |   1.6791e-06    |    1.0000   
+2026-10-28 19:50:03 - INFO - |   4    |   2.5444e-09    |   3.2057e-10    |    1.0000   
+2026-10-28 19:50:03 - INFO - |   5    |   5.4454e-13    |   6.8605e-14    |    1.0000   
+2026-10-28 19:50:03 - INFO - -----------------------------------------------------------
+2026-10-28 19:50:03 - INFO - Succefully converged in 5 iterations.
+2026-10-28 19:50:03 - INFO - method finished on 2.27 seconds
+2026-10-28 19:50:03 - INFO - ------- Simulation finished -------
+2026-10-28 19:50:04 - INFO - ------- Starting simulation -------
+2026-10-28 19:50:04 - INFO - Model: cav
+2026-10-28 19:50:04 - INFO - Dimension: 2D
+2026-10-28 19:50:04 - INFO - Nodes: 4225
+2026-10-28 19:50:04 - INFO - Elements: 8192
+2026-10-28 19:50:04 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 19:50:04 - INFO - ------- Solver configuration -------
+2026-10-28 19:50:04 - INFO - Study: Steady state
+2026-10-28 19:50:04 - INFO - Type: Nonlinear
+2026-10-28 19:50:04 - INFO - Method: Direct
+2026-10-28 19:50:04 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:50:04 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 19:50:04 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 19:50:04 - INFO - -----------------------------------------------------------
+2026-10-28 19:50:04 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 19:50:04 - INFO - -----------------------------------------------------------
+2026-10-28 19:50:04 - INFO - Ningun contorno fija la presion: p = 0 en el nodo 0 (use setPressureReference).
+2026-10-28 19:50:05 - INFO - |   1    |   8.5868e-03    |   1.0818e-03    |    1.0000   
+2026-10-28 19:50:05 - INFO - |   2    |   8.6335e-04    |   1.0877e-04    |    1.0000   
+2026-10-28 19:50:05 - INFO - |   3    |   1.3023e-05    |   1.6408e-06    |    1.0000   
+2026-10-28 19:50:05 - INFO - |   4    |   2.9113e-09    |   3.6679e-10    |    1.0000   
+2026-10-28 19:50:06 - INFO - |   5    |   1.4590e-12    |   1.8382e-13    |    1.0000   
+2026-10-28 19:50:06 - INFO - -----------------------------------------------------------
+2026-10-28 19:50:06 - INFO - Succefully converged in 5 iterations.
+2026-10-28 19:50:06 - INFO - method finished on 2.174 seconds
+2026-10-28 19:50:06 - INFO - ------- Simulation finished -------

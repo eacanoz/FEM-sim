@@ -1,0 +1,215 @@
+2026-10-28 19:39:33 - INFO - ------- Starting simulation -------
+2026-10-28 19:39:33 - INFO - Model: species
+2026-10-28 19:39:33 - INFO - Dimension: 1D
+2026-10-28 19:39:33 - INFO - Nodes: 9
+2026-10-28 19:39:33 - INFO - Elements: 8
+2026-10-28 19:39:33 - INFO - Physics: Transport of Chemical Species
+2026-10-28 19:39:33 - INFO - ------- Solver configuration -------
+2026-10-28 19:39:33 - INFO - Study: Steady state
+2026-10-28 19:39:33 - INFO - Type: Linear
+2026-10-28 19:39:33 - INFO - Method: Direct
+2026-10-28 19:39:33 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:39:33 - INFO - method finished on 0.501 seconds
+2026-10-28 19:39:33 - INFO - ------- Simulation finished -------
+2026-10-28 19:39:33 - INFO - ------- Starting simulation -------
+2026-10-28 19:39:33 - INFO - Model: species
+2026-10-28 19:39:33 - INFO - Dimension: 1D
+2026-10-28 19:39:33 - INFO - Nodes: 17
+2026-10-28 19:39:33 - INFO - Elements: 16
+2026-10-28 19:39:33 - INFO - Physics: Transport of Chemical Species
+2026-10-28 19:39:33 - INFO - ------- Solver configuration -------
+2026-10-28 19:39:33 - INFO - Study: Steady state
+2026-10-28 19:39:33 - INFO - Type: Linear
+2026-10-28 19:39:33 - INFO - Method: Direct
+2026-10-28 19:39:33 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:39:34 - INFO - method finished on 0.356 seconds
+2026-10-28 19:39:34 - INFO - ------- Simulation finished -------
+2026-10-28 19:39:34 - INFO - ------- Starting simulation -------
+2026-10-28 19:39:34 - INFO - Model: species
+2026-10-28 19:39:34 - INFO - Dimension: 1D
+2026-10-28 19:39:34 - INFO - Nodes: 33
+2026-10-28 19:39:34 - INFO - Elements: 32
+2026-10-28 19:39:34 - INFO - Physics: Transport of Chemical Species
+2026-10-28 19:39:34 - INFO - ------- Solver configuration -------
+2026-10-28 19:39:34 - INFO - Study: Steady state
+2026-10-28 19:39:34 - INFO - Type: Linear
+2026-10-28 19:39:34 - INFO - Method: Direct
+2026-10-28 19:39:34 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:39:34 - INFO - method finished on 0.356 seconds
+2026-10-28 19:39:34 - INFO - ------- Simulation finished -------
+2026-10-28 19:39:34 - INFO - ------- Starting simulation -------
+2026-10-28 19:39:34 - INFO - Model: species
+2026-10-28 19:39:34 - INFO - Dimension: 1D
+2026-10-28 19:39:34 - INFO - Nodes: 65
+2026-10-28 19:39:34 - INFO - Elements: 64
+2026-10-28 19:39:34 - INFO - Physics: Transport of Chemical Species
+2026-10-28 19:39:34 - INFO - ------- Solver configuration -------
+2026-10-28 19:39:34 - INFO - Study: Steady state
+2026-10-28 19:39:34 - INFO - Type: Linear
+2026-10-28 19:39:34 - INFO - Method: Direct
+2026-10-28 19:39:34 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:39:34 - INFO - method finished on 0.358 seconds
+2026-10-28 19:39:34 - INFO - ------- Simulation finished -------
+2026-10-28 19:39:34 - INFO - ------- Starting simulation -------
+2026-10-28 19:39:34 - INFO - Model: species
+2026-10-28 19:39:34 - INFO - Dimension: 1D
+2026-10-28 19:39:34 - INFO - Nodes: 41
+2026-10-28 19:39:34 - INFO - Elements: 40
+2026-10-28 19:39:34 - INFO - Physics: Transport of Chemical Species
+2026-10-28 19:39:34 - INFO - ------- Solver configuration -------
+2026-10-28 19:39:34 - INFO - Study: Steady state
+2026-10-28 19:39:34 - INFO - Type: Linear
+2026-10-28 19:39:34 - INFO - Method: Direct
+2026-10-28 19:39:34 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:39:35 - INFO - method finished on 0.353 seconds
+2026-10-28 19:39:35 - INFO - ------- Simulation finished -------
+2026-10-28 19:39:35 - INFO - ------- Starting simulation -------
+2026-10-28 19:39:35 - INFO - Model: species
+2026-10-28 19:39:35 - INFO - Dimension: 1D
+2026-10-28 19:39:35 - INFO - Nodes: 21
+2026-10-28 19:39:35 - INFO - Elements: 20
+2026-10-28 19:39:35 - INFO - Physics: Transport of Chemical Species
+2026-10-28 19:39:35 - INFO - ------- Solver configuration -------
+2026-10-28 19:39:35 - INFO - Study: Steady state
+2026-10-28 19:39:35 - INFO - Type: Nonlinear
+2026-10-28 19:39:35 - INFO - Method: Direct
+2026-10-28 19:39:35 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:39:35 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 19:39:35 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 19:39:35 - INFO - -----------------------------------------------------------
+2026-10-28 19:39:35 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 19:39:35 - INFO - -----------------------------------------------------------
+2026-10-28 19:39:35 - INFO - |   1    |   2.0624e-02    |   8.5973e-03    |    1.0000   
+2026-10-28 19:39:35 - INFO - |   2    |   2.1716e-05    |   9.0526e-06    |    1.0000   
+2026-10-28 19:39:35 - INFO - |   3    |   6.4818e-10    |   2.7020e-10    |    1.0000   
+2026-10-28 19:39:35 - INFO - |   4    |   9.9193e-16    |   4.1350e-16    |    1.0000   
+2026-10-28 19:39:35 - INFO - -----------------------------------------------------------
+2026-10-28 19:39:35 - INFO - Succefully converged in 4 iterations.
+2026-10-28 19:39:35 - INFO - method finished on 0.423 seconds
+2026-10-28 19:39:35 - INFO - ------- Simulation finished -------
+2026-10-28 19:39:35 - INFO - ------- Starting simulation -------
+2026-10-28 19:39:35 - INFO - Model: species
+2026-10-28 19:39:35 - INFO - Dimension: 1D
+2026-10-28 19:39:35 - INFO - Nodes: 41
+2026-10-28 19:39:35 - INFO - Elements: 40
+2026-10-28 19:39:35 - INFO - Physics: Transport of Chemical Species
+2026-10-28 19:39:35 - INFO - ------- Solver configuration -------
+2026-10-28 19:39:35 - INFO - Study: Transient
+2026-10-28 19:39:35 - INFO - Type: Linear
+2026-10-28 19:39:35 - INFO - Method: Direct
+2026-10-28 19:39:35 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:39:35 - INFO - Time Discretization: 0.5
+2026-10-28 19:39:35 - INFO - Time Step: 0.005
+2026-10-28 19:39:35 - INFO - Total Time: 0.1
+2026-10-28 19:39:35 - INFO - Theta = 0.5, steps = 20, dt = 0.005
+2026-10-28 19:39:36 - INFO - method finished on 0.265 seconds
+2026-10-28 19:39:36 - INFO - ------- Simulation finished -------
+2026-10-28 19:39:36 - INFO - ------- Starting simulation -------
+2026-10-28 19:39:36 - INFO - Model: species2d
+2026-10-28 19:39:36 - INFO - Dimension: 2D
+2026-10-28 19:39:36 - INFO - Nodes: 25
+2026-10-28 19:39:36 - INFO - Elements: 16
+2026-10-28 19:39:36 - INFO - Physics: Transport of Chemical Species
+2026-10-28 19:39:36 - INFO - ------- Solver configuration -------
+2026-10-28 19:39:36 - INFO - Study: Steady state
+2026-10-28 19:39:36 - INFO - Type: Nonlinear
+2026-10-28 19:39:36 - INFO - Method: Direct
+2026-10-28 19:39:36 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:39:36 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 19:39:36 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 19:39:36 - INFO - -----------------------------------------------------------
+2026-10-28 19:39:36 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 19:39:36 - INFO - -----------------------------------------------------------
+2026-10-28 19:39:36 - INFO - |   1    |   5.7554e-02    |   5.6910e-02    |    1.0000   
+2026-10-28 19:39:36 - INFO - |   2    |   1.5072e-04    |   1.4903e-04    |    1.0000   
+2026-10-28 19:39:36 - INFO - |   3    |   1.0354e-09    |   1.0238e-09    |    1.0000   
+2026-10-28 19:39:36 - INFO - |   4    |   4.0341e-16    |   3.9890e-16    |    1.0000   
+2026-10-28 19:39:36 - INFO - -----------------------------------------------------------
+2026-10-28 19:39:36 - INFO - Succefully converged in 4 iterations.
+2026-10-28 19:39:36 - INFO - method finished on 0.421 seconds
+2026-10-28 19:39:36 - INFO - ------- Simulation finished -------
+2026-10-28 19:39:36 - INFO - ------- Starting simulation -------
+2026-10-28 19:39:36 - INFO - Model: species2d
+2026-10-28 19:39:36 - INFO - Dimension: 2D
+2026-10-28 19:39:36 - INFO - Nodes: 81
+2026-10-28 19:39:36 - INFO - Elements: 64
+2026-10-28 19:39:36 - INFO - Physics: Transport of Chemical Species
+2026-10-28 19:39:36 - INFO - ------- Solver configuration -------
+2026-10-28 19:39:36 - INFO - Study: Steady state
+2026-10-28 19:39:36 - INFO - Type: Nonlinear
+2026-10-28 19:39:36 - INFO - Method: Direct
+2026-10-28 19:39:36 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:39:36 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 19:39:36 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 19:39:36 - INFO - -----------------------------------------------------------
+2026-10-28 19:39:36 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 19:39:36 - INFO - -----------------------------------------------------------
+2026-10-28 19:39:36 - INFO - |   1    |   3.4653e-02    |   6.1662e-02    |    1.0000   
+2026-10-28 19:39:36 - INFO - |   2    |   1.0352e-04    |   1.8421e-04    |    1.0000   
+2026-10-28 19:39:36 - INFO - |   3    |   9.1555e-10    |   1.6291e-09    |    1.0000   
+2026-10-28 19:39:36 - INFO - |   4    |   9.4942e-16    |   1.6894e-15    |    1.0000   
+2026-10-28 19:39:36 - INFO - -----------------------------------------------------------
+2026-10-28 19:39:36 - INFO - Succefully converged in 4 iterations.
+2026-10-28 19:39:36 - INFO - method finished on 0.387 seconds
+2026-10-28 19:39:36 - INFO - ------- Simulation finished -------
+2026-10-28 19:39:36 - INFO - ------- Starting simulation -------
+2026-10-28 19:39:36 - INFO - Model: species2d
+2026-10-28 19:39:36 - INFO - Dimension: 2D
+2026-10-28 19:39:36 - INFO - Nodes: 289
+2026-10-28 19:39:36 - INFO - Elements: 256
+2026-10-28 19:39:36 - INFO - Physics: Transport of Chemical Species
+2026-10-28 19:39:36 - INFO - ------- Solver configuration -------
+2026-10-28 19:39:36 - INFO - Study: Steady state
+2026-10-28 19:39:36 - INFO - Type: Nonlinear
+2026-10-28 19:39:36 - INFO - Method: Direct
+2026-10-28 19:39:36 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:39:36 - INFO - ------- Starting Newton-Raphson nonlinear solver -------
+2026-10-28 19:39:36 - INFO - Relative tolerance: 1.0e-10, Absolute tolerance: 1.0e-10, Max Number of Iterations: 200
+2026-10-28 19:39:36 - INFO - -----------------------------------------------------------
+2026-10-28 19:39:36 - INFO - |  Iter  |  ||R|| scaled   |  ||R||/||R0||   | Alpha (Step)
+2026-10-28 19:39:36 - INFO - -----------------------------------------------------------
+2026-10-28 19:39:37 - INFO - |   1    |   1.8190e-02    |   6.3038e-02    |    1.0000   
+2026-10-28 19:39:37 - INFO - |   2    |   5.6329e-05    |   1.9521e-04    |    1.0000   
+2026-10-28 19:39:37 - INFO - |   3    |   5.3284e-10    |   1.8465e-09    |    1.0000   
+2026-10-28 19:39:37 - INFO - |   4    |   2.3540e-15    |   8.1579e-15    |    1.0000   
+2026-10-28 19:39:37 - INFO - -----------------------------------------------------------
+2026-10-28 19:39:37 - INFO - Succefully converged in 4 iterations.
+2026-10-28 19:39:37 - INFO - method finished on 0.402 seconds
+2026-10-28 19:39:37 - INFO - ------- Simulation finished -------
+2026-10-28 19:39:37 - INFO - ------- Starting simulation -------
+2026-10-28 19:39:37 - INFO - Model: species2d
+2026-10-28 19:39:37 - INFO - Dimension: 2D
+2026-10-28 19:39:37 - INFO - Nodes: 25
+2026-10-28 19:39:37 - INFO - Elements: 16
+2026-10-28 19:39:37 - INFO - Physics: Transport of Chemical Species
+2026-10-28 19:39:37 - INFO - ------- Solver configuration -------
+2026-10-28 19:39:37 - INFO - Study: Steady state
+2026-10-28 19:39:37 - INFO - Type: Linear
+2026-10-28 19:39:37 - INFO - Method: Direct
+2026-10-28 19:39:37 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:39:37 - INFO - method finished on 0.294 seconds
+2026-10-28 19:39:37 - INFO - ------- Simulation finished -------
+2026-10-28 19:39:37 - INFO - ------- Starting simulation -------
+2026-10-28 19:39:37 - INFO - Model: species2d
+2026-10-28 19:39:37 - INFO - Dimension: 2D
+2026-10-28 19:39:37 - INFO - Nodes: 25
+2026-10-28 19:39:37 - INFO - Elements: 16
+2026-10-28 19:39:37 - INFO - Physics: Transport of Chemical Species
+2026-10-28 19:39:37 - INFO - ------- Solver configuration -------
+2026-10-28 19:39:37 - INFO - Study: Steady state
+2026-10-28 19:39:37 - INFO - Type: Linear
+2026-10-28 19:39:37 - INFO - Method: Direct
+2026-10-28 19:39:37 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:39:37 - INFO - method finished on 0.287 seconds
+2026-10-28 19:39:37 - INFO - ------- Simulation finished -------
+2026-10-28 19:39:37 - INFO - ------- Starting simulation -------
+2026-10-28 19:39:37 - INFO - Model: species
+2026-10-28 19:39:37 - INFO - Dimension: 1D
+2026-10-28 19:39:37 - INFO - Nodes: 21
+2026-10-28 19:39:37 - INFO - Elements: 20
+2026-10-28 19:39:37 - INFO - Physics: Transport of Chemical Species
+2026-10-28 19:39:37 - INFO - ------- Solver configuration -------
+2026-10-28 19:39:37 - INFO - Study: Steady state
+2026-10-28 19:39:37 - INFO - Type: Linear
+2026-10-28 19:39:37 - INFO - Method: Direct
+2026-10-28 19:39:37 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)

@@ -1,0 +1,26 @@
+2026-10-28 19:22:17 - INFO - ------- Starting simulation -------
+2026-10-28 19:22:17 - INFO - Model: darcy
+2026-10-28 19:22:17 - INFO - Dimension: 2D
+2026-10-28 19:22:17 - INFO - Nodes: 3321
+2026-10-28 19:22:17 - INFO - Elements: 3200
+2026-10-28 19:22:17 - INFO - Physics: Darcy flow
+2026-10-28 19:22:17 - INFO - ------- Solver configuration -------
+2026-10-28 19:22:17 - INFO - Study: Steady state
+2026-10-28 19:22:17 - INFO - Type: Linear
+2026-10-28 19:22:17 - INFO - Method: Direct
+2026-10-28 19:22:17 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:22:17 - INFO - method finished on 0.395 seconds
+2026-10-28 19:22:17 - INFO - ------- Simulation finished -------
+2026-10-28 19:22:17 - INFO - ------- Starting simulation -------
+2026-10-28 19:22:17 - INFO - Model: pluma
+2026-10-28 19:22:17 - INFO - Dimension: 2D
+2026-10-28 19:22:17 - INFO - Nodes: 3321
+2026-10-28 19:22:17 - INFO - Elements: 3200
+2026-10-28 19:22:17 - INFO - Physics: Transport of Chemical Species
+2026-10-28 19:22:17 - INFO - ------- Solver configuration -------
+2026-10-28 19:22:17 - INFO - Study: Steady state
+2026-10-28 19:22:17 - INFO - Type: Linear
+2026-10-28 19:22:17 - INFO - Method: Direct
+2026-10-28 19:22:17 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:22:17 - INFO - method finished on 0.308 seconds
+2026-10-28 19:22:17 - INFO - ------- Simulation finished -------

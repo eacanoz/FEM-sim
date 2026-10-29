@@ -1,0 +1,360 @@
+2026-10-28 20:49:17 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:17 - INFO - Model: patch
+2026-10-28 20:49:17 - INFO - Dimension: 2D
+2026-10-28 20:49:17 - INFO - Nodes: 49
+2026-10-28 20:49:17 - INFO - Elements: 36
+2026-10-28 20:49:17 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:17 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:17 - INFO - Study: Steady state
+2026-10-28 20:49:17 - INFO - Type: Linear
+2026-10-28 20:49:17 - INFO - Method: Direct
+2026-10-28 20:49:17 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:17 - INFO - method finished on 0.388 seconds
+2026-10-28 20:49:17 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:17 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:17 - INFO - Model: patch
+2026-10-28 20:49:17 - INFO - Dimension: 2D
+2026-10-28 20:49:17 - INFO - Nodes: 49
+2026-10-28 20:49:17 - INFO - Elements: 72
+2026-10-28 20:49:17 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:17 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:17 - INFO - Study: Steady state
+2026-10-28 20:49:17 - INFO - Type: Linear
+2026-10-28 20:49:17 - INFO - Method: Direct
+2026-10-28 20:49:17 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:17 - INFO - method finished on 0.277 seconds
+2026-10-28 20:49:17 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:17 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:17 - INFO - Model: poiseuille
+2026-10-28 20:49:17 - INFO - Dimension: 2D
+2026-10-28 20:49:17 - INFO - Nodes: 85
+2026-10-28 20:49:17 - INFO - Elements: 64
+2026-10-28 20:49:17 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:17 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:17 - INFO - Study: Steady state
+2026-10-28 20:49:17 - INFO - Type: Linear
+2026-10-28 20:49:17 - INFO - Method: Direct
+2026-10-28 20:49:17 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:18 - INFO - method finished on 0.287 seconds
+2026-10-28 20:49:18 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:18 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:18 - INFO - Model: poiseuille
+2026-10-28 20:49:18 - INFO - Dimension: 2D
+2026-10-28 20:49:18 - INFO - Nodes: 297
+2026-10-28 20:49:18 - INFO - Elements: 256
+2026-10-28 20:49:18 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:18 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:18 - INFO - Study: Steady state
+2026-10-28 20:49:18 - INFO - Type: Linear
+2026-10-28 20:49:18 - INFO - Method: Direct
+2026-10-28 20:49:18 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:18 - INFO - method finished on 0.321 seconds
+2026-10-28 20:49:18 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:18 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:18 - INFO - Model: poiseuille
+2026-10-28 20:49:18 - INFO - Dimension: 2D
+2026-10-28 20:49:18 - INFO - Nodes: 1105
+2026-10-28 20:49:18 - INFO - Elements: 1024
+2026-10-28 20:49:18 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:18 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:18 - INFO - Study: Steady state
+2026-10-28 20:49:18 - INFO - Type: Linear
+2026-10-28 20:49:18 - INFO - Method: Direct
+2026-10-28 20:49:18 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:19 - INFO - method finished on 0.418 seconds
+2026-10-28 20:49:19 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:19 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:19 - INFO - Model: poiseuille
+2026-10-28 20:49:19 - INFO - Dimension: 2D
+2026-10-28 20:49:19 - INFO - Nodes: 85
+2026-10-28 20:49:19 - INFO - Elements: 64
+2026-10-28 20:49:19 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:19 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:19 - INFO - Study: Steady state
+2026-10-28 20:49:19 - INFO - Type: Linear
+2026-10-28 20:49:19 - INFO - Method: Direct
+2026-10-28 20:49:19 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:19 - INFO - method finished on 0.284 seconds
+2026-10-28 20:49:19 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:19 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:19 - INFO - Model: poiseuille
+2026-10-28 20:49:19 - INFO - Dimension: 2D
+2026-10-28 20:49:19 - INFO - Nodes: 297
+2026-10-28 20:49:19 - INFO - Elements: 256
+2026-10-28 20:49:19 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:19 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:19 - INFO - Study: Steady state
+2026-10-28 20:49:19 - INFO - Type: Linear
+2026-10-28 20:49:19 - INFO - Method: Direct
+2026-10-28 20:49:19 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:19 - INFO - method finished on 0.297 seconds
+2026-10-28 20:49:19 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:19 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:19 - INFO - Model: poiseuille
+2026-10-28 20:49:19 - INFO - Dimension: 2D
+2026-10-28 20:49:19 - INFO - Nodes: 1105
+2026-10-28 20:49:19 - INFO - Elements: 1024
+2026-10-28 20:49:19 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:19 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:19 - INFO - Study: Steady state
+2026-10-28 20:49:19 - INFO - Type: Linear
+2026-10-28 20:49:19 - INFO - Method: Direct
+2026-10-28 20:49:19 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:20 - INFO - method finished on 0.325 seconds
+2026-10-28 20:49:20 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:20 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:20 - INFO - Model: poiseuille
+2026-10-28 20:49:20 - INFO - Dimension: 2D
+2026-10-28 20:49:20 - INFO - Nodes: 85
+2026-10-28 20:49:20 - INFO - Elements: 128
+2026-10-28 20:49:20 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:20 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:20 - INFO - Study: Steady state
+2026-10-28 20:49:20 - INFO - Type: Linear
+2026-10-28 20:49:20 - INFO - Method: Direct
+2026-10-28 20:49:20 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:20 - INFO - method finished on 0.301 seconds
+2026-10-28 20:49:20 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:20 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:20 - INFO - Model: poiseuille
+2026-10-28 20:49:20 - INFO - Dimension: 2D
+2026-10-28 20:49:20 - INFO - Nodes: 297
+2026-10-28 20:49:20 - INFO - Elements: 512
+2026-10-28 20:49:20 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:20 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:20 - INFO - Study: Steady state
+2026-10-28 20:49:20 - INFO - Type: Linear
+2026-10-28 20:49:20 - INFO - Method: Direct
+2026-10-28 20:49:20 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:20 - INFO - method finished on 0.324 seconds
+2026-10-28 20:49:20 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:20 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:20 - INFO - Model: poiseuille
+2026-10-28 20:49:20 - INFO - Dimension: 2D
+2026-10-28 20:49:20 - INFO - Nodes: 1105
+2026-10-28 20:49:20 - INFO - Elements: 2048
+2026-10-28 20:49:20 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:20 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:20 - INFO - Study: Steady state
+2026-10-28 20:49:20 - INFO - Type: Linear
+2026-10-28 20:49:20 - INFO - Method: Direct
+2026-10-28 20:49:20 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:21 - INFO - method finished on 0.417 seconds
+2026-10-28 20:49:21 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:21 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:21 - INFO - Model: poiseuille
+2026-10-28 20:49:21 - INFO - Dimension: 2D
+2026-10-28 20:49:21 - INFO - Nodes: 85
+2026-10-28 20:49:21 - INFO - Elements: 128
+2026-10-28 20:49:21 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:21 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:21 - INFO - Study: Steady state
+2026-10-28 20:49:21 - INFO - Type: Linear
+2026-10-28 20:49:21 - INFO - Method: Direct
+2026-10-28 20:49:21 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:21 - INFO - method finished on 0.288 seconds
+2026-10-28 20:49:21 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:21 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:21 - INFO - Model: poiseuille
+2026-10-28 20:49:21 - INFO - Dimension: 2D
+2026-10-28 20:49:21 - INFO - Nodes: 297
+2026-10-28 20:49:21 - INFO - Elements: 512
+2026-10-28 20:49:21 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:21 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:21 - INFO - Study: Steady state
+2026-10-28 20:49:21 - INFO - Type: Linear
+2026-10-28 20:49:21 - INFO - Method: Direct
+2026-10-28 20:49:21 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:21 - INFO - method finished on 0.297 seconds
+2026-10-28 20:49:21 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:21 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:21 - INFO - Model: poiseuille
+2026-10-28 20:49:21 - INFO - Dimension: 2D
+2026-10-28 20:49:21 - INFO - Nodes: 1105
+2026-10-28 20:49:21 - INFO - Elements: 2048
+2026-10-28 20:49:21 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:21 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:21 - INFO - Study: Steady state
+2026-10-28 20:49:21 - INFO - Type: Linear
+2026-10-28 20:49:21 - INFO - Method: Direct
+2026-10-28 20:49:21 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:22 - INFO - method finished on 0.344 seconds
+2026-10-28 20:49:22 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:22 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:22 - INFO - Model: poiseuille
+2026-10-28 20:49:22 - INFO - Dimension: 2D
+2026-10-28 20:49:22 - INFO - Nodes: 297
+2026-10-28 20:49:22 - INFO - Elements: 256
+2026-10-28 20:49:22 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:22 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:22 - INFO - Study: Steady state
+2026-10-28 20:49:22 - INFO - Type: Linear
+2026-10-28 20:49:22 - INFO - Method: Direct
+2026-10-28 20:49:22 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:22 - INFO - method finished on 0.326 seconds
+2026-10-28 20:49:22 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:22 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:22 - INFO - Model: poiseuille
+2026-10-28 20:49:22 - INFO - Dimension: 2D
+2026-10-28 20:49:22 - INFO - Nodes: 297
+2026-10-28 20:49:22 - INFO - Elements: 256
+2026-10-28 20:49:22 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:22 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:22 - INFO - Study: Steady state
+2026-10-28 20:49:22 - INFO - Type: Linear
+2026-10-28 20:49:22 - INFO - Method: Direct
+2026-10-28 20:49:22 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:22 - INFO - method finished on 0.329 seconds
+2026-10-28 20:49:22 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:22 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:22 - INFO - Model: exact
+2026-10-28 20:49:22 - INFO - Dimension: 2D
+2026-10-28 20:49:22 - INFO - Nodes: 81
+2026-10-28 20:49:22 - INFO - Elements: 64
+2026-10-28 20:49:22 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:22 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:22 - INFO - Study: Steady state
+2026-10-28 20:49:22 - INFO - Type: Linear
+2026-10-28 20:49:22 - INFO - Method: Direct
+2026-10-28 20:49:22 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:23 - INFO - method finished on 0.314 seconds
+2026-10-28 20:49:23 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:23 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:23 - INFO - Model: exact
+2026-10-28 20:49:23 - INFO - Dimension: 2D
+2026-10-28 20:49:23 - INFO - Nodes: 289
+2026-10-28 20:49:23 - INFO - Elements: 256
+2026-10-28 20:49:23 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:23 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:23 - INFO - Study: Steady state
+2026-10-28 20:49:23 - INFO - Type: Linear
+2026-10-28 20:49:23 - INFO - Method: Direct
+2026-10-28 20:49:23 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:23 - INFO - method finished on 0.323 seconds
+2026-10-28 20:49:23 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:23 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:23 - INFO - Model: exact
+2026-10-28 20:49:23 - INFO - Dimension: 2D
+2026-10-28 20:49:23 - INFO - Nodes: 1089
+2026-10-28 20:49:23 - INFO - Elements: 1024
+2026-10-28 20:49:23 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:23 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:23 - INFO - Study: Steady state
+2026-10-28 20:49:23 - INFO - Type: Linear
+2026-10-28 20:49:23 - INFO - Method: Direct
+2026-10-28 20:49:23 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:24 - INFO - method finished on 0.423 seconds
+2026-10-28 20:49:24 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:24 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:24 - INFO - Model: exact
+2026-10-28 20:49:24 - INFO - Dimension: 2D
+2026-10-28 20:49:24 - INFO - Nodes: 81
+2026-10-28 20:49:24 - INFO - Elements: 128
+2026-10-28 20:49:24 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:24 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:24 - INFO - Study: Steady state
+2026-10-28 20:49:24 - INFO - Type: Linear
+2026-10-28 20:49:24 - INFO - Method: Direct
+2026-10-28 20:49:24 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:24 - INFO - method finished on 0.303 seconds
+2026-10-28 20:49:24 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:24 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:24 - INFO - Model: exact
+2026-10-28 20:49:24 - INFO - Dimension: 2D
+2026-10-28 20:49:24 - INFO - Nodes: 289
+2026-10-28 20:49:24 - INFO - Elements: 512
+2026-10-28 20:49:24 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:24 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:24 - INFO - Study: Steady state
+2026-10-28 20:49:24 - INFO - Type: Linear
+2026-10-28 20:49:24 - INFO - Method: Direct
+2026-10-28 20:49:24 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:24 - INFO - method finished on 0.324 seconds
+2026-10-28 20:49:24 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:24 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:24 - INFO - Model: exact
+2026-10-28 20:49:24 - INFO - Dimension: 2D
+2026-10-28 20:49:24 - INFO - Nodes: 1089
+2026-10-28 20:49:24 - INFO - Elements: 2048
+2026-10-28 20:49:24 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:24 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:24 - INFO - Study: Steady state
+2026-10-28 20:49:24 - INFO - Type: Linear
+2026-10-28 20:49:24 - INFO - Method: Direct
+2026-10-28 20:49:24 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:25 - INFO - method finished on 0.437 seconds
+2026-10-28 20:49:25 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:25 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:25 - INFO - Model: cavity
+2026-10-28 20:49:25 - INFO - Dimension: 2D
+2026-10-28 20:49:25 - INFO - Nodes: 4225
+2026-10-28 20:49:25 - INFO - Elements: 4096
+2026-10-28 20:49:25 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:25 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:25 - INFO - Study: Steady state
+2026-10-28 20:49:25 - INFO - Type: Linear
+2026-10-28 20:49:25 - INFO - Method: Direct
+2026-10-28 20:49:25 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:25 - INFO - Ningun contorno fija la presion: p = 0 en el nodo 0 (use setPressureReference).
+2026-10-28 20:49:26 - INFO - method finished on 0.781 seconds
+2026-10-28 20:49:26 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:26 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:26 - INFO - Model: sym
+2026-10-28 20:49:26 - INFO - Dimension: 2D
+2026-10-28 20:49:26 - INFO - Nodes: 153
+2026-10-28 20:49:26 - INFO - Elements: 128
+2026-10-28 20:49:26 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:26 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:26 - INFO - Study: Steady state
+2026-10-28 20:49:26 - INFO - Type: Linear
+2026-10-28 20:49:26 - INFO - Method: Direct
+2026-10-28 20:49:26 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:26 - INFO - method finished on 0.279 seconds
+2026-10-28 20:49:26 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:26 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:26 - INFO - Model: sym
+2026-10-28 20:49:26 - INFO - Dimension: 2D
+2026-10-28 20:49:26 - INFO - Nodes: 85
+2026-10-28 20:49:26 - INFO - Elements: 64
+2026-10-28 20:49:26 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:26 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:26 - INFO - Study: Steady state
+2026-10-28 20:49:26 - INFO - Type: Linear
+2026-10-28 20:49:26 - INFO - Method: Direct
+2026-10-28 20:49:26 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:26 - INFO - method finished on 0.298 seconds
+2026-10-28 20:49:26 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:26 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:26 - INFO - Model: startup
+2026-10-28 20:49:26 - INFO - Dimension: 2D
+2026-10-28 20:49:26 - INFO - Nodes: 75
+2026-10-28 20:49:26 - INFO - Elements: 48
+2026-10-28 20:49:26 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:26 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:26 - INFO - Study: Transient
+2026-10-28 20:49:26 - INFO - Type: Linear
+2026-10-28 20:49:26 - INFO - Method: Direct
+2026-10-28 20:49:26 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:26 - INFO - Time Discretization: 0.5
+2026-10-28 20:49:26 - INFO - Time Step: 0.0025
+2026-10-28 20:49:26 - INFO - Total Time: 0.05
+2026-10-28 20:49:26 - INFO - Theta = 0.5, steps = 20, dt = 0.0025
+2026-10-28 20:49:27 - INFO - method finished on 0.311 seconds
+2026-10-28 20:49:27 - INFO - ------- Simulation finished -------
+2026-10-28 20:49:27 - INFO - ------- Starting simulation -------
+2026-10-28 20:49:27 - INFO - Model: startup
+2026-10-28 20:49:27 - INFO - Dimension: 2D
+2026-10-28 20:49:27 - INFO - Nodes: 75
+2026-10-28 20:49:27 - INFO - Elements: 48
+2026-10-28 20:49:27 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 20:49:27 - INFO - ------- Solver configuration -------
+2026-10-28 20:49:27 - INFO - Study: Transient
+2026-10-28 20:49:27 - INFO - Type: Linear
+2026-10-28 20:49:27 - INFO - Method: Direct
+2026-10-28 20:49:27 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 20:49:27 - INFO - Time Discretization: 1.0
+2026-10-28 20:49:27 - INFO - Time Step: 0.05
+2026-10-28 20:49:27 - INFO - Total Time: 3.0
+2026-10-28 20:49:27 - INFO - Theta = 1.0, steps = 60, dt = 0.05
+2026-10-28 20:49:27 - INFO - method finished on 0.335 seconds
+2026-10-28 20:49:27 - INFO - ------- Simulation finished -------

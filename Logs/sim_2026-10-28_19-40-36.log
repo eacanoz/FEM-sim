@@ -1,0 +1,39 @@
+2026-10-28 19:40:36 - INFO - ------- Starting simulation -------
+2026-10-28 19:40:36 - INFO - Model: contraccion
+2026-10-28 19:40:36 - INFO - Dimension: 2D
+2026-10-28 19:40:36 - INFO - Nodes: 2317
+2026-10-28 19:40:36 - INFO - Elements: 4250
+2026-10-28 19:40:36 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 19:40:36 - INFO - ------- Solver configuration -------
+2026-10-28 19:40:36 - INFO - Study: Steady state
+2026-10-28 19:40:36 - INFO - Type: Linear
+2026-10-28 19:40:36 - INFO - Method: Direct
+2026-10-28 19:40:36 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:40:37 - INFO - method finished on 0.72 seconds
+2026-10-28 19:40:37 - INFO - ------- Simulation finished -------
+2026-10-28 19:40:38 - INFO - ------- Starting simulation -------
+2026-10-28 19:40:38 - INFO - Model: contraccion
+2026-10-28 19:40:38 - INFO - Dimension: 2D
+2026-10-28 19:40:38 - INFO - Nodes: 8686
+2026-10-28 19:40:38 - INFO - Elements: 16606
+2026-10-28 19:40:38 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 19:40:38 - INFO - ------- Solver configuration -------
+2026-10-28 19:40:38 - INFO - Study: Steady state
+2026-10-28 19:40:38 - INFO - Type: Linear
+2026-10-28 19:40:38 - INFO - Method: Direct
+2026-10-28 19:40:38 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:40:39 - INFO - method finished on 1.5 seconds
+2026-10-28 19:40:39 - INFO - ------- Simulation finished -------
+2026-10-28 19:40:43 - INFO - ------- Starting simulation -------
+2026-10-28 19:40:43 - INFO - Model: contraccion
+2026-10-28 19:40:43 - INFO - Dimension: 2D
+2026-10-28 19:40:43 - INFO - Nodes: 33927
+2026-10-28 19:40:43 - INFO - Elements: 66324
+2026-10-28 19:40:43 - INFO - Physics: Creeping flow (Stokes)
+2026-10-28 19:40:43 - INFO - ------- Solver configuration -------
+2026-10-28 19:40:43 - INFO - Study: Steady state
+2026-10-28 19:40:43 - INFO - Type: Linear
+2026-10-28 19:40:43 - INFO - Method: Direct
+2026-10-28 19:40:43 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:40:48 - INFO - method finished on 5.844 seconds
+2026-10-28 19:40:48 - INFO - ------- Simulation finished -------

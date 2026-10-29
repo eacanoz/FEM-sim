@@ -1,0 +1,167 @@
+2026-10-28 18:51:55 - INFO - ------- Starting simulation -------
+2026-10-28 18:51:55 - INFO - Model: poisson
+2026-10-28 18:51:55 - INFO - Dimension: 2D
+2026-10-28 18:51:55 - INFO - Nodes: 2601
+2026-10-28 18:51:55 - INFO - Elements: 2500
+2026-10-28 18:51:55 - INFO - Physics: Heat transfer
+2026-10-28 18:51:55 - INFO - ------- Solver configuration -------
+2026-10-28 18:51:55 - INFO - Study: Steady state
+2026-10-28 18:51:55 - INFO - Type: Linear
+2026-10-28 18:51:55 - INFO - Method: Direct
+2026-10-28 18:51:55 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 18:51:56 - INFO - method finished on 0.439 seconds
+2026-10-28 18:51:56 - INFO - ------- Simulation finished -------
+2026-10-28 18:51:56 - INFO - ------- Starting simulation -------
+2026-10-28 18:51:56 - INFO - Model: poisson
+2026-10-28 18:51:56 - INFO - Dimension: 2D
+2026-10-28 18:51:56 - INFO - Nodes: 2601
+2026-10-28 18:51:56 - INFO - Elements: 2500
+2026-10-28 18:51:56 - INFO - Physics: Heat transfer
+2026-10-28 18:51:56 - INFO - ------- Solver configuration -------
+2026-10-28 18:51:56 - INFO - Study: Steady state
+2026-10-28 18:51:56 - INFO - Type: Linear
+2026-10-28 18:51:56 - INFO - Method: Iterative
+2026-10-28 18:51:56 - INFO - Solver: Conjugate Gradient
+2026-10-28 18:51:56 - INFO - Preconditioner: Algebraic multigrid (pyamg)
+2026-10-28 18:51:56 - INFO - method finished on 0.161 seconds
+2026-10-28 18:51:56 - INFO - ------- Simulation finished -------
+2026-10-28 18:51:56 - INFO - ------- Starting simulation -------
+2026-10-28 18:51:56 - INFO - Model: poisson
+2026-10-28 18:51:56 - INFO - Dimension: 2D
+2026-10-28 18:51:56 - INFO - Nodes: 2601
+2026-10-28 18:51:56 - INFO - Elements: 2500
+2026-10-28 18:51:56 - INFO - Physics: Heat transfer
+2026-10-28 18:51:56 - INFO - ------- Solver configuration -------
+2026-10-28 18:51:56 - INFO - Study: Steady state
+2026-10-28 18:51:56 - INFO - Type: Linear
+2026-10-28 18:51:56 - INFO - Method: Iterative
+2026-10-28 18:51:56 - INFO - Solver: Conjugate Gradient
+2026-10-28 18:51:56 - INFO - Preconditioner: none
+2026-10-28 18:51:56 - INFO - method finished on 0.023 seconds
+2026-10-28 18:51:56 - INFO - ------- Simulation finished -------
+2026-10-28 18:51:56 - INFO - ------- Starting simulation -------
+2026-10-28 18:51:56 - INFO - Model: poisson
+2026-10-28 18:51:56 - INFO - Dimension: 2D
+2026-10-28 18:51:56 - INFO - Nodes: 10201
+2026-10-28 18:51:56 - INFO - Elements: 10000
+2026-10-28 18:51:56 - INFO - Physics: Heat transfer
+2026-10-28 18:51:56 - INFO - ------- Solver configuration -------
+2026-10-28 18:51:56 - INFO - Study: Steady state
+2026-10-28 18:51:56 - INFO - Type: Linear
+2026-10-28 18:51:56 - INFO - Method: Direct
+2026-10-28 18:51:56 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 18:51:56 - INFO - method finished on 0.497 seconds
+2026-10-28 18:51:56 - INFO - ------- Simulation finished -------
+2026-10-28 18:51:57 - INFO - ------- Starting simulation -------
+2026-10-28 18:51:57 - INFO - Model: poisson
+2026-10-28 18:51:57 - INFO - Dimension: 2D
+2026-10-28 18:51:57 - INFO - Nodes: 10201
+2026-10-28 18:51:57 - INFO - Elements: 10000
+2026-10-28 18:51:57 - INFO - Physics: Heat transfer
+2026-10-28 18:51:57 - INFO - ------- Solver configuration -------
+2026-10-28 18:51:57 - INFO - Study: Steady state
+2026-10-28 18:51:57 - INFO - Type: Linear
+2026-10-28 18:51:57 - INFO - Method: Iterative
+2026-10-28 18:51:57 - INFO - Solver: Conjugate Gradient
+2026-10-28 18:51:57 - INFO - Preconditioner: Algebraic multigrid (pyamg)
+2026-10-28 18:51:57 - INFO - method finished on 0.113 seconds
+2026-10-28 18:51:57 - INFO - ------- Simulation finished -------
+2026-10-28 18:51:57 - INFO - ------- Starting simulation -------
+2026-10-28 18:51:57 - INFO - Model: poisson
+2026-10-28 18:51:57 - INFO - Dimension: 2D
+2026-10-28 18:51:57 - INFO - Nodes: 10201
+2026-10-28 18:51:57 - INFO - Elements: 10000
+2026-10-28 18:51:57 - INFO - Physics: Heat transfer
+2026-10-28 18:51:57 - INFO - ------- Solver configuration -------
+2026-10-28 18:51:57 - INFO - Study: Steady state
+2026-10-28 18:51:57 - INFO - Type: Linear
+2026-10-28 18:51:57 - INFO - Method: Iterative
+2026-10-28 18:51:57 - INFO - Solver: Conjugate Gradient
+2026-10-28 18:51:57 - INFO - Preconditioner: none
+2026-10-28 18:51:57 - INFO - method finished on 0.077 seconds
+2026-10-28 18:51:57 - INFO - ------- Simulation finished -------
+2026-10-28 18:51:58 - INFO - ------- Starting simulation -------
+2026-10-28 18:51:58 - INFO - Model: poisson
+2026-10-28 18:51:58 - INFO - Dimension: 2D
+2026-10-28 18:51:58 - INFO - Nodes: 40401
+2026-10-28 18:51:58 - INFO - Elements: 40000
+2026-10-28 18:51:58 - INFO - Physics: Heat transfer
+2026-10-28 18:51:58 - INFO - ------- Solver configuration -------
+2026-10-28 18:51:58 - INFO - Study: Steady state
+2026-10-28 18:51:58 - INFO - Type: Linear
+2026-10-28 18:51:58 - INFO - Method: Direct
+2026-10-28 18:51:58 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 18:51:58 - INFO - method finished on 0.607 seconds
+2026-10-28 18:51:58 - INFO - ------- Simulation finished -------
+2026-10-28 18:51:59 - INFO - ------- Starting simulation -------
+2026-10-28 18:51:59 - INFO - Model: poisson
+2026-10-28 18:51:59 - INFO - Dimension: 2D
+2026-10-28 18:51:59 - INFO - Nodes: 40401
+2026-10-28 18:51:59 - INFO - Elements: 40000
+2026-10-28 18:51:59 - INFO - Physics: Heat transfer
+2026-10-28 18:51:59 - INFO - ------- Solver configuration -------
+2026-10-28 18:51:59 - INFO - Study: Steady state
+2026-10-28 18:51:59 - INFO - Type: Linear
+2026-10-28 18:51:59 - INFO - Method: Iterative
+2026-10-28 18:51:59 - INFO - Solver: Conjugate Gradient
+2026-10-28 18:51:59 - INFO - Preconditioner: Algebraic multigrid (pyamg)
+2026-10-28 18:51:59 - INFO - method finished on 0.452 seconds
+2026-10-28 18:51:59 - INFO - ------- Simulation finished -------
+2026-10-28 18:52:00 - INFO - ------- Starting simulation -------
+2026-10-28 18:52:00 - INFO - Model: poisson
+2026-10-28 18:52:00 - INFO - Dimension: 2D
+2026-10-28 18:52:00 - INFO - Nodes: 40401
+2026-10-28 18:52:00 - INFO - Elements: 40000
+2026-10-28 18:52:00 - INFO - Physics: Heat transfer
+2026-10-28 18:52:00 - INFO - ------- Solver configuration -------
+2026-10-28 18:52:00 - INFO - Study: Steady state
+2026-10-28 18:52:00 - INFO - Type: Linear
+2026-10-28 18:52:00 - INFO - Method: Iterative
+2026-10-28 18:52:00 - INFO - Solver: Conjugate Gradient
+2026-10-28 18:52:00 - INFO - Preconditioner: none
+2026-10-28 18:52:00 - INFO - method finished on 0.41 seconds
+2026-10-28 18:52:00 - INFO - ------- Simulation finished -------
+2026-10-28 18:52:02 - INFO - ------- Starting simulation -------
+2026-10-28 18:52:02 - INFO - Model: poisson
+2026-10-28 18:52:02 - INFO - Dimension: 2D
+2026-10-28 18:52:02 - INFO - Nodes: 160801
+2026-10-28 18:52:02 - INFO - Elements: 160000
+2026-10-28 18:52:02 - INFO - Physics: Heat transfer
+2026-10-28 18:52:02 - INFO - ------- Solver configuration -------
+2026-10-28 18:52:02 - INFO - Study: Steady state
+2026-10-28 18:52:02 - INFO - Type: Linear
+2026-10-28 18:52:02 - INFO - Method: Direct
+2026-10-28 18:52:02 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 18:52:04 - INFO - method finished on 1.881 seconds
+2026-10-28 18:52:04 - INFO - ------- Simulation finished -------
+2026-10-28 18:52:06 - INFO - ------- Starting simulation -------
+2026-10-28 18:52:06 - INFO - Model: poisson
+2026-10-28 18:52:06 - INFO - Dimension: 2D
+2026-10-28 18:52:06 - INFO - Nodes: 160801
+2026-10-28 18:52:06 - INFO - Elements: 160000
+2026-10-28 18:52:06 - INFO - Physics: Heat transfer
+2026-10-28 18:52:06 - INFO - ------- Solver configuration -------
+2026-10-28 18:52:06 - INFO - Study: Steady state
+2026-10-28 18:52:06 - INFO - Type: Linear
+2026-10-28 18:52:06 - INFO - Method: Iterative
+2026-10-28 18:52:06 - INFO - Solver: Conjugate Gradient
+2026-10-28 18:52:06 - INFO - Preconditioner: Algebraic multigrid (pyamg)
+2026-10-28 18:52:08 - INFO - method finished on 1.808 seconds
+2026-10-28 18:52:08 - INFO - ------- Simulation finished -------
+2026-10-28 18:52:08 - INFO - ------- Starting simulation -------
+2026-10-28 18:52:08 - INFO - Model: poisson
+2026-10-28 18:52:08 - INFO - Dimension: 2D
+2026-10-28 18:52:08 - INFO - Nodes: 10201
+2026-10-28 18:52:08 - INFO - Elements: 10000
+2026-10-28 18:52:08 - INFO - Physics: Heat transfer
+2026-10-28 18:52:08 - INFO - ------- Solver configuration -------
+2026-10-28 18:52:08 - INFO - Study: Transient
+2026-10-28 18:52:08 - INFO - Type: Linear
+2026-10-28 18:52:08 - INFO - Method: Direct
+2026-10-28 18:52:08 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 18:52:08 - INFO - Time Discretization: 1.0
+2026-10-28 18:52:08 - INFO - Time Step: 0.001
+2026-10-28 18:52:08 - INFO - Total Time: 0.2
+2026-10-28 18:52:08 - INFO - Theta = 1.0, steps = 200, dt = 0.001
+2026-10-28 18:52:09 - INFO - method finished on 0.814 seconds
+2026-10-28 18:52:09 - INFO - ------- Simulation finished -------

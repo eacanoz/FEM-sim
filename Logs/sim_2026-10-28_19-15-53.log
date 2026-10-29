@@ -1,0 +1,39 @@
+2026-10-28 19:15:53 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:53 - INFO - Model: inj
+2026-10-28 19:15:53 - INFO - Dimension: 2D
+2026-10-28 19:15:53 - INFO - Nodes: 28
+2026-10-28 19:15:53 - INFO - Elements: 36
+2026-10-28 19:15:53 - INFO - Physics: Darcy flow
+2026-10-28 19:15:53 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:53 - INFO - Study: Steady state
+2026-10-28 19:15:53 - INFO - Type: Linear
+2026-10-28 19:15:53 - INFO - Method: Direct
+2026-10-28 19:15:53 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:54 - INFO - method finished on 0.379 seconds
+2026-10-28 19:15:54 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:54 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:54 - INFO - Model: hydro
+2026-10-28 19:15:54 - INFO - Dimension: 2D
+2026-10-28 19:15:54 - INFO - Nodes: 25
+2026-10-28 19:15:54 - INFO - Elements: 16
+2026-10-28 19:15:54 - INFO - Physics: Darcy flow
+2026-10-28 19:15:54 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:54 - INFO - Study: Steady state
+2026-10-28 19:15:54 - INFO - Type: Linear
+2026-10-28 19:15:54 - INFO - Method: Direct
+2026-10-28 19:15:54 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:54 - INFO - method finished on 0.307 seconds
+2026-10-28 19:15:54 - INFO - ------- Simulation finished -------
+2026-10-28 19:15:54 - INFO - ------- Starting simulation -------
+2026-10-28 19:15:54 - INFO - Model: inj
+2026-10-28 19:15:54 - INFO - Dimension: 2D
+2026-10-28 19:15:54 - INFO - Nodes: 28
+2026-10-28 19:15:54 - INFO - Elements: 36
+2026-10-28 19:15:54 - INFO - Physics: Darcy flow
+2026-10-28 19:15:54 - INFO - ------- Solver configuration -------
+2026-10-28 19:15:54 - INFO - Study: Steady state
+2026-10-28 19:15:54 - INFO - Type: Linear
+2026-10-28 19:15:54 - INFO - Method: Direct
+2026-10-28 19:15:54 - INFO - Solver: PARDISO (Parallel Direct Sparse Solver)
+2026-10-28 19:15:54 - INFO - method finished on 0.299 seconds
+2026-10-28 19:15:54 - INFO - ------- Simulation finished -------
