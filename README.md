@@ -35,7 +35,7 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Axisimétrico r-z (`Model(axisymmetric=True)`): calor, especies, Darcy y flujo (términos de aro en deformación, divergencia y esfuerzo) | Operativo: conducción radial, Hagen–Poiseuille, extensión uniaxial exacta, ley de potencia en tubo, jacobiano acoplado |
 | Transitorio no lineal (`solverConfiguration(timeScheme='BDF2')` o θ): Newton en cada paso, estabilización con el residuo discreto en el tiempo, presión implícita; fuerzas por reacciones (`ff.boundaryForce`) | Operativo: Taylor–Green (BDF2 orden 2, Euler orden 1), arranque frente a la serie de Fourier, límite estacionario exacto, cilindro de Schäfer–Turek |
 | Convección natural (`ff.setBoussinesq`, térmica y solutal) y especies arrastradas por el flujo; flujos de contorno por reacciones (`boundaryFlux`, Nusselt) | Operativo: cavidad de de Vahl Davis Ra = 1e3–1e6 (Nusselt < 0.2 %), estratificación estable en reposo, especies = calor con Le = 1 |
-| Turbulencia | Pendiente: ver [docs/PLAN_FLUIDOS.md](docs/PLAN_FLUIDOS.md) |
+| Turbulencia RANS Spalart–Allmaras (`Model(psc=[ff, sa])`, SA-neg, distancia a la pared de Spalding, sin funciones de pared) | Operativo: canal Re_τ = 180–590 (U_c⁺ a 1–2 % de la DNS, ley de pared), límite laminar, jacobiano acoplado. k-ω SST pendiente |
 | `rho Cp(T)`, elementos de orden superior, 3D | No implementado |
 
 ## Requisitos
@@ -208,6 +208,7 @@ Las aristas se seleccionan con un predicado sobre su punto medio: `mesh.boundary
 | `Example_Capillary_Rheometer.py` | Reómetro capilar simulado (axisimétrico, Cross): tasa de corte aparente, esfuerzo en pared, pérdida de entrada (Bagley), corrección de Rabinowitsch; recupera la curva de viscosidad del modelo |
 | `Example_Cylinder_Vortex_Shedding.py` | Desprendimiento de vórtices detrás de un cilindro (Schäfer–Turek 2D-2, Re = 100): Navier–Stokes transitorio con BDF2, C_D, C_L y Strouhal frente a la referencia (varios minutos) |
 | `Example_Natural_Convection.py` | Cavidad calentada lateralmente (de Vahl Davis), Ra = 1e3–1e6 con continuación: Nusselt, velocidades máximas frente a la referencia, isotermas y líneas de corriente |
+| `Example_Turbulent_Channel.py` | Canal turbulento con Spalart–Allmaras a Re_τ = 180, 395 y 590: u⁺(y⁺) frente a la ley de pared, U_c⁺ frente a la DNS, C_f frente a Dean, viscosidad turbulenta |
 | `readMesh.py` | Lectura de información de un archivo `.msh` con gmsh |
 
 Algunos ejemplos abren ventanas de Matplotlib (`plt.show()`). Para ejecutarlos sin ventanas use `MPLBACKEND=Agg`.
@@ -243,6 +244,7 @@ python Test/test_non_newtonian.py         # Etapa 12: leyes de viscosidad, ley d
 python Test/test_axisymmetric.py          # Etapa 13: medidas r-z, conducción radial, Hagen–Poiseuille, extensión uniaxial, tubo de ley de potencia, jacobiano (6)
 python Test/test_transient_flow.py        # Etapa 14: Taylor–Green, arranque, límite estacionario, tangente con dt, calor transitorio, fuerzas (7)
 python Test/test_buoyancy.py              # Etapa 15: de Vahl Davis, estratificación estable, especies y flotación solutal, tangente, flujo de calor (5)
+python Test/test_turbulence.py            # Etapa 16: distancia a la pared, canal turbulento Re_τ 180/395, límite laminar, tangente, viscosidad turbulenta (5)
 ```
 
 Todas deben pasar antes de hacer un commit que toque el núcleo (`Source/`).
@@ -267,6 +269,7 @@ Source/
     Darcy.py                   darcy: flujo en medios porosos (presión) y velocidad de Darcy
     FluidFlow.py               ff: flujo incompresible (Stokes y Navier–Stokes, no newtoniano, calentamiento viscoso) con PSPG/SUPG/LSIC
     Rheology.py                leyes de viscosidad μ(γ̇, T): potencia, Carreau–Yasuda, Cross, Cross–WLF, Bingham, Herschel–Bulkley, Arrhenius
+    Turbulence.py              sa: Spalart–Allmaras (SA-neg), distancia a la pared, viscosidad turbulenta
   Primals/                     campos escalares y vectoriales (valores nodales)
   Simulation/
     Discretization.py          geometría en los puntos de Gauss y facetas (cualquier dimensión)

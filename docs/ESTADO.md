@@ -107,6 +107,10 @@
 | Especies en el flujo calculado | Le = 1: especie = temperatura; flotación solutal = térmica | `Test/test_buoyancy.py` | 1e-8 |
 | Tangente con flotación | térmica y solutal, Carreau, inercia, calor y especie con SUPG, estacionario y paso de Crank–Nicolson | `Test/test_buoyancy.py` | 1e-7 relativo |
 | Flujo de calor por reacciones | pared plana: k ΔT / L | `Test/test_buoyancy.py` | 1e-12 |
+| Distancia a la pared | placas paralelas; cilindro (convexo) | `Test/test_turbulence.py` | Q4 exacta (1e-12), T3 O(h) solo donde ∇φ = 0; cilindro: sobreestima ≈ d/(2R), independiente de la malla |
+| Canal turbulento (Spalart–Allmaras) | Re_τ = 180, 395 (prueba) y 590 (ejemplo): u⁺ = y⁺, ley de pared de Reichardt, U_c⁺ de la DNS de Moser, Kim y Mansour (1999), C_f de Dean | `Test/test_turbulence.py`, `Example_Turbulent_Channel.py` | subcapa < 2 %; ley de pared < 7 %; U_c⁺ +1.0 %, −0.4 %, −2.3 %; C_f −4 a −6 %; independiente de la malla; Newton 12–17 |
+| Límite laminar | sin turbulencia de entrada SA no produce ν̃: Poiseuille | `Test/test_turbulence.py` | ν̃ = 0 (1e-12) |
+| Tangente con SA | u, p, ν̃ de ambos signos y la viscosidad turbulenta, frente a diferencias finitas | `Test/test_turbulence.py` | 1e-6 relativo |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -228,6 +232,14 @@ Lo que sigue pendiente:
   Una discretización robusta en presión (Taylor–Hood con proyección, H(div)) lo evitaría (Etapa 17).
 - A Ra alto conviene la continuación en Ra (como en los ejemplos).
 
+### Fluidos (Etapa 16a, turbulencia)
+- Spalart–Allmaras sin el término de transición `f_t2` y sin funciones de pared: el primer nodo debe quedar en y⁺ ≲ 1.
+- La distancia de Spalding sobreestima la distancia a paredes convexas en ≈ d/(2R) (eikonal o p-Poisson en la Etapa 17).
+- Solo 2D plano (`GradientLawTerm` no tiene los términos de aro del axisimétrico).
+- Newton directo converge en el canal desde un perfil aproximado; en flujos con separación puede hacer falta
+  avanzar en pseudo-tiempo (transitorio BDF2 con pasos grandes) hasta el estacionario.
+- k-ω SST: pendiente (Etapa 16b).
+
 ### Física y numérica
 - **Convección:** diferencias centradas sin estabilización. Para Pe alto habrá oscilaciones. `Pe` se calcula pero no se
   usa. El código de estabilización que no estaba conectado se eliminó en la Etapa 5; habrá que implementarlo.
@@ -315,7 +327,7 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
    factorización reutilizada (transitorio lineal y `solve()` repetidos), exportación VTK/PVD. Pendiente: XDMF/HDF5, VTK binario,
    iterativo para sistemas con convección fuerte o varios campos acoplados (AMG por bloques).
 6. ~~**Estabilización de convección.**~~ Hecha (SUPG en 1D y 2D).
-7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 a 15 hechas (base vectorial y Darcy, Stokes, Navier–Stokes, no newtonianos y acoplamiento térmico, axisimétrico, transitorio, convección natural y especies); siguiente, turbulencia RANS (Etapa 16).
+7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 a 15 y 16a (Spalart–Allmaras) hechas; siguiente, k-ω SST (Etapa 16b) y escalado (Etapa 17).
 
 ## 5. Criterio para cerrar una etapa
 

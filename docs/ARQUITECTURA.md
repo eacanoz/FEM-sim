@@ -215,7 +215,15 @@ El plan completo de fluidos está en [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md).
   `physics.boundaryFlux(aristas, field=None)` (clase base): lo que entra por un contorno con Dirichlet por reacciones
   (calor, especies; `2π` en axisimétrico). Especies arrastradas por el flujo: `Model(psc=[ff, ht, mt])` y
   `setVelocity('u')`.
-- **Falta:** turbulencia (Etapa 16), elementos de orden mixto (`quad9`, `tri6`) y
+- **Ya está (Etapa 16a):** `Physics/Turbulence.py`. `sa` (`part_name = 'turbulence'`) transporta `nut` (ν̃) y guarda
+  `wall_distance` como campo fijado en todos los nodos (`wall_distance(mesh, paredes)`: Poisson de Spalding con el
+  gradiente recuperado por parches). La convección de ν̃ es `FieldConvectionTerm` con la velocidad calculada y SUPG; la
+  difusión no lineal, la producción y la destrucción son una ley puntual (`sa_law`) de ν̃, ∇ν̃, ∇u y d en
+  `GradientLawTerm` (jacobiano automático, ramas de SA-neg con `jnp.where`). `sa.coupleFlow()` pone en el flujo la ley
+  `SAViscosity` (μ + ρν̃f_v1) leída del campo `nut` (`ff.setViscosityLaw(ley, temperature='nut')`: el segundo argumento
+  de una ley es cualquier campo escalar). `setWalls(aristas)` fija ν̃ = 0 y mide la distancia; `derived_fields`:
+  `eddy_viscosity`. Solo 2D plano.
+- **Falta:** k-ω SST (Etapa 16b), elementos de orden mixto (`quad9`, `tri6`) y
   `DofLayout` con nodos distintos por campo (Taylor–Hood), estado interno para plasticidad.
 
 ### 5.3 Añadir un elemento o una dimensión

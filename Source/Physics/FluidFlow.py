@@ -104,9 +104,10 @@ class ff(physics):
 
         """Generalized Newtonian fluid: mu(gamma_dot, T) from Source.Physics.Rheology (power law, Carreau-Yasuda,
         Cross, Cross-WLF, Bingham, Herschel-Bulkley, Arrhenius shift, ...). The problem becomes nonlinear
-        (ProblemType.nonlinear). A temperature-dependent law reads the field `temperature` (default 'T': combine
-        with the heat physics, Model(psc=[ff, ht])). Shear-thinning laws converge best starting from a Newtonian
-        solution (solve with setViscosity first, then switch the law on and solve again)."""
+        (ProblemType.nonlinear). A law that reads a field (uses_temperature) takes it from the scalar field named
+        `temperature`: 'T' for the heat physics (Model(psc=[ff, ht])), or any other one, e.g. 'nut' for the eddy
+        viscosity of a turbulence model. Shear-thinning laws converge best starting from a Newtonian solution (solve
+        with setViscosity first, then switch the law on and solve again)."""
 
         self.viscosity_law = law
         self.temperature_field = temperature if getattr(law, 'uses_temperature', False) else None
