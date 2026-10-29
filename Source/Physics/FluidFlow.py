@@ -19,8 +19,9 @@
 #
 # The bracket (SUPG and grad-div/LSIC) is added only with inertia. div(2 mu eps(u_h)) vanishes inside a linear
 # element, so R_M uses a recovered continuous stress sigma~ (viscous_projection, default) to stay consistent.
-# tau = 1 / sqrt((2 rho / dt)^2 + (2 rho |u| / h)^2 + (12 mu / h^2)^2) (Operators.pspg_tau): h^2 / (12 mu) for creeping
-# flow. A constant q gives integral div u = 0 exactly: the discrete flow rate is conserved globally.
+# tau = 1 / sqrt((2 rho |u| / h)^2 + (12 mu / h^2)^2) (Operators.pspg_tau, without the time step): h^2 / (12 mu) for
+# creeping flow. A constant q gives integral div u = 0 exactly: the discrete flow rate is conserved globally.
+# Transient studies: rho du/dt of the step enters R_M at the new time level (system.time, set by the solver).
 #
 # Generalized Newtonian fluids (setViscosityLaw): mu(gamma_dot, T) from Source.Physics.Rheology, gamma_dot = sqrt(2 eps:eps),
 # with the Newton tangent through dmu/dgamma_dot and dmu/dT. Viscous heating (setViscousHeating): the dissipation
@@ -41,7 +42,7 @@ from Source.Simulation.PointwiseLaw import PointwiseLaw, cached_law
 from Source.Primals.Scalar import scalarField
 from Source.Primals.Vector import vectorField
 import Source.Simulation.Operators as ops
-from Source.enums import ShapeFunctionType, StudyType
+from Source.enums import ShapeFunctionType
 from Source.logger_config import sim_logger
 
 
@@ -169,13 +170,6 @@ class ff(physics):
 
     # ----- weak form -----
 
-    def _time_step(self, model):
-
-        options = model.solverOptions or {}
-        if options.get('Study') == StudyType.transient and np.any(np.asarray(self.rho) > 0):
-            return float(options['Time Step'])
-        return None
-
     def _nonlinear(self):
 
         """True if the flow needs the nonlinear term: inertia, a viscosity law or viscous heating."""
@@ -209,7 +203,7 @@ class ff(physics):
         if self._nonlinear():
             self._add_flow_term(system, model, disc, layout, f)
         elif self.Stab == 'PSPG':
-            tau = ops.pspg_tau(disc, self.mu, self.rho, dt=self._time_step(model))
+            tau = ops.pspg_tau(disc, self.mu, self.rho)                       # no dt: see FlowTerm
             system.add_matrix(layout.scatter_matrix(ops.diffusion(disc, tau), rp, rp))
             if f is not None:
                 system.add_vector(layout.scatter_vector(ops.gradient_source(disc, tau[..., None] * f), rp))
@@ -231,8 +225,8 @@ class ff(physics):
     def _add_flow_term(self, system, model, disc, layout, f):
 
         """Viscosity law, convection, viscous heating and the residual-based stabilization (PSPG, SUPG, LSIC) as one
-        nonlinear term. With a time step the stabilized mass terms use tau and the SUPG weight of the state at the
-        start of the solve."""
+        nonlinear term. In transient studies the term reads the time derivative of the step from system.time, so
+        rho du/dt enters the stabilized momentum residual at the new time level (no frozen stabilized masses)."""
 
         V = Q = None
         if self.viscous_projection:
@@ -241,25 +235,7 @@ class ff(physics):
             else:
                 Q = ops.gauss_stress_divergence(disc)
 
-        term = FlowTerm(system, self, f, V, Q)
-        system.add_term(term)
-
-        dt = self._time_step(model)
-        if dt is not None:
-            nel, _, nne, dim = disc.B.shape
-            ru = layout.element_dofs(disc.conn, 'u')
-            rp = layout.element_dofs(disc.conn, 'p')
-            u = disc.interpolate(np.asarray(self.var['u'].values, dtype=float))
-            mu = term.viscosity(model._state())[0]
-            speed = np.linalg.norm(u, axis=-1) if self.inertia else 0.0
-            tau = ops.pspg_tau(disc, mu, self.rho, speed=speed, dt=dt)
-            rho = ops.at_gauss(disc, self.rho)
-            if self.inertia:
-                uB = np.einsum('egb,egib->egi', u, disc.B)
-                supg = np.einsum('eg,egi,gj,ac->eiajc', disc.detJw * tau * rho * rho, uB, disc.N, np.eye(dim))
-                system.add_mass(layout.scatter_matrix(supg.reshape(nel, nne * dim, nne * dim), ru, ru))
-            if self.Stab == 'PSPG':
-                system.add_mass(layout.scatter_matrix(ops.pspg_mass(disc, tau * rho), rp, ru))
+        system.add_term(FlowTerm(system, self, f, V, Q))
 
     def _pressure_level_set(self, model):
 
@@ -286,6 +262,34 @@ class ff(physics):
         q = float(np.sum(np.einsum('fqa,fqa->fq', uq, facets.normals) * facets.detJw))
 
         return 2.0 * np.pi * q if disc.axisymmetric else q
+
+    def boundaryForce(self, edges, rate=None):
+
+        """Force of the fluid on the boundary formed by `edges` (a wall, an obstacle) [N per unit depth; N in
+        axisymmetric], from the reactions: the momentum residual at the nodes of those edges, assembled without the
+        boundary conditions, is the consistent integral of sigma . n (more accurate than integrating the stress of the
+        discrete solution along the boundary). Returns (F_x, F_y): drag and lift for a flow along x.
+
+        rate: time derivative of the solution vector (transient: e.g. (x_n - x_{n-1}) / dt) to include the inertia
+        rho du/dt of the elements next to the boundary. Use the current state of the model's fields.
+        """
+
+        model = self.modelRef
+        system, layout = model._system(), model.layout
+        x = model._state()
+
+        saved, system.time = system.time, None
+        try:
+            _, R = system._assemble(x)
+        finally:
+            system.time = saved
+        if rate is not None:
+            R = R + system.mass() @ np.asarray(rate, dtype=float)
+
+        nodes = np.unique(np.ravel(edges))
+        force = -R[layout.node_dofs('u', nodes)].sum(axis=0)
+
+        return 2.0 * np.pi * force if model.geometry.axisymmetric else force
 
     def derived_fields(self, model):
 
@@ -534,6 +538,9 @@ class FlowTerm:
         mu_tau = mu if self.tau_state is None else self.viscosity(state)[0]
         speed = np.linalg.norm(self._kinematics(state)[1], axis=-1) if self.inertia else np.zeros(w.shape)
         rho = ops.at_gauss(disc, self.rho)
+        time = self.system.time
+        # tau without the time step (Bochev, Gunzburger & Shadid 2004): a dt-dependent tau shifts the discrete
+        # steady state, spoils the temporal convergence at a fixed mesh and weakens PSPG for small steps
         tau = ops.pspg_tau(disc, mu_tau, self.rho, speed=speed)
 
         ru = layout.element_dofs(disc.conn, 'u')
@@ -587,42 +594,75 @@ class FlowTerm:
             divs = (self.V @ x).reshape(nel, ngp, dim)
             d_divs = self.V
 
-        # ----- momentum residual R_M and its local derivatives -----
-        RM = gp - divs
+        # ----- momentum residual R_M (without grad p: RM_space) and its local derivatives -----
+        RM_space = -divs
         if self.f is not None:
-            RM = RM - self.f
+            RM_space = RM_space - self.f
 
         dconv = None
         if self.inertia:
             conv = rho[..., None] * np.einsum('egb,egab->ega', u, G)
-            RM = RM + conv
+            RM_space = RM_space + conv
             uB = np.einsum('egb,egib->egi', u, B)                                 # u . grad N_i
             dconv = np.einsum('eg,ac,egj->egajc', rho, eye, uB)                    # rho u . grad N_j (Picard part)
             if self.newton:
                 dconv = dconv + np.einsum('eg,gj,egac->egajc', rho, N, G)          # rho N_j du_a/dx_c
 
-            ws = w * tau * rho
+        # The stabilization uses the time-discrete momentum residual of the step, evaluated once:
+        #   R_M = rho (u - u_n)/dt-like x' + grad p + theta RM_space(x) + (1 - theta) RM_space(x_n)
+        # c = (c_time, c_grad_p, c_new, c_old) weighs its parts: in the algebraic PSPG rows it enters whole; in the
+        # momentum rows (weighted theta by the solver) it is divided by theta. Steady: (0, 1, 1, 0). The residual of
+        # the old level (time['old_level']) leaves the SUPG out: it is already in the new level.
+        old_level = time is not None and time.get('old_level', False)
+        if time is None or old_level:
+            c_p = c_s = (0.0, 1.0, 1.0, 0.0)
+        else:
+            th = time['theta']
+            c_p = (1.0, 1.0, th, 1.0 - th)
+            c_s = tuple(c / th for c in c_p)
+
+        u_t = old = 0.0
+        if c_p[0]:
+            u_t = disc.interpolate(np.asarray(layout.split(time['alpha'] * x + time['beta'])['u'], dtype=float))
+            if c_p[3]:
+                old = self._old_space_residual(time)
+
+        def residual(c):
+            return c[0] * rho[..., None] * u_t + c[1] * gp + c[2] * RM_space + c[3] * old
+
+        def local_derivative(c):
+            d = None if dconv is None else c[2] * dconv
+            if c[0]:
+                d_t = c[0] * np.einsum('eg,ac,gj->egajc', time['alpha'] * rho, eye, N)
+                d = d_t if d is None else d + d_t
+            return d
+
+        RM_s, RM_p = residual(c_s), residual(c_p)
+        dRM_s, dRM_p = local_derivative(c_s), local_derivative(c_p)
+
+        if self.inertia:
+            ws = w * tau * rho * (0.0 if old_level else 1.0)                      # SUPG weight factor
             tau_c = ops.lsic_tau(disc, mu_tau, self.rho, speed)
             divu = np.einsum('egaa->eg', G) + e_hh
 
-            Ru += (np.einsum('eg,gi,ega->eia', w, N, conv) + np.einsum('eg,egi,ega->eia', ws, uB, RM)
+            Ru += (np.einsum('eg,gi,ega->eia', w, N, conv) + np.einsum('eg,egi,ega->eia', ws, uB, RM_s)
                    + np.einsum('eg,egia->eia', w * tau_c * divu, divB))
 
-            Juu = (np.einsum('eg,gi,egajc->eiajc', w, N, dconv) + np.einsum('eg,egi,egajc->eiajc', ws, uB, dconv)
+            Juu = (np.einsum('eg,gi,egajc->eiajc', w, N, dconv) + np.einsum('eg,egi,egajc->eiajc', ws, uB, dRM_s)
                    + np.einsum('eg,egia,egjc->eiajc', w * tau_c, divB, divB))
             if self.newton:
-                Juu = Juu + np.einsum('eg,gj,egic,ega->eiajc', ws, N, B, RM)        # derivative of the SUPG weight
+                Juu = Juu + np.einsum('eg,gj,egic,ega->eiajc', ws, N, B, RM_s)      # derivative of the SUPG weight
             blocks.append((Juu.reshape(nel, nne * dim, nne * dim), ru, ru))
-            blocks.append((np.einsum('eg,egi,egja->eiaj', ws, uB, B).reshape(nel, nne * dim, nne), ru, rp))
+            blocks.append((c_s[1] * np.einsum('eg,egi,egja->eiaj', ws, uB, B).reshape(nel, nne * dim, nne), ru, rp))
 
         R += layout.scatter_vector(Ru.reshape(nel, -1), ru)
 
         # ----- PSPG -----
         if self.pspg:
-            R += layout.scatter_vector(np.einsum('eg,egia,ega->ei', w * tau, B, RM), rp)
-            blocks.append((np.einsum('eg,egia,egja->eij', w * tau, B, B), rp, rp))
-            if dconv is not None:
-                blocks.append((np.einsum('eg,egia,egajc->eijc', w * tau, B, dconv).reshape(nel, nne, nne * dim), rp, ru))
+            R += layout.scatter_vector(np.einsum('eg,egia,ega->ei', w * tau, B, RM_p), rp)
+            blocks.append((c_p[1] * np.einsum('eg,egia,egja->eij', w * tau, B, B), rp, rp))
+            if dRM_p is not None:
+                blocks.append((np.einsum('eg,egia,egajc->eijc', w * tau, B, dRM_p).reshape(nel, nne, nne * dim), rp, ru))
 
         # ----- viscous heating -----
         if self.heating is not None:
@@ -642,13 +682,13 @@ class FlowTerm:
             cols = np.arange(nel * ngp).reshape(nel, ngp)[:, :, None] * dim + np.arange(dim)    # (nel, ngp, dim)
             W = sp.csr_matrix((layout.ndof, nel * ngp * dim))
             if self.inertia:
-                Ws = np.einsum('eg,egi,ac->egiac', w * tau * rho, uB, eye)                      # (e, g, i, a, a')
+                Ws = np.einsum('eg,egi,ac->egiac', c_s[2] * ws, uB, eye)                        # (e, g, i, a, a')
                 rows = np.broadcast_to(ru.reshape(nel, nne, dim)[:, None, :, :, None], Ws.shape)
                 W = W + sp.coo_matrix((Ws.ravel(), (rows.ravel(),
                                                     np.broadcast_to(cols[:, :, None, None, :], Ws.shape).ravel())),
                                       shape=W.shape).tocsr()
             if self.pspg:
-                Wp = np.einsum('eg,egia->egia', w * tau, B)
+                Wp = np.einsum('eg,egia->egia', c_p[2] * w * tau, B)
                 W = W + sp.coo_matrix((Wp.ravel(), (np.broadcast_to(rp[:, None, :, None], Wp.shape).ravel(),
                                                     np.broadcast_to(cols[:, :, None, :], Wp.shape).ravel())),
                                       shape=W.shape).tocsr()
@@ -702,3 +742,46 @@ class FlowTerm:
                                   shape=D.shape).tocsr()
 
         return extra, D
+
+    def _old_space_residual(self, time):
+
+        """RM_space (momentum residual without grad p) at the old level time['x_old'], computed once per step."""
+
+        x_old = time['x_old']
+        cached = getattr(self, '_old_cache', None)
+        if cached is not None and cached[0] is x_old:
+            return cached[1]
+
+        value = self._space_residual(x_old)
+        self._old_cache = (x_old, value)
+
+        return value
+
+    def _space_residual(self, x):
+
+        """rho (u . grad) u - f - div(sigma~) at the Gauss points of the state x (no derivatives)."""
+
+        disc = self.system.disc
+        nel, ngp, nne, dim = disc.B.shape
+        _, u, G, _ = self._kinematics(x)
+
+        if self.law is not None:
+            eps, e_hh, _, _ = self._strain(u, G)
+            mu = self.viscosity(x)[0]
+            sigma = 2.0 * mu[..., None, None] * eps
+            divs = np.zeros((nel, ngp, dim)) if self.Q is None else (self.Q @ sigma.ravel()).reshape(nel, ngp, dim)
+            if self.Q is not None and disc.axisymmetric:
+                r = disc.radius
+                divs = divs + np.stack([(sigma[..., 0, 0] - 2.0 * mu * e_hh) / r, sigma[..., 1, 0] / r], axis=-1)
+        elif self.V is not None:
+            divs = (self.V @ x).reshape(nel, ngp, dim)
+        else:
+            divs = np.zeros((nel, ngp, dim))
+
+        value = -divs
+        if self.f is not None:
+            value = value - self.f
+        if self.inertia:
+            value = value + ops.at_gauss(disc, self.rho)[..., None] * np.einsum('egb,egab->ega', u, G)
+
+        return value

@@ -95,6 +95,13 @@
 | Ley de potencia en tubo (n = 0.5) | perfil analítico y caudal | `Test/test_axisymmetric.py` | orden 2.03 |
 | Jacobiano axisimétrico acoplado | Carreau + Arrhenius, inercia, PSPG con términos de aro, calentamiento, convección del calor | `Test/test_axisymmetric.py` | 1e-7 relativo |
 | Reómetro capilar (ejemplo) | viscosidad "medida" (Rabinowitsch) frente a la ley Cross del modelo | `Example_Capillary_Rheometer.py` | 0.3–1.1 % (2.2 % en el extremo, n' unilateral) |
+| Taylor–Green (Re = 10 en [0, π]², paredes deslizantes) | solución exacta; error temporal frente a una referencia de paso fino en la misma malla | `Test/test_transient_flow.py` | u 3e-4, p 1e-3 (24×24); Euler orden 1.0, BDF2 orden 2.0; Crank–Nicolson 3 a 12 veces más preciso que BDF2 pero de orden 1 asintótico |
+| Arranque entre placas con inercia | serie de Fourier; presión monótona (sin oscilación), igual en CN y BDF2 | `Test/test_transient_flow.py` | u 1e-3 relativo |
+| Límite estacionario | cavidad Re = 10 con Carreau: final del transitorio BDF2 = solución estacionaria de Newton | `Test/test_transient_flow.py` | 1e-10 |
+| Tangente transitoria | flujo + calor con el contexto de paso frente a diferencias finitas | `Test/test_transient_flow.py` | 1e-7 relativo |
+| Calor transitorio convectado | flujo tapón de `ff` = velocidad prescrita en `ht`, con SUPG | `Test/test_transient_flow.py` | 1e-8 |
+| Fuerzas por reacciones | canal: paredes = Δp H; Couette: −μU L/H; tubo: Δp πR² | `Test/test_transient_flow.py` | 1e-10 |
+| Cilindro de Schäfer–Turek 2D-2 (Re = 100, ejemplo) | C_D,max 3.22–3.24; C_L,max 0.99–1.01; St 0.295–0.305 | `Example_Cylinder_Vortex_Shedding.py` | 2926 nodos, BDF2 dt = 0.01: C_D,max 3.231 (dentro); C_L,max 0.966 (−2.4 %); St 0.2905 (−1.5 %); 15 min |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -198,6 +205,16 @@ Lo que sigue pendiente:
 - Fluidos inelásticos: la pérdida de entrada de una contracción (corrección de Bagley) es pequeña; en polímeros reales
   domina la elasticidad del fundido (viscoelástico, Etapa 17 opcional).
 
+### Fluidos (Etapa 14, transitorio)
+- **Esquema recomendado para flujo: BDF2** (orden 2 limpio, L-estable). Crank–Nicolson es estable (presión implícita,
+  sin oscilaciones) y muy preciso a pasos prácticos, pero conserva un término de primer orden de coeficiente pequeño
+  cuyo origen no se ha aislado. Euler implícito: orden 1.
+- La presión del arranque desde el reposo tiene un pequeño error espacial de la PSPG (curvatura grande cerca de las
+  paredes) que decae con el tiempo.
+- Paso fijo (sin control adaptativo). Condiciones de contorno independientes del tiempo.
+- Coste: el término de flujo se reensambla en cada iteración de Newton (en Python vectorizado); el ejemplo del cilindro
+  con unos miles de nodos y 800 pasos tarda del orden de veinte minutos.
+
 ### Física y numérica
 - **Convección:** diferencias centradas sin estabilización. Para Pe alto habrá oscilaciones. `Pe` se calcula pero no se
   usa. El código de estabilización que no estaba conectado se eliminó en la Etapa 5; habrá que implementarlo.
@@ -285,7 +302,7 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
    factorización reutilizada (transitorio lineal y `solve()` repetidos), exportación VTK/PVD. Pendiente: XDMF/HDF5, VTK binario,
    iterativo para sistemas con convección fuerte o varios campos acoplados (AMG por bloques).
 6. ~~**Estabilización de convección.**~~ Hecha (SUPG en 1D y 2D).
-7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 (base vectorial y Darcy), 10 (Stokes con PSPG), 11 (Navier–Stokes estacionario), 12 (no newtonianos y acoplamiento térmico) y 13 (axisimétrico) hechas; siguiente, transitorio de Navier–Stokes.
+7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 a 14 hechas (base vectorial y Darcy, Stokes, Navier–Stokes, no newtonianos y acoplamiento térmico, axisimétrico, transitorio); siguiente, Boussinesq y especies (Etapa 15).
 
 ## 5. Criterio para cerrar una etapa
 

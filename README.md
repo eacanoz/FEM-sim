@@ -33,7 +33,8 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Fluidos no newtonianos (`ff.setViscosityLaw`): ley de potencia, Carreau–Yasuda, Cross, Cross–WLF, Bingham y Herschel–Bulkley regularizados, desplazamiento de Arrhenius | Operativo: perfiles analíticos de ley de potencia (orden 2) y Bingham (tapón), jacobiano exacto con dμ/dγ̇ y dμ/dT |
 | Acoplamiento flujo–calor (`Model(psc=[ff, ht])`, `setVelocity('u')`, `setViscousHeating`): convección por la velocidad calculada con SUPG, disipación viscosa, μ(T) | Operativo: Brinkman exacto, μ(T) en Couette, equivalencia con velocidad prescrita, jacobiano acoplado completo |
 | Axisimétrico r-z (`Model(axisymmetric=True)`): calor, especies, Darcy y flujo (términos de aro en deformación, divergencia y esfuerzo) | Operativo: conducción radial, Hagen–Poiseuille, extensión uniaxial exacta, ley de potencia en tubo, jacobiano acoplado |
-| Transitorio NS, turbulencia | En curso: ver [docs/PLAN_FLUIDOS.md](docs/PLAN_FLUIDOS.md) |
+| Transitorio no lineal (`solverConfiguration(timeScheme='BDF2')` o θ): Newton en cada paso, estabilización con el residuo discreto en el tiempo, presión implícita; fuerzas por reacciones (`ff.boundaryForce`) | Operativo: Taylor–Green (BDF2 orden 2, Euler orden 1), arranque frente a la serie de Fourier, límite estacionario exacto, cilindro de Schäfer–Turek |
+| Turbulencia | Pendiente: ver [docs/PLAN_FLUIDOS.md](docs/PLAN_FLUIDOS.md) |
 | `rho Cp(T)`, elementos de orden superior, 3D | No implementado |
 
 ## Requisitos
@@ -204,6 +205,7 @@ Las aristas se seleccionan con un predicado sobre su punto medio: `mesh.boundary
 | `Example_NavierStokes_Cavity.py` | Cavidad con tapa móvil a Re = 100, 400 y 1000 con continuación en Re; perfil central frente a Ghia et al. y líneas de corriente |
 | `Example_Polymer_Slit_Die.py` | Fundido de polímero en un dado de rendija: Cross–WLF, calentamiento viscoso y acoplamiento térmico; perfil de velocidad, temperatura, balance de energía y curva caudal–presión |
 | `Example_Capillary_Rheometer.py` | Reómetro capilar simulado (axisimétrico, Cross): tasa de corte aparente, esfuerzo en pared, pérdida de entrada (Bagley), corrección de Rabinowitsch; recupera la curva de viscosidad del modelo |
+| `Example_Cylinder_Vortex_Shedding.py` | Desprendimiento de vórtices detrás de un cilindro (Schäfer–Turek 2D-2, Re = 100): Navier–Stokes transitorio con BDF2, C_D, C_L y Strouhal frente a la referencia (varios minutos) |
 | `readMesh.py` | Lectura de información de un archivo `.msh` con gmsh |
 
 Algunos ejemplos abren ventanas de Matplotlib (`plt.show()`). Para ejecutarlos sin ventanas use `MPLBACKEND=Agg`.
@@ -237,6 +239,7 @@ python Test/test_stokes.py                # Etapa 10: Stokes con PSPG: parche, P
 python Test/test_navier_stokes.py         # Etapa 11: Navier–Stokes: tangente, Kovasznay, cavidad frente a Ghia, canal, límite de Stokes, Picard (8)
 python Test/test_non_newtonian.py         # Etapa 12: leyes de viscosidad, ley de potencia, Bingham, Brinkman, μ(T), convección acoplada, jacobiano (8)
 python Test/test_axisymmetric.py          # Etapa 13: medidas r-z, conducción radial, Hagen–Poiseuille, extensión uniaxial, tubo de ley de potencia, jacobiano (6)
+python Test/test_transient_flow.py        # Etapa 14: Taylor–Green, arranque, límite estacionario, tangente con dt, calor transitorio, fuerzas (7)
 ```
 
 Todas deben pasar antes de hacer un commit que toque el núcleo (`Source/`).
@@ -268,7 +271,7 @@ Source/
     Operators.py               operadores de forma débil vectorizados (einsum), escalares y vectoriales
     PointwiseLaw.py            leyes no lineales con jacobianos automáticos (JAX)
     System.py                  matrices, términos no lineales (leyes de valores y de gradientes) y BC
-    Solvers.py                 modelSolver: lineal, Newton, θ-método transitorio
+    Solvers.py                 modelSolver: lineal, Newton, transitorio θ (lineal) y no lineal θ/BDF2 con Newton por paso
     DirectSolver.py            PARDISO / SuperLU
     IterativeSolver.py         BiCGSTAB, GMRES, CG con iLU
 Test/                          pruebas automáticas (ver arriba) y cuadernos antiguos

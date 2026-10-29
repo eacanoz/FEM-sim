@@ -66,7 +66,7 @@ Mesh ─► Elements ─► Discretization ─► Operators ─► System ─►
 | Gauss | 2 puntos por dirección (`Discretization(mesh, order=2)`) |
 | Coeficientes | número, array en puntos de Gauss, o función de las coordenadas `f(x)`, `f(x, y)` |
 | `h` y `flux` como función | en una BC, una función recibe el **valor del campo** (p. ej. `h(T)` de radiación) |
-| Transitorio | θ-método de paso fijo sobre `M x' + A x = b`; con términos no lineales cada paso usa la linealización de Newton: `(M + θ dt J) Δx = -dt R(x_n)` |
+| Transitorio | Paso fijo. Sistema lineal con θ: `(M + θ dt A) x = ...` con la factorización reutilizada. Con términos no lineales o `timeScheme='BDF2'`: Newton en cada paso sobre `F(x) = M x' + θ R(x) + (1-θ) R(x_n)` (BDF2: `M (3x - 4x_n + x_{n-1})/(2dt) + R(x)`); las filas algebraicas (sin masa) y sus incógnitas (presión) son siempre implícitas |
 | Estado inicial | `physics.initField(campo, valor)`: número o función de las coordenadas |
 
 ## 4. Módulos en detalle
@@ -201,7 +201,15 @@ El plan completo de fluidos está en [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md).
   términos `(σ_rr - σ_θθ)/r`, `σ_rz/r` de `div σ` (`Operators.hoop_stress_terms`, en el residuo de la PSPG/SUPG). La
   PSPG lineal de Stokes usa ahora `pspg_weight(disc, τ) @ recovered_stress_divergence(disc, μ)`. El eje es una
   condición de simetría (`addBC_SymmetryEdges`, `u_r = 0`); `flowRate` devuelve el caudal volumétrico `2π∫u·n r ds`.
-- **Falta:** transitorio de Navier–Stokes (Etapa 14), elementos de orden mixto (`quad9`, `tri6`) y
+- **Ya está (Etapa 14):** `modelSolver._nonlinear_transient`: Newton con búsqueda de línea en cada paso (θ o BDF2;
+  `model.step_iterations`). El solver publica el paso en `System.time = {alpha, beta, theta, x_old, dt}` (`x' = αx + β`).
+  `FlowTerm` estabiliza con el residuo de momento discreto en el tiempo, `ρx' + ∇p + θR_esp(x) + (1-θ)R_esp(x_n)`,
+  evaluado una vez (dividido por θ en las filas de momento, entero en las de PSPG); el residuo del nivel anterior se
+  evalúa con `{'old_level': True}` y sin SUPG. `FieldConvectionTerm` hace lo mismo con `m φ'`. Ya no hay masas
+  estabilizadas congeladas. `τ` no depende de `dt` (Bochev, Gunzburger y Shadid 2004): así el estado estacionario del
+  transitorio coincide con el del solver estacionario. `ff.boundaryForce(aristas, rate=None)`: fuerza del fluido sobre
+  un contorno por reacciones (residuo de momento sin BC en los nodos del contorno; `rate` añade la inercia).
+- **Falta:** turbulencia (Etapa 16), elementos de orden mixto (`quad9`, `tri6`) y
   `DofLayout` con nodos distintos por campo (Taylor–Hood), estado interno para plasticidad.
 
 ### 5.3 Añadir un elemento o una dimensión

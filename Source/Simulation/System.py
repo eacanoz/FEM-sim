@@ -263,6 +263,10 @@ class System:
         self._M = sp.csr_matrix((n, n))
         self._terms = []
 
+        # Time derivative of the current step, set by the transient solver: x' = alpha x + beta, with the factor
+        # `scale` for the terms that add it to their residual and the step `dt`. None in steady studies.
+        self.time = None
+
         self.is_dirichlet = np.zeros(n, dtype=bool)
         self.dirichlet_value = np.zeros(n)
 

@@ -156,9 +156,17 @@ class Model(object):
         return self._system().mass()
 
     def solverConfiguration(self, Study=StudyType.steady_state, Type=ProblemType.linear, Method=SolverType.direct, Solver = DirectSolvers.PARDISO, 
-                            timeDisc = 1, timeStep=0.05, totalTime = 3, prec = Preconditioners.iLU, tol = 1e-10, maxiter = None):
-        
-        """Configures the solver for the model based on the provided options."""
+                            timeDisc = 1, timeStep=0.05, totalTime = 3, prec = Preconditioners.iLU, tol = 1e-10, maxiter = None,
+                            timeScheme='theta'):
+
+        """Configures the solver for the model based on the provided options.
+
+        Transient studies: timeScheme 'theta' (timeDisc = theta: 1 implicit Euler, 0.5 Crank-Nicolson) or 'BDF2'
+        (second order and L-stable: no oscillating algebraic variables such as the pressure; the first step is
+        implicit Euler). Systems with nonlinear terms iterate Newton inside every step."""
+
+        if timeScheme not in ('theta', 'BDF2'):
+            raise ValueError(f"Esquema temporal desconocido: {timeScheme!r} (use 'theta' o 'BDF2').")
 
         self.solverOptions = {
             'Study': Study,
@@ -167,6 +175,7 @@ class Model(object):
             'Solver': Solver,
             'Preconditioner': prec,
             'Time Discretization': timeDisc,
+            'Time Scheme': timeScheme,
             'Time Step': timeStep,
             'Time': totalTime,
             'Tolerance': tol,           # relative residual of the iterative solvers
@@ -201,7 +210,8 @@ class Model(object):
             sim_logger.info("Preconditioner: " + (prec.value if prec is not None else "none"))
 
         if self.solverOptions['Study'] == StudyType.transient:
-            sim_logger.info("Time Discretization: " + str(self.solverOptions['Time Discretization']))
+            sim_logger.info("Time Discretization: " + str(self.solverOptions['Time Discretization']) +
+                            ", scheme: " + str(self.solverOptions.get('Time Scheme', 'theta')))
             sim_logger.info("Time Step: " + str(self.solverOptions['Time Step']))
             sim_logger.info("Total Time: " + str(self.solverOptions['Time']))
 
@@ -213,6 +223,7 @@ class Model(object):
         self.timeVector = solver.timeVector
         self.solver_iterations = solver.iterations   # Krylov iterations of every linear solve (empty with direct solvers)
         self.newton_iterations = getattr(solver, 'newton_iterations', None)   # steady nonlinear solves
+        self.step_iterations = getattr(solver, 'step_iterations', None)       # Newton iterations of each time step
 
         if self.solverOptions['Study'] == StudyType.steady_state:
             self.sol.update(self.physics.derived_fields(self))
