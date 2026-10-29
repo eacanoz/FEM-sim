@@ -19,7 +19,7 @@ from Source.Physics.Physics import physics
 
 class CoupledPhysics(physics):
 
-    _own = ('parts', 'modelRef', 'mat', 'physics_description')
+    _own = ('parts', 'modelRef', 'mat')
 
     def __init__(self, model, parts):
 
@@ -37,7 +37,12 @@ class CoupledPhysics(physics):
 
             self.parts[name] = cls(model)
 
-        self.physics_description = ' + '.join(p.physics_description for p in self.parts.values())
+    @property
+    def physics_description(self):
+
+        """Descriptions of the parts, read live (a part may change it, e.g. ff.setInertia)."""
+
+        return ' + '.join(p.physics_description for p in self.parts.values())
 
     # ----- fields and conditions of all the parts -----
 

@@ -203,6 +203,19 @@ def test_picard_reaches_the_same_solution():
     assert newton.newton_iterations < picard.newton_iterations
 
 
+def test_description_follows_set_inertia():
+
+    mesh = rect_mesh((1.0, 1.0), (2, 2))
+    model = Model(name='desc', dim=2, mesh=mesh, mat=material('X', miu=1.0, rho=1.0), psc=ff)
+    assert 'Stokes' in model.physics_status and 'Physics: Creeping flow' in str(model)
+
+    model.physics.setInertia(True)
+    assert model.physics_status == 'Laminar flow (Navier-Stokes)' and 'Navier-Stokes' in str(model)
+
+    model.physics.setInertia(False)
+    assert 'Stokes' in model.physics_status
+
+
 def test_errors():
 
     mesh = rect_mesh((1.0, 1.0), (2, 2))
@@ -221,7 +234,8 @@ def test_errors():
 if __name__ == "__main__":
     tests = [test_tangent_against_finite_differences, test_kovasznay_flow_converges,
              test_lid_driven_cavity_re100_against_ghia, test_fully_developed_channel_is_exact_with_inertia,
-             test_low_reynolds_limit_is_stokes, test_picard_reaches_the_same_solution, test_errors]
+             test_low_reynolds_limit_is_stokes, test_picard_reaches_the_same_solution,
+             test_description_follows_set_inertia, test_errors]
     failed = 0
     for t in tests:
         try:

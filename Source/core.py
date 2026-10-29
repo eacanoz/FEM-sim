@@ -46,12 +46,6 @@ class Model(object):
         # Model physics: one physics class, or a list of classes solved together (CoupledPhysics)
         self.physics = CoupledPhysics(self, psc) if isinstance(psc, (list, tuple)) else psc(self)
 
-        if self.physics is None:
-            self.physics_status = 'Not defined'
-
-        else:
-            self.physics_status = self.physics.physics_description
-
         self.A = None
         self.b = None
 
@@ -70,6 +64,13 @@ class Model(object):
 
         """Returns the mesh of the model."""
         return self._mesh
+
+    @property
+    def physics_status(self):
+
+        """Current description of the physics (read live: setInertia and similar calls change it)."""
+
+        return 'Not defined' if self.physics is None else self.physics.physics_description
 
     def add_material(self):
         pass
