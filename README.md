@@ -30,7 +30,9 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Flujo de Darcy (`darcy`): permeabilidad escalar, función o tensor, gravedad, fuente, almacenamiento; velocidad hacia la convección de `ht`/`mt` | Operativo, exacto en 1D y 2D, hidrostática, inyección |
 | Flujo reptante (Stokes, `ff`): velocidad y presión de igual orden (Q4/T3) con PSPG y esfuerzo viscoso recuperado; no deslizamiento, entrada, salida, simetría, tracción; transitorio | Operativo: Poiseuille nodalmente exacto (Q4), solución exacta (u orden 2, p orden 1–1.5), cavidad frente a la referencia, arranque frente a la serie de Fourier |
 | Navier–Stokes estacionario (`ff.setInertia(True)`): convección con Newton o Picard, SUPG/PSPG/LSIC sobre el residuo completo | Operativo: Kovasznay (orden 2 en u y p), cavidad Re = 100 frente a Ghia et al., Newton en 5–7 iteraciones |
-| No newtonianos, axisimétrico, transitorio NS, turbulencia | En curso: ver [docs/PLAN_FLUIDOS.md](docs/PLAN_FLUIDOS.md) |
+| Fluidos no newtonianos (`ff.setViscosityLaw`): ley de potencia, Carreau–Yasuda, Cross, Cross–WLF, Bingham y Herschel–Bulkley regularizados, desplazamiento de Arrhenius | Operativo: perfiles analíticos de ley de potencia (orden 2) y Bingham (tapón), jacobiano exacto con dμ/dγ̇ y dμ/dT |
+| Acoplamiento flujo–calor (`Model(psc=[ff, ht])`, `setVelocity('u')`, `setViscousHeating`): convección por la velocidad calculada con SUPG, disipación viscosa, μ(T) | Operativo: Brinkman exacto, μ(T) en Couette, equivalencia con velocidad prescrita, jacobiano acoplado completo |
+| Axisimétrico, transitorio NS, turbulencia | En curso: ver [docs/PLAN_FLUIDOS.md](docs/PLAN_FLUIDOS.md) |
 | `rho Cp(T)`, elementos de orden superior, 3D | No implementado |
 
 ## Requisitos
@@ -199,6 +201,7 @@ Las aristas se seleccionan con un predicado sobre su punto medio: `mesh.boundary
 | `Example_Darcy_Transport.py` | Darcy en un medio con una inclusión de baja permeabilidad, conservación del caudal y pluma de un trazador arrastrada por la velocidad de Darcy |
 | `Example_Stokes_Contraction.py` | Contracción plana 4:1 (entrada a un dado) en flujo reptante: conservación del caudal, pérdida de presión de entrada y corrección de Couette en tres mallas, vórtice de esquina |
 | `Example_NavierStokes_Cavity.py` | Cavidad con tapa móvil a Re = 100, 400 y 1000 con continuación en Re; perfil central frente a Ghia et al. y líneas de corriente |
+| `Example_Polymer_Slit_Die.py` | Fundido de polímero en un dado de rendija: Cross–WLF, calentamiento viscoso y acoplamiento térmico; perfil de velocidad, temperatura, balance de energía y curva caudal–presión |
 | `readMesh.py` | Lectura de información de un archivo `.msh` con gmsh |
 
 Algunos ejemplos abren ventanas de Matplotlib (`plt.show()`). Para ejecutarlos sin ventanas use `MPLBACKEND=Agg`.
@@ -229,7 +232,8 @@ python Test/test_triangles_gmsh.py        # triángulos T3 y gmsh: parche, manuf
 python Test/test_convection_supg.py       # velocidad compartida y SUPG: exactitud 1D, 2D = 1D, manufacturada, transitorio (9)
 python Test/test_fluids_foundation.py     # Etapa 9: operadores vectoriales, leyes con gradientes, ley de potencia, Darcy (11)
 python Test/test_stokes.py                # Etapa 10: Stokes con PSPG: parche, Poiseuille, solución exacta, cavidad, simetría, arranque (8)
-python Test/test_navier_stokes.py         # Etapa 11: Navier–Stokes: tangente, Kovasznay, cavidad frente a Ghia, canal, límite de Stokes, Picard (7)
+python Test/test_navier_stokes.py         # Etapa 11: Navier–Stokes: tangente, Kovasznay, cavidad frente a Ghia, canal, límite de Stokes, Picard (8)
+python Test/test_non_newtonian.py         # Etapa 12: leyes de viscosidad, ley de potencia, Bingham, Brinkman, μ(T), convección acoplada, jacobiano (8)
 ```
 
 Todas deben pasar antes de hacer un commit que toque el núcleo (`Source/`).
@@ -252,7 +256,8 @@ Source/
     HeatTransfer.py            ht: conducción, convección, radiación, BC en nodos y aristas
     MassTransfer.py            mt: especies, reacciones acopladas, BC en nodos y aristas
     Darcy.py                   darcy: flujo en medios porosos (presión) y velocidad de Darcy
-    FluidFlow.py               ff: flujo incompresible (Stokes y Navier–Stokes) con PSPG/SUPG/LSIC, BC de velocidad, salida, simetría y tracción
+    FluidFlow.py               ff: flujo incompresible (Stokes y Navier–Stokes, no newtoniano, calentamiento viscoso) con PSPG/SUPG/LSIC
+    Rheology.py                leyes de viscosidad μ(γ̇, T): potencia, Carreau–Yasuda, Cross, Cross–WLF, Bingham, Herschel–Bulkley, Arrhenius
   Primals/                     campos escalares y vectoriales (valores nodales)
   Simulation/
     Discretization.py          geometría en los puntos de Gauss y facetas (cualquier dimensión)

@@ -27,7 +27,7 @@ Mesh ─► Elements ─► Discretization ─► Operators ─► System ─►
 | Operadores | `Simulation/Operators.py` | Escalares: `diffusion`, `diffusion_tensor`, `convection`, `mass`, `source`, `gradient_source`, `facet_mass`, `facet_source`. Vectoriales: `vector_mass`, `vector_diffusion`, `viscous`, `divergence`, `vector_source`, `facet_vector_source`. PSPG: `element_size`, `pspg_tau`, `pspg_mass`, `recovered_stress`, `projected_stress_divergence`, `recovered_stress_divergence`, `lsic_tau`. Coeficientes por punto de Gauss | no |
 | Leyes puntuales | `Simulation/PointwiseLaw.py` | Función JAX → `vmap` + `jacfwd` compilados una vez, aplicados a todos los puntos | no |
 | Sistema | `Simulation/System.py` | Acumula matrices, términos no lineales y BC; da `linear(x)`, `residual_and_tangent(x)`, `mass()` | no |
-| Física | `Physics/HeatTransfer.py`, `Physics/MassTransfer.py`, `Physics/Darcy.py`, `Physics/FluidFlow.py` | Añade sus operadores y leyes a un `System` (`add_terms`) | sí |
+| Física | `Physics/HeatTransfer.py`, `Physics/MassTransfer.py`, `Physics/Darcy.py`, `Physics/FluidFlow.py` (+ `Physics/Rheology.py`) | Añade sus operadores y leyes a un `System` (`add_terms`) | sí |
 | Composición | `Physics/Coupled.py` | Reúne varias físicas en un modelo: un `DofLayout` y un `System` compartidos | no |
 | Solvers | `Simulation/Solvers.py` | Lineal, Newton con line search, θ-método transitorio, todo sobre vectores de DOF | no |
 
@@ -87,7 +87,7 @@ Toda física debe implementar `build_system`; la antigua ruta por elemento (JAX 
   (`nc * dim`, fila a fila); por cada salida devuelve una fuente `s` (`nc`) y un flujo `F` (`nc * dim`). El jacobiano
   sale por autodiff respecto a valores y gradientes. Sirve para `p`-Laplaciano/ley de potencia, convección por un campo
   calculado, `μ(γ̇)` y modelos de turbulencia. `value_gradient_basis` da a la vez la interpolación y las funciones de prueba.
-- `add_term(term)`: cualquier término no lineal con `contribution(x) -> (R, J)` (p. ej. `NavierStokesTerm`).
+- `add_term(term)`: cualquier término no lineal con `contribution(x) -> (R, J)` (p. ej. `FlowTerm`, `FieldConvectionTerm`).
 - `add_traction(campo, facetas, t)`: tracción sobre un campo vectorial. `add_normal_pressure(campo, facetas, p)`:
   tracción `-p n` (BC `NormalTraction`, salidas).
 - `add_flux(campo, facetas, q)` y `add_robin(campo, facetas, h, ext)`: BC sobre facetas, con `h` o `q` numéricos o
@@ -177,14 +177,23 @@ El plan completo de fluidos está en [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md).
   promedios por elemento de un parche; en los nodos de contorno el parche incluye el de sus vecinos interiores) y
   hace exacto el Poiseuille en Q4. Con todas las velocidades prescritas la presión se fija en un nodo
   (`setPressureReference`, o el nodo 0 automáticamente). `flowRate(aristas)` integra `u·n`.
-- **Ya está (Etapa 11):** `ff.setInertia(True, linearization='newton'|'picard')`. `NavierStokesTerm` (en
+- **Ya está (Etapa 11):** `ff.setInertia(True, linearization='newton'|'picard')`. `NavierStokesTerm` (hoy `FlowTerm`, en
   `FluidFlow.py`, añadido con `System.add_term`) ensambla en bloque la convección de Galerkin y los términos de
   estabilización sobre el residuo completo `R_M = ρ(u·∇)u + ∇p - f - div σ̃`: SUPG `∫τρ(u·∇v)·R_M`, PSPG `∫τ∇q·R_M` y
   grad-div `∫τ_c div u div v` (`τ_c = ρ|u|h/2·min(Re_h/3, 1)`). El tangente es exacto con `τ` congelado (se omite
   `dτ/du`); `div σ̃` es una matriz dispersa `V` que acopla los elementos de cada parche de recuperación. `model.newton_iterations`
   guarda las iteraciones del último solve no lineal. Continuación en Re: cambiar `setViscosity` y volver a resolver
   (los campos conservan la solución anterior).
-- **Falta:** no newtonianos (Etapa 12), elementos de orden mixto (`quad9`, `tri6`) y
+- **Ya está (Etapa 12):** `ff.setViscosityLaw(ley)` con las leyes de `Physics/Rheology.py` (`ViscosityLaw`: `μ(γ̇², T)`
+  en `jax.numpy`, `γ̇ = sqrt(2 ε:ε)`, temperatura en °C). `NavierStokesTerm` pasó a llamarse `FlowTerm` y reúne lo
+  no lineal del flujo: viscosidad por ley (tangente con `dμ/dγ̇²` y `dμ/dT`), inercia, PSPG/SUPG/LSIC y disipación
+  viscosa `Φ = μγ̇²` (`setViscousHeating`) como fuente del calor. Con una ley, el esfuerzo recuperado se calcula a partir
+  del esfuerzo en Gauss con `Operators.gauss_stress_divergence` (solo geometría) y su tangente es `Q @ dσ/dx`. Sin ley,
+  inercia ni calentamiento, Stokes sigue lineal. `physics.setVelocity('u')` (nombre de un campo) añade
+  `FieldConvectionTerm` (`Physics.py`): convección monolítica por la velocidad calculada, con SUPG y bloques cruzados;
+  `CoupledPhysics.setVelocity/setStabilization` omiten la parte de flujo (`computes_velocity = True`).
+  `derived_fields` de `ff`: `shear_rate` y, con ley, `viscosity`.
+- **Falta:** axisimétrico (Etapa 13), elementos de orden mixto (`quad9`, `tri6`) y
   `DofLayout` con nodos distintos por campo (Taylor–Hood), estado interno para plasticidad.
 
 ### 5.3 Añadir un elemento o una dimensión

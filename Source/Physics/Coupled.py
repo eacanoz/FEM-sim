@@ -90,15 +90,20 @@ class CoupledPhysics(physics):
 
     def setVelocity(self, v):
 
-        """One velocity for every part: they all convect with the same field."""
+        """One velocity for every transported part: they all convect with the same field. A flow physics (whose
+        velocity is an unknown) is skipped, so model.physics.setVelocity('u') couples heat and species with it."""
 
         for part in self.parts.values():
-            part.setVelocity(v)
+            if not getattr(part, 'computes_velocity', False):
+                part.setVelocity(v)
 
     def setStabilization(self, method='SUPG'):
 
+        """Convection stabilization of the transported parts (the flow physics keeps its own, set on the part)."""
+
         for part in self.parts.values():
-            part.setStabilization(method)
+            if not getattr(part, 'computes_velocity', False):
+                part.setStabilization(method)
 
     # ----- delegation to the parts -----
 

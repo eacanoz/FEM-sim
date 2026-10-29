@@ -73,7 +73,9 @@ class physics:
 
     def setVelocity(self, v):
 
-        """Convection velocity: a number (1D), a vector (2D) or a function of the coordinates. Switches convection on."""
+        """Convection velocity: a number (1D), a vector (2D), a function of the coordinates, an array at the Gauss
+        points, or the name of a vector field of the same model (e.g. 'u', the velocity solved by the flow physics in
+        Model(psc=[ff, ht])): then the convection is nonlinear and coupled with that field. Switches convection on."""
 
         self.vel = v
         self.Convection = True
@@ -100,6 +102,20 @@ class physics:
             return
 
         rows = layout.element_dofs(disc.conn, field)
+
+        if isinstance(self.vel, str):
+            if self.vel not in layout.names:
+                raise ValueError(f"La velocidad de conveccion es el campo '{self.vel}', que no existe en el modelo "
+                                 "(combine con la fisica de flujo: Model(psc=[ff, ht])).")
+            system.add_term(FieldConvectionTerm(system, field, self.vel, self.C_const, k, f, self.Stab == 'SUPG'))
+            if self.Stab == 'SUPG' and np.any(np.asarray(self.M_const) != 0):
+                # transient: SUPG mass with the velocity of the state at the start of the solve
+                u0 = disc.interpolate(np.asarray(self.modelRef.physics.var[self.vel].values, dtype=float))
+                tau = ops.supg_tau(disc, self.C_const, u0, k)
+                _, M, _ = ops.supg_terms(disc, self.C_const, u0, tau, m=self.M_const)
+                system.add_mass(layout.scatter_matrix(M, rows, rows))
+            return
+
         system.add_matrix(layout.scatter_matrix(ops.convection(disc, self.C_const, self.vel), rows, rows))
 
         if self.Stab == 'SUPG':
@@ -161,3 +177,61 @@ class physics:
         """
 
         return {'type': 'Newton', 'h': h, 'var_ext': var_ext}
+
+
+class FieldConvectionTerm:
+
+    """Convection of a scalar field by a vector field of the same model, both unknowns (monolithic coupling):
+
+        R_phi += integral N_i c u . grad(phi)  [+ integral tau (c u . grad N_i) (c u . grad(phi) - f)  with SUPG]
+
+    The tangent includes the coupling blocks d/du (convecting velocity and SUPG weight); tau is kept frozen. The SUPG
+    residual has the convection and the source f of the equation; other sources (reactions, viscous heating) and the
+    diffusion (zero inside linear elements) are left out of it.
+    """
+
+    def __init__(self, system, field, velocity, c, k=None, f=None, supg=False):
+
+        self.system = system
+        self.field, self.velocity = field, velocity
+        self.c, self.k, self.f = c, k, f
+        self.supg = supg
+        self.tau_state = None        # evaluate tau at this state instead of x (to test the tangent)
+
+    def contribution(self, x):
+
+        disc, layout = self.system.disc, self.system.layout
+        nel, ngp, nne, dim = disc.B.shape
+        N, B, w = disc.N, disc.B, disc.detJw
+
+        fields = layout.split(x)
+        u = disc.interpolate(np.asarray(fields[self.velocity], dtype=float))      # (nel, ngp, dim)
+        gphi = disc.gradient(np.asarray(fields[self.field], dtype=float))         # (nel, ngp, dim)
+        c = ops.at_gauss(disc, self.c)
+
+        a = c[..., None] * u
+        conv = np.einsum('ega,ega->eg', a, gphi)
+        aB = np.einsum('egb,egjb->egj', a, B)                                     # c u . grad N_j
+
+        rows = layout.element_dofs(disc.conn, self.field)
+        cols_u = layout.element_dofs(disc.conn, self.velocity)
+
+        Re = np.einsum('eg,gi,eg->ei', w, N, conv)
+        Kpp = np.einsum('eg,gi,egj->eij', w, N, aB)
+        Kpu = np.einsum('eg,gi,gj,egc->eijc', w * c, N, N, gphi)
+
+        if self.supg:
+            u_tau = u if self.tau_state is None else disc.interpolate(layout.split(self.tau_state)[self.velocity])
+            tau = ops.supg_tau(disc, self.c, u_tau, self.k)
+            res = conv - (ops.at_gauss(disc, self.f) if self.f is not None else 0.0)
+
+            Re = Re + np.einsum('eg,egi,eg->ei', w * tau, aB, res)
+            Kpp = Kpp + np.einsum('eg,egi,egj->eij', w * tau, aB, aB)
+            Kpu = Kpu + (np.einsum('eg,gj,egic,eg->eijc', w * tau * c, N, B, res)
+                         + np.einsum('eg,egi,gj,egc->eijc', w * tau * c, aB, N, gphi))
+
+        R = layout.scatter_vector(Re, rows)
+        J = (layout.scatter_matrix(Kpp, rows, rows)
+             + layout.scatter_matrix(Kpu.reshape(nel, nne, nne * dim), rows, cols_u))
+
+        return R, J

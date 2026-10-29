@@ -80,6 +80,14 @@
 | Navier–Stokes: cavidad Re = 400 y 1000 (ejemplo) | u_min en x = 0.5 frente a Ghia (-0.3273 en y = 0.281; -0.3829 en y = 0.172) | `Example_NavierStokes_Cavity.py` | -0.3305 en y = 0.281; -0.3925 en y = 0.172 (64×64); vórtice principal en (0.53, 0.56) |
 | Navier–Stokes: canal desarrollado | Poiseuille con inercia (Re = 100) nodalmente exacto en Q4 | `Test/test_navier_stokes.py` | 1e-10 |
 | Navier–Stokes: límites | ρ → 0 igual a Stokes; Picard converge a la misma solución (17 frente a 6 iteraciones) | `Test/test_navier_stokes.py` | pasa |
+| Leyes de viscosidad | límites newtoniano y de potencia de Carreau y Cross, Cross–WLF en `T = D2`, esfuerzo de Bingham y Herschel–Bulkley más allá de la fluencia, Arrhenius | `Test/test_non_newtonian.py` | pasa |
+| Ley de potencia en canal (n = 0.5) | perfil analítico, presión lineal | `Test/test_non_newtonian.py` | orden 2.00 (error 1e-3 con 32 elementos) |
+| Bingham (Papanastasiou, m = 2000) en canal | perfil con tapón analítico | `Test/test_non_newtonian.py` | error 2e-4; tasa de corte en el tapón < 0.1 % de la de pared |
+| Calentamiento viscoso (Brinkman) | Couette con paredes isotermas: T parabólica exacta | `Test/test_non_newtonian.py` | exacto en los nodos (1e-9), Q4 y T3 |
+| μ(T) en Couette | exponencial: nodalmente exacto (la media de Gauss es proporcional a la exacta); Arrhenius frente a cuadratura | `Test/test_non_newtonian.py` | 1e-12; orden 2.00 |
+| Convección por la velocidad calculada | flujo tapón de `ff` = velocidad constante en `ht`, con y sin SUPG | `Test/test_non_newtonian.py` | 1e-9 |
+| Jacobiano acoplado u–p–T | Carreau + Arrhenius, inercia, PSPG con esfuerzo recuperado, calentamiento, convección del calor con SUPG, frente a diferencias finitas (τ congelado) | `Test/test_non_newtonian.py` | 1e-7 relativo |
+| Dado de rendija (ejemplo) | caudal conservado; aumento de la temperatura de mezcla (0.29 K) menor que el adiabático Δp/ρCp (0.48 K) | `Example_Polymer_Slit_Die.py` | coherente |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -163,6 +171,18 @@ Lo que sigue pendiente:
 - El tangente omite `dτ/du`: la convergencia no es estrictamente cuadrática, pero 5–7 iteraciones bastan en los casos
   probados.
 - Sin estabilización de captura de discontinuidades (no hace falta en flujo incompresible laminar).
+
+### Fluidos (Etapa 12, no newtonianos y acoplamiento térmico)
+- Las leyes con fluencia (Bingham, Herschel–Bulkley) son regularizadas: el tapón es casi rígido, no rígido. Valores de
+  `m·τ_y/μ_p` muy altos endurecen Newton; conviene subir `m` por continuación.
+- Las leyes de adelgazamiento convergen mejor partiendo de una solución newtoniana (resolver con `setViscosity` y luego
+  activar la ley); los ejemplos lo hacen así.
+- El residuo SUPG del calor incluye convección y la fuente constante, no la disipación viscosa ni reacciones: pequeña
+  inconsistencia O(τ Φ).
+- Transitorio: las masas estabilizadas (PSPG, SUPG del flujo y del calor) se congelan con el estado inicial del solve.
+- Cross–WLF sin dependencia de la presión (`D3 = 0`).
+- Con una ley de viscosidad, cada iteración multiplica `Q @ dσ/dx` (dispersa); es más caro que el caso newtoniano.
+  `viscous_projection = False` lo evita a costa de la consistencia de la PSPG.
 
 ### Física y numérica
 - **Convección:** diferencias centradas sin estabilización. Para Pe alto habrá oscilaciones. `Pe` se calcula pero no se
@@ -251,7 +271,7 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
    factorización reutilizada (transitorio lineal y `solve()` repetidos), exportación VTK/PVD. Pendiente: XDMF/HDF5, VTK binario,
    iterativo para sistemas con convección fuerte o varios campos acoplados (AMG por bloques).
 6. ~~**Estabilización de convección.**~~ Hecha (SUPG en 1D y 2D).
-7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 (base vectorial y Darcy), 10 (Stokes con PSPG) y 11 (Navier–Stokes estacionario) hechas; siguiente, no newtonianos con acoplamiento térmico.
+7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 (base vectorial y Darcy), 10 (Stokes con PSPG), 11 (Navier–Stokes estacionario) y 12 (no newtonianos y acoplamiento térmico) hechas; siguiente, axisimétrico.
 
 ## 5. Criterio para cerrar una etapa
 

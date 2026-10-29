@@ -22,6 +22,11 @@
 # tau = 1 / sqrt((2 rho / dt)^2 + (2 rho |u| / h)^2 + (12 mu / h^2)^2) (Operators.pspg_tau): h^2 / (12 mu) for creeping
 # flow. A constant q gives integral div u = 0 exactly: the discrete flow rate is conserved globally.
 #
+# Generalized Newtonian fluids (setViscosityLaw): mu(gamma_dot, T) from Source.Physics.Rheology, gamma_dot = sqrt(2 eps:eps),
+# with the Newton tangent through dmu/dgamma_dot and dmu/dT. Viscous heating (setViscousHeating): the dissipation
+# Phi = mu gamma_dot^2 is a source of the heat equation. Combined with the heat physics, Model(psc=[ff, ht]) and
+# heat.setVelocity('u'), velocity, pressure and temperature are solved together (monolithic coupling).
+#
 # Boundary conditions: velocity (any component, None leaves it free), no slip, symmetry/slip on walls aligned
 # with the axes (normal component fixed), outlet (normal traction -p n, optionally fully developed: tangential
 # velocity zero) and general tractions. Walls without a condition are traction free. If no boundary sets the
@@ -32,6 +37,7 @@ import numpy as np
 import scipy.sparse as sp
 
 from Source.Physics.Physics import physics
+from Source.Simulation.PointwiseLaw import PointwiseLaw, cached_law
 from Source.Primals.Scalar import scalarField
 from Source.Primals.Vector import vectorField
 import Source.Simulation.Operators as ops
@@ -43,11 +49,10 @@ class ff(physics):
 
     part_name = 'fluid'
     ConstRel = 'ρ ∂u/∂t - ∇.(2μ ε(u)) + ∇p == f,  ∇.u == 0'
+    computes_velocity = True     # its velocity is an unknown: CoupledPhysics.setVelocity does not set it
 
     def __init__(self, model):
         super().__init__(model)
-
-        self.physics_description = 'Creeping flow (Stokes)'
 
         dim = model._PD
         self.dim = dim
@@ -63,13 +68,51 @@ class ff(physics):
         self.viscous_projection = True               # PSPG with the projected viscous stress (consistent on linear elements)
         self.inertia = False                         # Navier-Stokes convection (setInertia)
         self.linearization = 'newton'                # 'newton' or 'picard'
+        self.viscosity_law = None                    # generalized Newtonian mu(gamma_dot, T) (setViscosityLaw)
+        self.temperature_field = None                # field read by a temperature-dependent law
+        self.heating_field = None                    # field that receives the viscous dissipation (setViscousHeating)
 
         self.pressure_reference = None               # (node id, value)
+
+    @property
+    def physics_description(self):
+
+        regime = 'Laminar flow (Navier-Stokes)' if self.inertia else 'Creeping flow (Stokes)'
+        extras = []
+        if self.viscosity_law is not None:
+            extras.append(f"{type(self.viscosity_law).__name__} viscosity")
+        if self.heating_field is not None:
+            extras.append('viscous heating')
+
+        return regime + (f", {', '.join(extras)}" if extras else '')
 
     # ----- properties -----
 
     def setViscosity(self, mu):
+
+        """Constant (Newtonian) viscosity [Pa s]: a number or a function of the coordinates. Removes a viscosity law."""
+
         self.mu = mu
+        self.viscosity_law = None
+        self.temperature_field = None
+
+    def setViscosityLaw(self, law, temperature='T'):
+
+        """Generalized Newtonian fluid: mu(gamma_dot, T) from Source.Physics.Rheology (power law, Carreau-Yasuda,
+        Cross, Cross-WLF, Bingham, Herschel-Bulkley, Arrhenius shift, ...). The problem becomes nonlinear
+        (ProblemType.nonlinear). A temperature-dependent law reads the field `temperature` (default 'T': combine
+        with the heat physics, Model(psc=[ff, ht])). Shear-thinning laws converge best starting from a Newtonian
+        solution (solve with setViscosity first, then switch the law on and solve again)."""
+
+        self.viscosity_law = law
+        self.temperature_field = temperature if getattr(law, 'uses_temperature', False) else None
+
+    def setViscousHeating(self, on=True, field='T'):
+
+        """Viscous dissipation Phi = mu gamma_dot^2 [W/m3] as a heat source of the field `field` (default 'T', the
+        heat physics in the same model). Nonlinear (quadratic in the velocity gradient)."""
+
+        self.heating_field = field if on else None
 
     def setDensity(self, rho):
         self.rho = rho
@@ -109,7 +152,6 @@ class ff(physics):
 
         self.inertia = bool(on)
         self.linearization = linearization
-        self.physics_description = 'Laminar flow (Navier-Stokes)' if on else 'Creeping flow (Stokes)'
 
     def setVelocity(self, v):
         raise AttributeError("La velocidad de 'ff' es una incognita: use condiciones de contorno (addBC_Velocity...).")
@@ -134,27 +176,40 @@ class ff(physics):
             return float(options['Time Step'])
         return None
 
+    def _nonlinear(self):
+
+        """True if the flow needs the nonlinear term: inertia, a viscosity law or viscous heating."""
+
+        return self.inertia or self.viscosity_law is not None or self.heating_field is not None
+
     def add_terms(self, system, model, disc, layout):
 
         ru = layout.element_dofs(disc.conn, 'u')
         rp = layout.element_dofs(disc.conn, 'p')
 
+        for name in (self.temperature_field, self.heating_field):
+            if name is not None and name not in layout.names:
+                raise ValueError(f"La fisica de flujo usa el campo '{name}', que no existe en el modelo "
+                                 "(combine con la fisica de calor: Model(psc=[ff, ht])).")
+
         D = ops.divergence(disc)
-        system.add_matrix(layout.scatter_matrix(ops.viscous(disc, self.mu), ru, ru)
-                          + layout.scatter_matrix(-np.swapaxes(D, 1, 2), ru, rp)
-                          + layout.scatter_matrix(D, rp, ru))
+        A = layout.scatter_matrix(-np.swapaxes(D, 1, 2), ru, rp) + layout.scatter_matrix(D, rp, ru)
+        if self.viscosity_law is None:
+            A = A + layout.scatter_matrix(ops.viscous(disc, self.mu), ru, ru)
+        system.add_matrix(A)
 
         f = None if self.body_force is None else ops._velocity(disc, self.body_force)
         if f is not None:
             system.add_vector(layout.scatter_vector(ops.vector_source(disc, f), ru))
 
-        transient = np.any(np.asarray(self.rho) > 0)
-        if transient:
+        has_density = np.any(np.asarray(self.rho) > 0)
+        if has_density:
             system.add_mass(layout.scatter_matrix(ops.vector_mass(disc, self.rho), ru, ru))
 
-        if self.inertia:
-            self._add_navier_stokes(system, model, disc, layout, f)
+        if self._nonlinear():
+            self._add_flow_term(system, model, disc, layout, f)
         elif self.Stab == 'PSPG':
+            transient = has_density
             tau = ops.pspg_tau(disc, self.mu, self.rho, dt=self._time_step(model))
             system.add_matrix(layout.scatter_matrix(ops.diffusion(disc, tau), rp, rp))
             if f is not None:
@@ -175,13 +230,21 @@ class ff(physics):
         if reference is not None:
             system.set_dirichlet(layout.node_dofs('p', reference[0])[0], reference[1])
 
-    def _add_navier_stokes(self, system, model, disc, layout, f):
+    def _add_flow_term(self, system, model, disc, layout, f):
 
-        """Convection and the residual-based stabilization (PSPG, SUPG, LSIC) as one nonlinear term. With a time step
-        the stabilized mass terms use tau and the SUPG weight of the state at the start of the solve."""
+        """Viscosity law, convection, viscous heating and the residual-based stabilization (PSPG, SUPG, LSIC) as one
+        nonlinear term. With a time step the stabilized mass terms use tau and the SUPG weight of the state at the
+        start of the solve."""
 
-        V = ops.recovered_stress_divergence(disc, self.mu) if self.viscous_projection else None
-        system.add_term(NavierStokesTerm(system, self.mu, self.rho, f, V, self.linearization, self.Stab == 'PSPG'))
+        V = Q = None
+        if self.viscous_projection:
+            if self.viscosity_law is None:
+                V = ops.recovered_stress_divergence(disc, self.mu)
+            else:
+                Q = ops.gauss_stress_divergence(disc)
+
+        term = FlowTerm(system, self, f, V, Q)
+        system.add_term(term)
 
         dt = self._time_step(model)
         if dt is not None:
@@ -189,11 +252,14 @@ class ff(physics):
             ru = layout.element_dofs(disc.conn, 'u')
             rp = layout.element_dofs(disc.conn, 'p')
             u = disc.interpolate(np.asarray(self.var['u'].values, dtype=float))
-            tau = ops.pspg_tau(disc, self.mu, self.rho, speed=np.linalg.norm(u, axis=-1), dt=dt)
+            mu = term.viscosity(model._state())[0]
+            speed = np.linalg.norm(u, axis=-1) if self.inertia else 0.0
+            tau = ops.pspg_tau(disc, mu, self.rho, speed=speed, dt=dt)
             rho = ops.at_gauss(disc, self.rho)
-            uB = np.einsum('egb,egib->egi', u, disc.B)
-            supg = np.einsum('eg,egi,gj,ac->eiajc', disc.detJw * tau * rho * rho, uB, disc.N, np.eye(dim))
-            system.add_mass(layout.scatter_matrix(supg.reshape(nel, nne * dim, nne * dim), ru, ru))
+            if self.inertia:
+                uB = np.einsum('egb,egib->egi', u, disc.B)
+                supg = np.einsum('eg,egi,gj,ac->eiajc', disc.detJw * tau * rho * rho, uB, disc.N, np.eye(dim))
+                system.add_mass(layout.scatter_matrix(supg.reshape(nel, nne * dim, nne * dim), ru, ru))
             if self.Stab == 'PSPG':
                 system.add_mass(layout.scatter_matrix(ops.pspg_mass(disc, tau * rho), rp, ru))
 
@@ -217,6 +283,27 @@ class ff(physics):
         uq = np.einsum('qk,fka->fqa', facets.N, U[facets.nodes])
 
         return float(np.sum(np.einsum('fqa,fqa->fq', uq, facets.normals) * facets.detJw))
+
+    def derived_fields(self, model):
+
+        """Nodal shear rate gamma_dot = sqrt(2 eps:eps) and, with a viscosity law, the viscosity (both projected
+        from the Gauss points)."""
+
+        disc = model.geometry
+        G = disc.gradient(np.asarray(self.var['u'].values, dtype=float))
+        eps = 0.5 * (G + np.swapaxes(G, -1, -2))
+        g2 = 2.0 * np.einsum('egab,egab->eg', eps, eps)
+        out = {'shear_rate': disc.project(np.sqrt(g2))}
+
+        if self.viscosity_law is not None:
+            law = self.viscosity_law
+            if self.temperature_field is not None:
+                T = disc.interpolate(np.asarray(model.physics.var[self.temperature_field].values, dtype=float))
+            else:
+                T = np.zeros(g2.shape)
+            out['viscosity'] = disc.project(law.viscosity(np.sqrt(g2), T))
+
+        return out
 
     # ----- boundary conditions -----
 
@@ -324,29 +411,43 @@ class ff(physics):
         self.facet_bcs.append({'type': 'Traction', 'field': 'u', 'facets': list(edges), 'traction': t})
 
 
-class NavierStokesTerm:
 
-    """Nonlinear part of the stabilized Navier-Stokes equations, assembled on all elements at once.
+class FlowTerm:
 
-    With the momentum residual at the Gauss points R_M = rho (u . grad) u + grad p - f - div(sigma~):
+    """Nonlinear part of the stabilized incompressible flow equations, assembled on all elements at once.
 
-        R_u += integral rho ((u . grad) u) . v  +  integral tau rho (u . grad v) . R_M  +  integral tau_c div u div v
-        R_p += integral tau grad(q) . R_M
+    Active pieces (by the physics settings):
 
-    tau (PSPG/SUPG, Operators.pspg_tau) and tau_c (grad-div, Operators.lsic_tau) depend on |u|; the tangent keeps them
-    frozen (their derivative is left out), the usual practice. 'picard' also leaves out the derivative of the
-    convecting velocity (u_old . grad u) and of the SUPG weight. div(sigma~) is linear in u (V, a sparse matrix that
-    couples the elements of each recovery patch); without the recovered stress it is zero.
+        viscosity law      R_u += integral 2 mu(gamma_dot, T) eps(u) : grad v          (else the linear viscous matrix)
+        inertia            R_u += integral rho ((u . grad) u) . v
+                                  + integral tau rho (u . grad v) . R_M  (SUPG)  + integral tau_c div u div v  (LSIC)
+        PSPG               R_p += integral tau grad(q) . R_M
+        viscous heating    R_T -= integral N mu gamma_dot^2
+
+    with the momentum residual at the Gauss points R_M = rho (u . grad) u + grad p - f - div(sigma~), sigma~ the recovered
+    viscous stress (linear in u for a constant mu: V; through Q from the Gauss-point stress for a viscosity law).
+
+    The tangent is exact except for tau and tau_c, which depend on |u| and on mu and are kept frozen (the usual
+    practice); 'picard' also leaves out the derivative of the convecting velocity and of the SUPG weight.
     """
 
-    def __init__(self, system, mu, rho, f, V, linearization='newton', pspg=True):
+    def __init__(self, system, flow, f, V=None, Q=None):
 
         self.system = system
-        self.mu, self.rho = mu, rho
+        self.mu_const = flow.mu
+        self.rho = flow.rho
         self.f = f
-        self.newton = linearization == 'newton'
-        self.pspg = pspg
-        self.tau_state = None        # evaluate tau at this state instead of x (to test the tangent)
+        self.inertia = flow.inertia
+        self.newton = flow.linearization == 'newton'
+        self.pspg = flow.Stab == 'PSPG'
+        self.T = flow.temperature_field
+        self.heating = flow.heating_field
+        self.tau_state = None        # evaluate tau (|u| and mu) at this state instead of x (to test the tangent)
+
+        self.law = None
+        if flow.viscosity_law is not None:
+            law = flow.viscosity_law
+            self.law = cached_law(('viscosity', law), lambda: PointwiseLaw(lambda w: law(w[0], w[1])))
 
         layout = system.layout
         self.V = None
@@ -354,82 +455,178 @@ class NavierStokesTerm:
             V = V.tocoo()
             u_dofs = layout.dofs('u').ravel()
             self.V = sp.coo_matrix((V.data, (V.row, u_dofs[V.col])), shape=(V.shape[0], layout.ndof)).tocsr()
+        self.Q = Q
+
+    # ----- kinematics and viscosity at the Gauss points -----
+
+    def _kinematics(self, x):
+
+        disc, layout = self.system.disc, self.system.layout
+        fields = layout.split(x)
+        U = np.asarray(fields['u'], dtype=float)[disc.conn]                       # (nel, nne, dim)
+        u = np.einsum('gj,ejc->egc', disc.N, U)
+        G = np.einsum('egjb,eja->egab', disc.B, U)                                # G_ab = du_a/dx_b
+        T = disc.interpolate(fields[self.T]) if self.T is not None else np.zeros(disc.detJw.shape)
+
+        return fields, u, G, T
+
+    def viscosity(self, x):
+
+        """mu, dmu/dgamma2, dmu/dT at the Gauss points of the state x (the derivatives are zero for a constant mu)."""
+
+        disc = self.system.disc
+        _, _, G, T = self._kinematics(x)
+        eps = 0.5 * (G + np.swapaxes(G, -1, -2))
+        g2 = 2.0 * np.einsum('egab,egab->eg', eps, eps)
+
+        if self.law is None:
+            zero = np.zeros(disc.detJw.shape)
+            return ops.at_gauss(disc, self.mu_const), zero, zero
+
+        values, derivatives = self.law(np.stack([g2.ravel(), T.ravel()], axis=-1))
+        shape = disc.detJw.shape
+        return values.reshape(shape), derivatives[:, 0, 0].reshape(shape), derivatives[:, 0, 1].reshape(shape)
+
+    # ----- residual and tangent -----
 
     def contribution(self, x):
 
         disc, layout = self.system.disc, self.system.layout
         nel, ngp, nne, dim = disc.B.shape
         N, B, w = disc.N, disc.B, disc.detJw
+        eye = np.eye(dim)
 
-        fields = layout.split(x)
-        U = np.asarray(fields['u'], dtype=float)[disc.conn]                       # (nel, nne, dim)
-        P = np.asarray(fields['p'], dtype=float)[disc.conn]                       # (nel, nne)
-
-        u = np.einsum('gj,ejc->egc', N, U)
-        G = np.einsum('egjb,eja->egab', B, U)                                     # G_ab = du_a/dx_b
+        fields, u, G, _ = self._kinematics(x)
+        P = np.asarray(fields['p'], dtype=float)[disc.conn]
         gp = np.einsum('egjb,ej->egb', B, P)
 
-        u_tau = u if self.tau_state is None else disc.interpolate(layout.split(self.tau_state)['u'])
-        speed = np.linalg.norm(u_tau, axis=-1)
+        eps = 0.5 * (G + np.swapaxes(G, -1, -2))
+        g2 = 2.0 * np.einsum('egab,egab->eg', eps, eps)
+        mu, mu_g2, mu_T = self.viscosity(x)
+        dg2 = 4.0 * np.einsum('egcb,egjb->egjc', eps, B)                           # d(gamma2)/dU_jc
+
+        state = x if self.tau_state is None else self.tau_state
+        mu_tau = mu if self.tau_state is None else self.viscosity(state)[0]
+        speed = np.linalg.norm(self._kinematics(state)[1], axis=-1) if self.inertia else np.zeros(w.shape)
         rho = ops.at_gauss(disc, self.rho)
-        tau = ops.pspg_tau(disc, self.mu, self.rho, speed=speed)
-        tau_c = ops.lsic_tau(disc, self.mu, self.rho, speed)
-
-        conv = rho[..., None] * np.einsum('egb,egab->ega', u, G)
-        RM = conv + gp
-        if self.f is not None:
-            RM = RM - self.f
-        if self.V is not None:
-            RM = RM - (self.V @ x).reshape(nel, ngp, dim)
-
-        uB = np.einsum('egb,egib->egi', u, B)                                     # u . grad N_i
-        divu = np.einsum('egaa->eg', G)
-        ws = w * tau * rho                                                         # SUPG weight factor
-
-        # ----- residual -----
-        Ru = (np.einsum('eg,gi,ega->eia', w, N, conv)
-              + np.einsum('eg,egi,ega->eia', ws, uB, RM)
-              + np.einsum('eg,egia->eia', w * tau_c * divu, B))
+        tau = ops.pspg_tau(disc, mu_tau, self.rho, speed=speed)
 
         ru = layout.element_dofs(disc.conn, 'u')
         rp = layout.element_dofs(disc.conn, 'p')
-        R = layout.scatter_vector(Ru.reshape(nel, -1), ru)
+        rT = layout.element_dofs(disc.conn, self.T) if self.T is not None else None
+
+        R = np.zeros(layout.ndof)
+        blocks = []                                                               # (Ke, rows, cols)
+        Ru = np.zeros((nel, nne, dim))
+
+        # ----- viscous stress of a viscosity law -----
+        divs = np.zeros((nel, ngp, dim))
+        d_divs = None                                                             # sparse (nel*ngp*dim, ndof)
+
+        if self.law is not None:
+            sigma = 2.0 * mu[..., None, None] * eps
+            dsig = (np.einsum('eg,egjb,ac->egabjc', mu, B, eye) + np.einsum('eg,egja,bc->egabjc', mu, B, eye)
+                    + 2.0 * np.einsum('egab,eg,egjc->egabjc', eps, mu_g2, dg2))
+            Ru += np.einsum('eg,egib,egab->eia', w, B, sigma)
+            blocks.append((np.einsum('eg,egib,egabjc->eiajc', w, B, dsig).reshape(nel, nne * dim, nne * dim), ru, ru))
+
+            dsigT = None
+            if self.T is not None:
+                dsigT = 2.0 * np.einsum('egab,eg,gj->egabj', eps, mu_T, N)
+                blocks.append((np.einsum('eg,egib,egabj->eiaj', w, B, dsigT).reshape(nel, nne * dim, nne), ru, rT))
+
+            if self.Q is not None:
+                divs = (self.Q @ sigma.ravel()).reshape(nel, ngp, dim)
+                d_divs = self.Q @ self._stress_tangent(dsig, dsigT, ru, rT)
+        elif self.V is not None:
+            divs = (self.V @ x).reshape(nel, ngp, dim)
+            d_divs = self.V
+
+        # ----- momentum residual R_M and its local derivatives -----
+        RM = gp - divs
+        if self.f is not None:
+            RM = RM - self.f
+
+        dconv = None
+        if self.inertia:
+            conv = rho[..., None] * np.einsum('egb,egab->ega', u, G)
+            RM = RM + conv
+            uB = np.einsum('egb,egib->egi', u, B)                                 # u . grad N_i
+            dconv = np.einsum('eg,ac,egj->egajc', rho, eye, uB)                    # rho u . grad N_j (Picard part)
+            if self.newton:
+                dconv = dconv + np.einsum('eg,gj,egac->egajc', rho, N, G)          # rho N_j du_a/dx_c
+
+            ws = w * tau * rho
+            tau_c = ops.lsic_tau(disc, mu_tau, self.rho, speed)
+            divu = np.einsum('egaa->eg', G)
+
+            Ru += (np.einsum('eg,gi,ega->eia', w, N, conv) + np.einsum('eg,egi,ega->eia', ws, uB, RM)
+                   + np.einsum('eg,egia->eia', w * tau_c * divu, B))
+
+            Juu = (np.einsum('eg,gi,egajc->eiajc', w, N, dconv) + np.einsum('eg,egi,egajc->eiajc', ws, uB, dconv)
+                   + np.einsum('eg,egia,egjc->eiajc', w * tau_c, B, B))
+            if self.newton:
+                Juu = Juu + np.einsum('eg,gj,egic,ega->eiajc', ws, N, B, RM)        # derivative of the SUPG weight
+            blocks.append((Juu.reshape(nel, nne * dim, nne * dim), ru, ru))
+            blocks.append((np.einsum('eg,egi,egja->eiaj', ws, uB, B).reshape(nel, nne * dim, nne), ru, rp))
+
+        R += layout.scatter_vector(Ru.reshape(nel, -1), ru)
+
+        # ----- PSPG -----
         if self.pspg:
-            R = R + layout.scatter_vector(np.einsum('eg,egia,ega->ei', w * tau, B, RM), rp)
+            R += layout.scatter_vector(np.einsum('eg,egia,ega->ei', w * tau, B, RM), rp)
+            blocks.append((np.einsum('eg,egia,egja->eij', w * tau, B, B), rp, rp))
+            if dconv is not None:
+                blocks.append((np.einsum('eg,egia,egajc->eijc', w * tau, B, dconv).reshape(nel, nne, nne * dim), rp, ru))
 
-        # ----- tangent (tau frozen) -----
-        eye = np.eye(dim)
-        dconv = np.einsum('eg,ac,egj->egajc', rho, eye, uB)                        # rho u . grad N_j (Picard part)
-        if self.newton:
-            dconv = dconv + np.einsum('eg,gj,egac->egajc', rho, N, G)              # rho N_j du_a/dx_c
+        # ----- viscous heating -----
+        if self.heating is not None:
+            rH = layout.element_dofs(disc.conn, self.heating)
+            R -= layout.scatter_vector(np.einsum('eg,gi,eg->ei', w, N, mu * g2), rH)
+            dphi = np.einsum('eg,egjc->egjc', mu + g2 * mu_g2, dg2)
+            blocks.append((-np.einsum('eg,gi,egjc->eijc', w, N, dphi).reshape(nel, nne, nne * dim), rH, ru))
+            if self.T is not None:
+                blocks.append((-np.einsum('eg,gi,eg,gj->eij', w, N, g2 * mu_T, N), rH, rT))
 
-        Juu = (np.einsum('eg,gi,egajc->eiajc', w, N, dconv)
-               + np.einsum('eg,egi,egajc->eiajc', ws, uB, dconv)
-               + np.einsum('eg,egia,egjc->eiajc', w * tau_c, B, B))
-        if self.newton:
-            Juu = Juu + np.einsum('eg,gj,egic,ega->eiajc', ws, N, B, RM)            # derivative of the SUPG weight
-        Jup = np.einsum('eg,egi,egja->eiaj', ws, uB, B)
+        J = sp.csr_matrix((layout.ndof, layout.ndof))
+        for Ke, rows, cols in blocks:
+            J = J + layout.scatter_matrix(Ke, rows, cols)
 
-        J = (layout.scatter_matrix(Juu.reshape(nel, nne * dim, nne * dim), ru, ru)
-             + layout.scatter_matrix(Jup.reshape(nel, nne * dim, nne), ru, rp))
-
-        if self.pspg:
-            Jpu = np.einsum('eg,egia,egajc->eijc', w * tau, B, dconv)
-            Jpp = np.einsum('eg,egia,egja->eij', w * tau, B, B)
-            J = J + layout.scatter_matrix(Jpu.reshape(nel, nne, nne * dim), rp, ru) + layout.scatter_matrix(Jpp, rp, rp)
-
-        if self.V is not None:
-            # -(SUPG and PSPG weights) @ V: the recovered stress couples the elements of each patch
+        # ----- nonlocal part: -(SUPG and PSPG weights) @ d(div sigma~)/dx -----
+        if d_divs is not None and (self.pspg or self.inertia):
             cols = np.arange(nel * ngp).reshape(nel, ngp)[:, :, None] * dim + np.arange(dim)    # (nel, ngp, dim)
-            Ws = np.einsum('eg,egi,ac->egiac', ws, uB, eye)                                      # (e, g, i, a, a')
-            rows = np.broadcast_to(ru.reshape(nel, nne, dim)[:, None, :, :, None], Ws.shape)
-            W = sp.coo_matrix((Ws.ravel(), (rows.ravel(), np.broadcast_to(cols[:, :, None, None, :], Ws.shape).ravel())),
-                              shape=(layout.ndof, nel * ngp * dim)).tocsr()
+            W = sp.csr_matrix((layout.ndof, nel * ngp * dim))
+            if self.inertia:
+                Ws = np.einsum('eg,egi,ac->egiac', w * tau * rho, uB, eye)                      # (e, g, i, a, a')
+                rows = np.broadcast_to(ru.reshape(nel, nne, dim)[:, None, :, :, None], Ws.shape)
+                W = W + sp.coo_matrix((Ws.ravel(), (rows.ravel(),
+                                                    np.broadcast_to(cols[:, :, None, None, :], Ws.shape).ravel())),
+                                      shape=W.shape).tocsr()
             if self.pspg:
                 Wp = np.einsum('eg,egia->egia', w * tau, B)
                 W = W + sp.coo_matrix((Wp.ravel(), (np.broadcast_to(rp[:, None, :, None], Wp.shape).ravel(),
                                                     np.broadcast_to(cols[:, :, None, :], Wp.shape).ravel())),
-                                      shape=(layout.ndof, nel * ngp * dim)).tocsr()
-            J = J - W @ self.V
+                                      shape=W.shape).tocsr()
+            J = J - W @ d_divs
 
         return R, J
+
+    def _stress_tangent(self, dsig, dsigT, ru, rT):
+
+        """Sparse d(sigma at the Gauss points)/dx (nel*ngp*dim*dim, ndof) from the local derivatives."""
+
+        disc, layout = self.system.disc, self.system.layout
+        nel, ngp, nne, dim = disc.B.shape
+        dd = dim * dim
+
+        rows = (np.arange(nel * ngp).reshape(nel, ngp)[:, :, None, None] * dd
+                + np.arange(dim)[:, None] * dim + np.arange(dim)[None, :])                    # (nel, ngp, dim, dim)
+        cols_u = ru.reshape(nel, nne, dim)
+        D = sp.coo_matrix((dsig.ravel(), (np.broadcast_to(rows[..., None, None], dsig.shape).ravel(),
+                                          np.broadcast_to(cols_u[:, None, None, None], dsig.shape).ravel())),
+                          shape=(nel * ngp * dd, layout.ndof)).tocsr()
+        if dsigT is not None:
+            D = D + sp.coo_matrix((dsigT.ravel(), (np.broadcast_to(rows[..., None], dsigT.shape).ravel(),
+                                                   np.broadcast_to(rT[:, None, None, None, :], dsigT.shape).ravel())),
+                                  shape=D.shape).tocsr()
+        return D

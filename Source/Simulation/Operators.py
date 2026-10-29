@@ -33,6 +33,7 @@ Pressure stabilization (PSPG) of equal-order velocity-pressure elements:
     pspg_mass(disc, c)                  (nel, nne, nne*dim)     integral of c grad(N_i) . u   (test: scalar, trial: vector)
     recovered_stress(disc, mu)          sparse                  continuous nodal stress recovered from 2 mu eps(u_h)
     recovered_stress_divergence         sparse                  div of the recovered stress at the Gauss points
+    gauss_stress_divergence(disc)       sparse                  same from a stress given at the Gauss points (nonlinear mu)
     lsic_tau(disc, mu, rho, speed)      (nel, ngp)              grad-div stabilization coefficient (Navier-Stokes)
 
 A coefficient is a number, an array already at the quadrature points, or a function of the
@@ -264,10 +265,21 @@ def recovered_stress(disc, mu):
 
     import scipy.sparse as sp
 
-    nel, ngp, nne, dim = disc.B.shape
-    n, dd = disc.n_nodes, dim * dim
+    dim = disc.dim
 
-    # Stress at the Gauss points: S[(e, g), a, b; j, c] = mu (dN_j/dx_b delta_ac + dN_j/dx_a delta_bc)
+    return sp.kron(disc.recovery(), sp.identity(dim * dim), format='csr') @ _gauss_stress(disc, mu)
+
+
+def _gauss_stress(disc, mu):
+
+    """Sparse S (nel*ngp*dim*dim, n_nodes*dim): 2 mu eps(u_h) at the Gauss points from the nodal velocity,
+    S[(e, g), a, b; j, c] = mu (dN_j/dx_b delta_ac + dN_j/dx_a delta_bc)."""
+
+    import scipy.sparse as sp
+
+    nel, ngp, nne, dim = disc.B.shape
+    dd = dim * dim
+
     eye = np.eye(dim)
     m = at_gauss(disc, mu)
     Se = (np.einsum('eg,egjb,ac->egabjc', m, disc.B, eye) + np.einsum('eg,egja,bc->egabjc', m, disc.B, eye))
@@ -275,11 +287,10 @@ def recovered_stress(disc, mu):
     point = np.arange(nel * ngp).reshape(nel, ngp)
     r = (point[:, :, None, None] * dd + np.arange(dim)[:, None] * dim + np.arange(dim)[None, :])
     c = disc.conn[:, :, None] * dim + np.arange(dim)
-    S = sp.coo_matrix((Se.ravel(), (np.broadcast_to(r[..., None, None], Se.shape).ravel(),
-                                     np.broadcast_to(c[:, None, None, None], Se.shape).ravel())),
-                      shape=(nel * ngp * dd, n * dim)).tocsr()
 
-    return sp.kron(disc.recovery(), sp.identity(dd), format='csr') @ S
+    return sp.coo_matrix((Se.ravel(), (np.broadcast_to(r[..., None, None], Se.shape).ravel(),
+                                       np.broadcast_to(c[:, None, None, None], Se.shape).ravel())),
+                         shape=(nel * ngp * dd, disc.n_nodes * dim)).tocsr()
 
 
 def _stress_rows(disc):
@@ -311,10 +322,12 @@ def projected_stress_divergence(disc, mu, tau):
     return C, recovered_stress(disc, mu)
 
 
-def recovered_stress_divergence(disc, mu):
+def gauss_stress_divergence(disc):
 
-    """Sparse V (nel*ngp*dim, n_nodes*dim): div(sigma~) at the Gauss points from the nodal velocity,
-    (V @ u).reshape(nel, ngp, dim). Rows (e, g, a) -> (e*ngp + g)*dim + a."""
+    """Sparse Q (nel*ngp*dim, nel*ngp*dim*dim): div(sigma~) at the Gauss points from any stress given at the Gauss
+    points, with sigma~ its continuous nodal recovery (Discretization.recovery). Geometry only, so it is built once;
+    a nonlinear stress (mu(gamma_dot)) is passed through it at every iteration. Rows (e, g, a) -> (e*ngp + g)*dim + a;
+    columns (e, g, a, b) -> (e*ngp + g)*dim*dim + a*dim + b."""
 
     import scipy.sparse as sp
 
@@ -330,7 +343,15 @@ def recovered_stress_divergence(disc, mu):
                                         np.broadcast_to(c, values.shape).ravel())),
                       shape=(nel * ngp * dim, disc.n_nodes * dim * dim)).tocsr()
 
-    return D @ recovered_stress(disc, mu)
+    return D @ sp.kron(disc.recovery(), sp.identity(dim * dim), format='csr')
+
+
+def recovered_stress_divergence(disc, mu):
+
+    """Sparse V (nel*ngp*dim, n_nodes*dim): div(sigma~) at the Gauss points from the nodal velocity for a viscosity
+    mu that does not depend on the flow, (V @ u).reshape(nel, ngp, dim). Rows (e, g, a) -> (e*ngp + g)*dim + a."""
+
+    return gauss_stress_divergence(disc) @ _gauss_stress(disc, mu)
 
 
 def lsic_tau(disc, mu, rho, speed):
