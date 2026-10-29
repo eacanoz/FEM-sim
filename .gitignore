@@ -1,0 +1,11 @@
+# Archivos generados al ejecutar simulaciones, ejemplos y pruebas
+Logs/
+resultados_vtk/
+
+# Python
+__pycache__/
+*.pyc
+
+# Entornos virtuales
+venv/
+.venv/
