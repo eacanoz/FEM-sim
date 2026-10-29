@@ -102,6 +102,11 @@
 | Calor transitorio convectado | flujo tapón de `ff` = velocidad prescrita en `ht`, con SUPG | `Test/test_transient_flow.py` | 1e-8 |
 | Fuerzas por reacciones | canal: paredes = Δp H; Couette: −μU L/H; tubo: Δp πR² | `Test/test_transient_flow.py` | 1e-10 |
 | Cilindro de Schäfer–Turek 2D-2 (Re = 100, ejemplo) | C_D,max 3.22–3.24; C_L,max 0.99–1.01; St 0.295–0.305 | `Example_Cylinder_Vortex_Shedding.py` | 2926 nodos, BDF2 dt = 0.01: C_D,max 3.231 (dentro); C_L,max 0.966 (−2.4 %); St 0.2905 (−1.5 %); 15 min |
+| Convección natural (de Vahl Davis 1983) | Nusselt de la pared caliente por reacciones, u_max y v_max en los planos medios; Ra = 1e3–1e5 (32×32) y 1e3–1e6 (48×48, ejemplo) | `Test/test_buoyancy.py`, `Example_Natural_Convection.py` | 32×32: Nu < 0.4 %, velocidades < 1.7 %; 48×48: Nu < 0.2 %, u_max < 0.9 %, v_max < 1.9 %; calor entrante = saliente (1e-10) |
+| Estratificación estable | calentada por arriba: reposo y presión cuadrática | `Test/test_buoyancy.py` | Q4 exacto (1e-10); T3 corrientes espurias de orden 3 (no robusto en presión) |
+| Especies en el flujo calculado | Le = 1: especie = temperatura; flotación solutal = térmica | `Test/test_buoyancy.py` | 1e-8 |
+| Tangente con flotación | térmica y solutal, Carreau, inercia, calor y especie con SUPG, estacionario y paso de Crank–Nicolson | `Test/test_buoyancy.py` | 1e-7 relativo |
+| Flujo de calor por reacciones | pared plana: k ΔT / L | `Test/test_buoyancy.py` | 1e-12 |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -215,6 +220,14 @@ Lo que sigue pendiente:
 - Coste: el término de flujo se reensambla en cada iteración de Newton (en Python vectorizado); el ejemplo del cilindro
   con unos miles de nodos y 800 pasos tarda del orden de veinte minutos.
 
+### Fluidos (Etapa 15, convección natural y especies)
+- Boussinesq con β constante; sin dependencia de la densidad en la inercia. La presión es la desviación de la
+  hidrostática (`ρ₀ g` no se incluye).
+- Triángulos: una fuerza de cuerpo que es un gradiente (estratificación) se equilibra solo de forma aproximada y
+  aparecen corrientes espurias pequeñas que convergen con orden 3; Q4 estructurado lo equilibra exactamente.
+  Una discretización robusta en presión (Taylor–Hood con proyección, H(div)) lo evitaría (Etapa 17).
+- A Ra alto conviene la continuación en Ra (como en los ejemplos).
+
 ### Física y numérica
 - **Convección:** diferencias centradas sin estabilización. Para Pe alto habrá oscilaciones. `Pe` se calcula pero no se
   usa. El código de estabilización que no estaba conectado se eliminó en la Etapa 5; habrá que implementarlo.
@@ -302,7 +315,7 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
    factorización reutilizada (transitorio lineal y `solve()` repetidos), exportación VTK/PVD. Pendiente: XDMF/HDF5, VTK binario,
    iterativo para sistemas con convección fuerte o varios campos acoplados (AMG por bloques).
 6. ~~**Estabilización de convección.**~~ Hecha (SUPG en 1D y 2D).
-7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 a 14 hechas (base vectorial y Darcy, Stokes, Navier–Stokes, no newtonianos y acoplamiento térmico, axisimétrico, transitorio); siguiente, Boussinesq y especies (Etapa 15).
+7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 a 15 hechas (base vectorial y Darcy, Stokes, Navier–Stokes, no newtonianos y acoplamiento térmico, axisimétrico, transitorio, convección natural y especies); siguiente, turbulencia RANS (Etapa 16).
 
 ## 5. Criterio para cerrar una etapa
 

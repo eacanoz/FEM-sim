@@ -72,6 +72,7 @@ class ff(physics):
         self.viscosity_law = None                    # generalized Newtonian mu(gamma_dot, T) (setViscosityLaw)
         self.temperature_field = None                # field read by a temperature-dependent law
         self.heating_field = None                    # field that receives the viscous dissipation (setViscousHeating)
+        self.buoyancy = []                           # Boussinesq terms (field, beta, reference, g) (setBoussinesq)
 
         self.pressure_reference = None               # (node id, value)
 
@@ -84,6 +85,8 @@ class ff(physics):
             extras.append(f"{type(self.viscosity_law).__name__} viscosity")
         if self.heating_field is not None:
             extras.append('viscous heating')
+        if self.buoyancy:
+            extras.append('Boussinesq buoyancy (' + ', '.join(b[0] for b in self.buoyancy) + ')')
 
         return regime + (f", {', '.join(extras)}" if extras else '')
 
@@ -114,6 +117,19 @@ class ff(physics):
         heat physics in the same model). Nonlinear (quadratic in the velocity gradient)."""
 
         self.heating_field = field if on else None
+
+    def setBoussinesq(self, g, beta, reference, field='T'):
+
+        """Boussinesq buoyancy: body force -rho0 beta (phi - reference) g, with phi the field `field` of the same model
+        (default 'T': Model(psc=[ff, ht]); a concentration for solutal buoyancy). rho0 is the density of the material,
+        beta the expansion coefficient [1/K or per unit of phi] and g the gravity vector, e.g. (0, -9.81). The
+        hydrostatic part rho0 g is absorbed into the pressure, so p is the deviation from it. Call once per field
+        (thermal and solutal buoyancy add up); setBoussinesq(..., beta=0) removes the field. Nonlinear coupling: use
+        ProblemType.nonlinear."""
+
+        self.buoyancy = [b for b in self.buoyancy if b[0] != field]
+        if beta:
+            self.buoyancy.append((field, float(beta), float(reference), np.asarray(g, dtype=float)))
 
     def setDensity(self, rho):
         self.rho = rho
@@ -172,16 +188,17 @@ class ff(physics):
 
     def _nonlinear(self):
 
-        """True if the flow needs the nonlinear term: inertia, a viscosity law or viscous heating."""
+        """True if the flow needs the nonlinear term: inertia, a viscosity law, viscous heating or buoyancy."""
 
-        return self.inertia or self.viscosity_law is not None or self.heating_field is not None
+        return (self.inertia or self.viscosity_law is not None or self.heating_field is not None
+                or bool(self.buoyancy))
 
     def add_terms(self, system, model, disc, layout):
 
         ru = layout.element_dofs(disc.conn, 'u')
         rp = layout.element_dofs(disc.conn, 'p')
 
-        for name in (self.temperature_field, self.heating_field):
+        for name in (self.temperature_field, self.heating_field, *(b[0] for b in self.buoyancy)):
             if name is not None and name not in layout.names:
                 raise ValueError(f"La fisica de flujo usa el campo '{name}', que no existe en el modelo "
                                  "(combine con la fisica de calor: Model(psc=[ff, ht])).")
@@ -433,6 +450,7 @@ class FlowTerm:
                                   + integral tau rho (u . grad v) . R_M  (SUPG)  + integral tau_c div u div v  (LSIC)
         PSPG               R_p += integral tau grad(q) . R_M
         viscous heating    R_T -= integral N mu gamma_dot^2
+        buoyancy           R_u -= integral f_b . v,  f_b = -rho0 beta (phi - reference) g  (Boussinesq; also in R_M)
 
     with the momentum residual at the Gauss points R_M = rho (u . grad) u + grad p - f - div(sigma~), sigma~ the recovered
     viscous stress (linear in u for a constant mu: V; through Q from the Gauss-point stress for a viscosity law).
@@ -452,6 +470,8 @@ class FlowTerm:
         self.pspg = flow.Stab == 'PSPG'
         self.T = flow.temperature_field
         self.heating = flow.heating_field
+        # Boussinesq body forces f_b = c (phi - reference), c = -rho0 beta g
+        self.buoyancy = [(name, -float(flow.rho) * beta * g, ref) for name, beta, ref, g in flow.buoyancy]
         self.tau_state = None        # evaluate tau (|u| and mu) at this state instead of x (to test the tangent)
 
         self.law = None
@@ -599,6 +619,16 @@ class FlowTerm:
         if self.f is not None:
             RM_space = RM_space - self.f
 
+        # Boussinesq body forces f_b = c (phi - ref): Galerkin part here, stabilization through RM_space
+        buoyancy_rows = []
+        for name, c, ref in self.buoyancy:
+            r_phi = layout.element_dofs(disc.conn, name)
+            fb = (disc.interpolate(np.asarray(fields[name], dtype=float)) - ref)[..., None] * c
+            RM_space = RM_space - fb
+            Ru -= np.einsum('eg,gi,ega->eia', w, N, fb)
+            blocks.append((-np.einsum('eg,gi,a,gj->eiaj', w, N, c, N).reshape(nel, nne * dim, nne), ru, r_phi))
+            buoyancy_rows.append((r_phi, c))
+
         dconv = None
         if self.inertia:
             conv = rho[..., None] * np.einsum('egb,egab->ega', u, G)
@@ -654,6 +684,9 @@ class FlowTerm:
                 Juu = Juu + np.einsum('eg,gj,egic,ega->eiajc', ws, N, B, RM_s)      # derivative of the SUPG weight
             blocks.append((Juu.reshape(nel, nne * dim, nne * dim), ru, ru))
             blocks.append((c_s[1] * np.einsum('eg,egi,egja->eiaj', ws, uB, B).reshape(nel, nne * dim, nne), ru, rp))
+            for r_phi, c in buoyancy_rows:                                         # d(R_M)/dphi_j = -c N_j
+                blocks.append((-c_s[2] * np.einsum('eg,egi,a,gj->eiaj', ws, uB, c, N).reshape(nel, nne * dim, nne),
+                               ru, r_phi))
 
         R += layout.scatter_vector(Ru.reshape(nel, -1), ru)
 
@@ -663,6 +696,8 @@ class FlowTerm:
             blocks.append((c_p[1] * np.einsum('eg,egia,egja->eij', w * tau, B, B), rp, rp))
             if dRM_p is not None:
                 blocks.append((np.einsum('eg,egia,egajc->eijc', w * tau, B, dRM_p).reshape(nel, nne, nne * dim), rp, ru))
+            for r_phi, c in buoyancy_rows:
+                blocks.append((-c_p[2] * np.einsum('eg,egia,a,gj->eij', w * tau, B, c, N), rp, r_phi))
 
         # ----- viscous heating -----
         if self.heating is not None:
@@ -759,11 +794,11 @@ class FlowTerm:
 
     def _space_residual(self, x):
 
-        """rho (u . grad) u - f - div(sigma~) at the Gauss points of the state x (no derivatives)."""
+        """rho (u . grad) u - f - f_buoyancy - div(sigma~) at the Gauss points of the state x (no derivatives)."""
 
         disc = self.system.disc
         nel, ngp, nne, dim = disc.B.shape
-        _, u, G, _ = self._kinematics(x)
+        fields, u, G, _ = self._kinematics(x)
 
         if self.law is not None:
             eps, e_hh, _, _ = self._strain(u, G)
@@ -781,6 +816,8 @@ class FlowTerm:
         value = -divs
         if self.f is not None:
             value = value - self.f
+        for name, c, ref in self.buoyancy:
+            value = value - (disc.interpolate(np.asarray(fields[name], dtype=float)) - ref)[..., None] * c
         if self.inertia:
             value = value + ops.at_gauss(disc, self.rho)[..., None] * np.einsum('egb,egab->ega', u, G)
 

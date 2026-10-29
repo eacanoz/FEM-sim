@@ -121,6 +121,34 @@ class physics:
             if F is not None:
                 system.add_vector(layout.scatter_vector(F, rows))
 
+    def boundaryFlux(self, edges, field=None, rate=None):
+
+        """What enters the domain through the edges per unit time (heat [W per unit depth], species [mol/s per unit
+        depth], ...; axisymmetric: through the whole surface of revolution), from the reactions: the residual of
+        `field` at the nodes of those edges, assembled without the boundary conditions, is the consistent boundary
+        integral of k dphi/dn (conduction plus what convection carries in). Positive: entering. Use it on edges with
+        a Dirichlet condition (a heated wall): elsewhere the natural condition already sets the flux.
+
+        rate: time derivative of the solution vector (transient), to include the storage of the boundary elements.
+        """
+
+        model = self.modelRef
+        system, layout = model._system(), model.layout
+        field = field or next(iter(self.var))
+
+        saved, system.time = system.time, None
+        try:
+            _, R = system._assemble(model._state())
+        finally:
+            system.time = saved
+        if rate is not None:
+            R = R + system.mass() @ np.asarray(rate, dtype=float)
+
+        nodes = np.unique(np.ravel(edges))
+        flux = float(R[layout.node_dofs(field, nodes)[:, 0]].sum())
+
+        return 2.0 * np.pi * flux if model.geometry.axisymmetric else flux
+
     def getVariables(self):
         return self.var.keys()
 

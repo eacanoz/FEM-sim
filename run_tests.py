@@ -30,6 +30,7 @@ SUITES = [
     "Test/test_non_newtonian.py",
     "Test/test_axisymmetric.py",
     "Test/test_transient_flow.py",
+    "Test/test_buoyancy.py",
 ]
 
 

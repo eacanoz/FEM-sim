@@ -209,6 +209,12 @@ El plan completo de fluidos está en [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md).
   estabilizadas congeladas. `τ` no depende de `dt` (Bochev, Gunzburger y Shadid 2004): así el estado estacionario del
   transitorio coincide con el del solver estacionario. `ff.boundaryForce(aristas, rate=None)`: fuerza del fluido sobre
   un contorno por reacciones (residuo de momento sin BC en los nodos del contorno; `rate` añade la inercia).
+- **Ya está (Etapa 15):** `ff.setBoussinesq(g, beta, reference, field='T')` (una entrada por campo: térmica y solutal
+  se suman): fuerza `f_b = -ρ₀β(φ - ref)g` en `FlowTerm`, en Galerkin y dentro de `R_M` (bloques u–φ y p–φ), también
+  en el residuo del nivel anterior del transitorio; la presión es la desviación respecto a la hidrostática.
+  `physics.boundaryFlux(aristas, field=None)` (clase base): lo que entra por un contorno con Dirichlet por reacciones
+  (calor, especies; `2π` en axisimétrico). Especies arrastradas por el flujo: `Model(psc=[ff, ht, mt])` y
+  `setVelocity('u')`.
 - **Falta:** turbulencia (Etapa 16), elementos de orden mixto (`quad9`, `tri6`) y
   `DofLayout` con nodos distintos por campo (Taylor–Hood), estado interno para plasticidad.
 

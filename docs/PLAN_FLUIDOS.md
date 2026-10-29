@@ -57,5 +57,6 @@ Fuera de alcance: compresible, superficie libre, multifásico, LES.
 | 12 | hecha: `Test/test_non_newtonian.py` (8 pruebas), `Example_Polymer_Slit_Die.py`. `Rheology.py`, `FlowTerm`, `FieldConvectionTerm` |
 | 13 | hecha: `Test/test_axisymmetric.py` (6 pruebas), `Example_Capillary_Rheometer.py`. `Model(axisymmetric=True)` |
 | 14 | hecha: `Test/test_transient_flow.py` (7 pruebas), `Example_Cylinder_Vortex_Shedding.py`. Newton por paso, BDF2, estabilización con el residuo discreto en el tiempo, `boundaryForce` |
-| 15 | siguiente |
-| 16–17 | pendiente |
+| 15 | hecha: `Test/test_buoyancy.py` (5 pruebas), `Example_Natural_Convection.py`. `setBoussinesq`, `boundaryFlux` |
+| 16 | siguiente |
+| 17 | pendiente; reúne las mejoras de las limitaciones identificadas en las etapas 9–15 (ver `docs/ESTADO.md`) |

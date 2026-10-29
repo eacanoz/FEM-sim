@@ -34,6 +34,7 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Acoplamiento flujo–calor (`Model(psc=[ff, ht])`, `setVelocity('u')`, `setViscousHeating`): convección por la velocidad calculada con SUPG, disipación viscosa, μ(T) | Operativo: Brinkman exacto, μ(T) en Couette, equivalencia con velocidad prescrita, jacobiano acoplado completo |
 | Axisimétrico r-z (`Model(axisymmetric=True)`): calor, especies, Darcy y flujo (términos de aro en deformación, divergencia y esfuerzo) | Operativo: conducción radial, Hagen–Poiseuille, extensión uniaxial exacta, ley de potencia en tubo, jacobiano acoplado |
 | Transitorio no lineal (`solverConfiguration(timeScheme='BDF2')` o θ): Newton en cada paso, estabilización con el residuo discreto en el tiempo, presión implícita; fuerzas por reacciones (`ff.boundaryForce`) | Operativo: Taylor–Green (BDF2 orden 2, Euler orden 1), arranque frente a la serie de Fourier, límite estacionario exacto, cilindro de Schäfer–Turek |
+| Convección natural (`ff.setBoussinesq`, térmica y solutal) y especies arrastradas por el flujo; flujos de contorno por reacciones (`boundaryFlux`, Nusselt) | Operativo: cavidad de de Vahl Davis Ra = 1e3–1e6 (Nusselt < 0.2 %), estratificación estable en reposo, especies = calor con Le = 1 |
 | Turbulencia | Pendiente: ver [docs/PLAN_FLUIDOS.md](docs/PLAN_FLUIDOS.md) |
 | `rho Cp(T)`, elementos de orden superior, 3D | No implementado |
 
@@ -206,6 +207,7 @@ Las aristas se seleccionan con un predicado sobre su punto medio: `mesh.boundary
 | `Example_Polymer_Slit_Die.py` | Fundido de polímero en un dado de rendija: Cross–WLF, calentamiento viscoso y acoplamiento térmico; perfil de velocidad, temperatura, balance de energía y curva caudal–presión |
 | `Example_Capillary_Rheometer.py` | Reómetro capilar simulado (axisimétrico, Cross): tasa de corte aparente, esfuerzo en pared, pérdida de entrada (Bagley), corrección de Rabinowitsch; recupera la curva de viscosidad del modelo |
 | `Example_Cylinder_Vortex_Shedding.py` | Desprendimiento de vórtices detrás de un cilindro (Schäfer–Turek 2D-2, Re = 100): Navier–Stokes transitorio con BDF2, C_D, C_L y Strouhal frente a la referencia (varios minutos) |
+| `Example_Natural_Convection.py` | Cavidad calentada lateralmente (de Vahl Davis), Ra = 1e3–1e6 con continuación: Nusselt, velocidades máximas frente a la referencia, isotermas y líneas de corriente |
 | `readMesh.py` | Lectura de información de un archivo `.msh` con gmsh |
 
 Algunos ejemplos abren ventanas de Matplotlib (`plt.show()`). Para ejecutarlos sin ventanas use `MPLBACKEND=Agg`.
@@ -240,6 +242,7 @@ python Test/test_navier_stokes.py         # Etapa 11: Navier–Stokes: tangente,
 python Test/test_non_newtonian.py         # Etapa 12: leyes de viscosidad, ley de potencia, Bingham, Brinkman, μ(T), convección acoplada, jacobiano (8)
 python Test/test_axisymmetric.py          # Etapa 13: medidas r-z, conducción radial, Hagen–Poiseuille, extensión uniaxial, tubo de ley de potencia, jacobiano (6)
 python Test/test_transient_flow.py        # Etapa 14: Taylor–Green, arranque, límite estacionario, tangente con dt, calor transitorio, fuerzas (7)
+python Test/test_buoyancy.py              # Etapa 15: de Vahl Davis, estratificación estable, especies y flotación solutal, tangente, flujo de calor (5)
 ```
 
 Todas deben pasar antes de hacer un commit que toque el núcleo (`Source/`).
