@@ -106,6 +106,108 @@ class DiffusionLawTerm:
         return R, J
 
 
+def value_gradient_basis(disc, nc):
+
+    """W (nel, ngp, nne, nc, nc * (1 + dim)) mapping the element values of a field to its values and gradients.
+
+    At a Gauss point, w_k = sum_{j, c} W[j, c, k] x_{j c} with w = (u_0, ..., u_{nc-1}, du_0/dx_0, ..., du_0/dx_{dim-1},
+    du_1/dx_0, ..., du_{nc-1}/dx_{dim-1}). The same array gives the test functions of a weak residual:
+    R_{i a} = integral of sum_k W[i, a, k] r_k, with r = (s_0, ..., s_{nc-1}, F_00, ..., F_{nc-1, dim-1}) tested by
+    N_i (s) and by dN_i/dx_b (F).
+    """
+
+    nel, ngp, nne, dim = disc.B.shape
+    W = np.zeros((nel, ngp, nne, nc, nc * (1 + dim)))
+
+    for c in range(nc):
+        W[:, :, :, c, c] = disc.N[None]
+        W[:, :, :, c, nc + c * dim: nc + (c + 1) * dim] = disc.B
+
+    return W
+
+
+class GradientLawTerm:
+
+    """Weak residual given pointwise as a function of the values and gradients of the input fields.
+
+    The law receives, for each input field in order, its values (nc) followed by its gradient (nc * dim, row
+    by row: du_0/dx_0, du_0/dx_1, ...). It returns, for each output field in order, a source s (nc), tested by
+    N_i, followed by a flux F (nc * dim, row by row), tested by grad(N_i):
+
+        R_{i a} += sign * integral of (N_i s_a + dN_i/dx_b F_ab)
+
+    Examples: nonlinear diffusion F = k(u, |grad u|) grad u (p-Laplacian, power-law fluid), convection
+    s = c v . grad(u) with v another field, viscous stress F = 2 mu(gamma_dot) eps(u). The tangent comes from the
+    law's automatic derivatives with respect to every value and gradient, so it couples outputs and inputs.
+    """
+
+    def __init__(self, system, law, inputs, outputs, sign=1.0):
+        self.system = system
+        self.law = law
+        self.inputs = inputs
+        self.outputs = outputs
+        self.sign = sign
+        self._basis = {}
+
+    def _W(self, nc):
+
+        if nc not in self._basis:
+            self._basis[nc] = value_gradient_basis(self.system.disc, nc)
+
+        return self._basis[nc]
+
+    def _slices(self, names):
+
+        dim, layout = self.system.disc.dim, self.system.layout
+        out, start = [], 0
+
+        for name in names:
+            nc = layout.spec(name).ncomp
+            out.append((name, nc, slice(start, start + nc * (1 + dim))))
+            start += nc * (1 + dim)
+
+        return out, start
+
+    def contribution(self, x):
+
+        disc, layout = self.system.disc, self.system.layout
+        nel, ngp, nne, _ = disc.B.shape
+
+        inputs, n_in = self._slices(self.inputs)
+        outputs, n_out = self._slices(self.outputs)
+
+        fields = layout.split(x)
+        U = np.concatenate([np.einsum('egjck,ejc->egk', self._W(nc), fields[name][disc.conn].reshape(nel, nne, nc))
+                            for name, nc, _ in inputs], axis=-1)
+
+        values, derivatives = self.law(U.reshape(-1, n_in))
+
+        if values.shape[1] != n_out:
+            raise ValueError(f"La ley devuelve {values.shape[1]} valores por punto; se esperaban {n_out} "
+                             f"(fuente y flujo de {self.outputs}).")
+
+        values = values.reshape(nel, ngp, n_out)
+        derivatives = derivatives.reshape(nel, ngp, n_out, n_in)
+
+        R = np.zeros(layout.ndof)
+        J = sp.csr_matrix((layout.ndof, layout.ndof))
+
+        for out, nc_o, so in outputs:
+            Wo = self._W(nc_o)
+            rows = layout.element_dofs(disc.conn, out)
+
+            Re = self.sign * np.einsum('eg,egiak,egk->eia', disc.detJw, Wo, values[..., so], optimize=True)
+            R += layout.scatter_vector(Re.reshape(nel, -1), rows)
+
+            for inp, nc_i, si in inputs:
+                Ke = self.sign * np.einsum('eg,egiak,egkl,egjcl->eiajc', disc.detJw, Wo, derivatives[..., so, si],
+                                           self._W(nc_i), optimize=True)
+                J = J + layout.scatter_matrix(Ke.reshape(nel, nne * nc_o, nne * nc_i), rows,
+                                              layout.element_dofs(disc.conn, inp))
+
+        return R, J
+
+
 class FacetLawTerm:
 
     """R_out += sign * boundary integral of N_i f_out(u), with u the input fields on the facets."""
@@ -194,12 +296,28 @@ class System:
 
         self._terms.append(DiffusionLawTerm(self, law, field, list(inputs) if inputs else [field]))
 
+    def add_gradient_law(self, law, inputs, outputs, sign=1.0):
+
+        """Weak residual sign * integral (N s + grad(N) . F) with s, F a law of the values and gradients of the inputs.
+
+        See GradientLawTerm for how the law's inputs and outputs are packed.
+        """
+
+        self._terms.append(GradientLawTerm(self, law, list(inputs), list(outputs), sign))
+
     def add_facet_law(self, law, facets, inputs, outputs, sign=1.0):
         self._terms.append(FacetLawTerm(self, law, facets, list(inputs), list(outputs), sign))
 
     def set_dirichlet(self, dofs, values):
         self.is_dirichlet[dofs] = True
         self.dirichlet_value[dofs] = values
+
+    def add_traction(self, field, facets, t):
+
+        """Traction t (force per unit area acting on the domain) on a vector field: b += boundary integral of t . v."""
+
+        rows = self.layout.element_dofs(facets.nodes, field)
+        self.add_vector(self.layout.scatter_vector(ops.facet_vector_source(facets, t), rows))
 
     # ----- boundary conditions on facets (any scalar field) -----
 
@@ -234,7 +352,10 @@ class System:
 
         Node conditions: Dirichlet on any dimension; Newton and Neumann on a node (1D only, where
         the boundary facet is a point). Facet conditions: dicts with 'type', 'field', 'facets' and
-        the values ('h' and 'var_ext' for Newton, 'flux' for Neumann).
+        the values ('h' and 'var_ext' for Newton, 'flux' for Neumann, 'traction' for Traction).
+
+        A Dirichlet value of a vector field is a sequence with one entry per component; None leaves that
+        component free (a symmetry or slip wall fixes only the normal component).
         """
 
         layout, disc = self.layout, self.disc
@@ -249,7 +370,17 @@ class System:
                     continue
 
                 if bc['type'] == 'Dirichlet':
-                    self.set_dirichlet(layout.node_dofs(field, node.id)[0], bc['value'])
+                    dofs = layout.node_dofs(field, node.id)
+                    if len(dofs) == 1:
+                        self.set_dirichlet(dofs[0], bc['value'])
+                    else:
+                        values = list(bc['value'])
+                        if len(values) != len(dofs):
+                            raise ValueError(f"El campo '{field}' tiene {len(dofs)} componentes y la condicion "
+                                             f"del nodo {node.id} da {len(values)}.")
+                        for dof, value in zip(dofs, values):
+                            if value is not None:
+                                self.set_dirichlet(dof, value)
 
                 elif disc.dim != 1:
                     raise ValueError("En 2D y 3D las BC Newton y Neumann se asignan a aristas o caras (addBC_*Edges).")
@@ -268,6 +399,10 @@ class System:
                 self.add_robin(entry['field'], facets, entry['h'], entry['var_ext'])
             elif entry['type'] == 'Neumann':
                 self.add_flux(entry['field'], facets, entry['flux'])
+            elif entry['type'] == 'Traction':
+                self.add_traction(entry['field'], facets, entry['traction'])
+            else:
+                raise ValueError(f"Tipo de condicion de contorno desconocido: {entry['type']!r}.")
 
     # ----- what the solvers use -----
 

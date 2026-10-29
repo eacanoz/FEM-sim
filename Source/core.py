@@ -100,35 +100,31 @@ class Model(object):
 
         return self._layout
 
+    @property
+    def geometry(self):
+
+        """Discretization of the mesh (shape functions and gradients at the Gauss points), built once."""
+
+        if self._geometry is None:
+            self._geometry = Discretization(self._mesh)
+
+        return self._geometry
+
     def _system(self):
 
         """System of the model (built by the physics, once per solve)."""
 
         if self._system_cache is None:
-
-            if self._geometry is None:
-                self._geometry = Discretization(self._mesh)
-
-            self._system_cache = self.physics.build_system(self, self._geometry, self.layout)
+            self._system_cache = self.physics.build_system(self, self.geometry, self.layout)
 
         return self._system_cache
 
     def dirichletDofs(self):
 
-        """Boolean mask over all dofs: True where a field has a Dirichlet condition."""
+        """Boolean mask over all dofs: True where a Dirichlet condition fixes the dof (node conditions, single
+        components of a vector field and values fixed by the physics, such as a reference pressure)."""
 
-        layout = self.layout
-        mask = np.zeros(layout.ndof, dtype=bool)
-
-        for node in self._mesh.NL:
-            if not node.BC:
-                continue
-
-            for name in layout.names:
-                if node.BC.get(name, {}).get('type') == 'Dirichlet':
-                    mask[layout.node_dofs(name, node.id)] = True
-
-        return mask
+        return self._system().is_dirichlet.copy()
 
     def _state(self):
 
@@ -212,6 +208,9 @@ class Model(object):
         self.timeVector = solver.timeVector
         self.solver_iterations = solver.iterations   # Krylov iterations of every linear solve (empty with direct solvers)
 
+        if self.solverOptions['Study'] == StudyType.steady_state:
+            self.sol.update(self.physics.derived_fields(self))
+
         sim_logger.info("------- Simulation finished -------")
 
 
@@ -251,7 +250,9 @@ class Model(object):
 
         triang = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles)
 
-        values = self.physics.var[variable].values if step is None else self.sol[variable][:, step]
+        values = self.physics.var[variable].values if step is None else np.asarray(self.sol[variable])[..., step]
+        if np.ndim(values) == 2:
+            values = np.linalg.norm(values, axis=1)   # vector field: magnitude
 
         own_figure = ax is None
         if own_figure:

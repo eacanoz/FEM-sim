@@ -1,6 +1,6 @@
 # Estado del proyecto, validación y próximos pasos
 
-Última actualización: 2026-10-27. Rama de trabajo: `test-branch`.
+Última actualización: 2026-10-28. Rama de trabajo: `test-branch`.
 
 ## 1. Qué está validado
 
@@ -59,6 +59,14 @@
 | Factorización reutilizada | transitorio lineal con una sola factorización (PARDISO y SuperLU); `solve()` repetido solo refactoriza si cambia la matriz | `Test/test_solver_scaling_output.py` | pasa |
 | Salida VTK | `.vtu` (Q4, T3, línea) y serie `.pvd` releídos y comparados con malla y solución | `Test/test_solver_scaling_output.py` | pasa |
 | Newton ante una reacción desbocada | nunca deja NaN: se detiene con aviso y conserva el último estado finito | `Test/test_coupling.py` | pasa |
+| Operadores vectoriales | bloques = escalar ⊗ I, simetría, núcleo de movimientos rígidos, energía de corte puro, divergencia y su traspuesta | `Test/test_fluids_foundation.py` | pasa (1e-12) |
+| Viscoso `-∇·(2μ ε(u)) = f` | manufacturada, Q4 y T3, mallas 4 a 32 | `Test/test_fluids_foundation.py` | orden 2.00 (Q4), 1.99 (T3) |
+| Tracciones y Dirichlet por componente | deformación pura exacta con paredes de simetría y tracciones, malla distorsionada | `Test/test_fluids_foundation.py` | pasa (1e-10) |
+| Campo vectorial transitorio y VTK | decaimiento `exp(-2π²t)` de dos componentes; `.pvd` con vectores de 3 componentes | `Test/test_fluids_foundation.py` | pasa |
+| Leyes con gradientes | reproducen difusión, convección y operador viscoso; jacobiano vector + escalar no lineal frente a diferencias finitas (Q4, T3) | `Test/test_fluids_foundation.py` | pasa (1e-7 relativo) |
+| Ley de potencia en canal (`p`-Laplaciano) | perfil analítico, Newton desde el perfil newtoniano | `Test/test_fluids_foundation.py` | n = 0.5: orden 2.00; n = 1.5: orden 1.6 (regularidad `C^{1,2/3}` del perfil exacto) |
+| Darcy | 1D con fuente (exacto en nodos); 2D lineal con permeabilidad tensorial y gravedad; inyección; hidrostática sin flujo | `Test/test_fluids_foundation.py` | pasa (1e-11) |
+| Darcy → convección | `ht` y `mt` con la velocidad de Darcy en Gauss = con la velocidad constante equivalente | `Test/test_fluids_foundation.py` | pasa (1e-12) |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -108,6 +116,14 @@ Lo que sigue pendiente:
 - **Escalado en Newton:** el residuo se escala fila a fila con la diagonal del jacobiano inicial (cada ecuación en las
   unidades de su incógnita). La tolerancia relativa pasó de 1e-8 a 1e-10 para conservar la exactitud de los casos 1D.
 - `heat.Convection = True` etc. deben asignarse en la parte (`model.physics.heat`), no en la combinación.
+
+### Fluidos (Etapa 9)
+- Solo Darcy está operativo como física de flujo; la velocidad pasa a otra física en los puntos de Gauss (acoplamiento
+  en un sentido, misma malla). El acoplamiento monolítico con un campo de velocidad calculado llega con Navier–Stokes.
+- `GradientLawTerm` evalúa un arreglo `W` de tamaño `nel·ngp·nne·nc·nc(1+dim)` por campo; es genérico pero más lento que
+  un operador dedicado. Para Navier–Stokes en mallas grandes conviene un operador de convección vectorizado propio.
+- `derived_fields` solo se añade en estudios estacionarios.
+- La ley de potencia con `n < 1` necesita regularización (`(γ̇² + ε²)^((n-1)/2)`) y un punto inicial no nulo.
 
 ### Física y numérica
 - **Convección:** diferencias centradas sin estabilización. Para Pe alto habrá oscilaciones. `Pe` se calcula pero no se
@@ -195,8 +211,8 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
 5. ~~**Escalado de solvers y salida.**~~ Hecha: AMG (`pyamg`), Jacobi e iLU sobre el sistema reducido, `tol`/`maxiter`,
    factorización reutilizada (transitorio lineal y `solve()` repetidos), exportación VTK/PVD. Pendiente: XDMF/HDF5, VTK binario,
    iterativo para sistemas con convección fuerte o varios campos acoplados (AMG por bloques).
-6. **Estabilización de convección.** Petrov-Galerkin o SUPG en 1D (y 2D cuando exista convección vectorial). Validar con
-   el problema de convección-difusión de Péclet alto.
+6. ~~**Estabilización de convección.**~~ Hecha (SUPG en 1D y 2D).
+7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapa 9 hecha (base vectorial y Darcy); siguiente, Stokes con PSPG.
 
 ## 5. Criterio para cerrar una etapa
 

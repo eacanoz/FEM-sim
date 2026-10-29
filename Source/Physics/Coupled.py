@@ -74,6 +74,15 @@ class CoupledPhysics(physics):
         for part in self.parts.values():
             part.add_terms(system, model, disc, layout)
 
+    def derived_fields(self, model):
+
+        merged = {}
+
+        for part in self.parts.values():
+            merged.update(part.derived_fields(model))
+
+        return merged
+
     def setVelocity(self, v):
 
         """One velocity for every part: they all convect with the same field."""

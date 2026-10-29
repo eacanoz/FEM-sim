@@ -43,9 +43,16 @@ class physics:
 
     def fields(self):
 
-        """Field specifications (name and number of components): one scalar field per variable."""
+        """Field specifications (name and number of components) of the variables: scalars, or vectors with `ncomp`."""
 
-        return [FieldSpec(name) for name in self.var]
+        return [FieldSpec(name, getattr(field, 'ncomp', 1)) for name, field in self.var.items()]
+
+    def derived_fields(self, model):
+
+        """Nodal quantities computed from the solution (Darcy velocity, shear rate, ...), added to model.sol
+        after a steady solve. Physics that have them override this."""
+
+        return {}
 
     def add_terms(self, system, model, disc, layout):
 

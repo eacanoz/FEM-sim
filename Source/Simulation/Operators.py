@@ -11,12 +11,24 @@ points, and returns the element arrays that DofLayout then scatters into the glo
     source(disc, f)             (nel, nne)         integral of f N_i
     facet_mass(facets, c)       (nf, nnf, nnf)     boundary integral of c N_i N_j
     facet_source(facets, f)     (nf, nnf)          boundary integral of f N_i
+    gradient_source(disc, g)    (nel, nne)         integral of g . grad(N_i), g a vector
+
+Vector fields (velocity, displacement) with nc components use node-major element dofs (i, a) -> i * nc + a,
+the order of DofLayout.element_dofs:
+
+    vector_mass(disc, c, nc)            (nel, nne*nc, nne*nc)   integral of c u . v
+    vector_diffusion(disc, mu)          (nel, nne*dim, nne*dim) integral of mu grad(u) : grad(v)
+    viscous(disc, mu)                   (nel, nne*dim, nne*dim) integral of 2 mu eps(u) : eps(v), eps = sym(grad)
+    divergence(disc, c)                 (nel, nne, nne*dim)     integral of c N_i div(u)   (test: scalar, trial: vector)
+    vector_source(disc, f)              (nel, nne*dim)          integral of f . v
+    facet_vector_source(facets, t)      (nf, nnf*dim)           boundary integral of t . v (tractions)
+
+The pressure term of the momentum equation, -integral of p div(v), is minus the transpose of `divergence`:
+np.swapaxes(divergence(disc), 1, 2) has the shape (nel, nne*dim, nne) of a block (test: vector, trial: scalar).
 
 A coefficient is a number, an array already at the quadrature points, or a function of the
-coordinates f(x), f(x, y), ... that is evaluated at the quadrature points.
-
-Extension points (not implemented yet): vector fields (B^T C B for solids, divergence-pressure
-coupling for fluids) follow the same pattern with `ncomp > 1` blocks.
+coordinates f(x), f(x, y), ... that is evaluated at the quadrature points. A vector coefficient is a
+constant vector (dim,), an array (n, nq, dim) or a function returning its components.
 """
 
 import numpy as np
@@ -75,7 +87,7 @@ def _velocity(disc, v):
 
     if v.ndim == 1:
         if v.shape[0] != disc.dim:
-            raise ValueError(f"La velocidad tiene {v.shape[0]} componentes y la malla es {disc.dim}D.")
+            raise ValueError(f"El vector (velocidad, fuerza, gravedad) tiene {v.shape[0]} componentes y la malla es {disc.dim}D.")
         v = np.broadcast_to(v, disc.detJw.shape + (disc.dim,))
 
     return v
@@ -150,3 +162,72 @@ def facet_mass(facets, c):
 def facet_source(facets, f):
 
     return np.einsum('fq,qi->fi', facets.detJw * at_facets(facets, f), facets.N)
+
+
+def gradient_source(disc, g):
+
+    return np.einsum('eg,egia,ega->ei', disc.detJw, disc.B, _velocity(disc, g))
+
+
+# ----- vector fields -----
+
+def expand_components(K, nc):
+
+    """Scalar element blocks (n, a, b) -> blocks (n, a*nc, b*nc) acting on every component alike (K ⊗ I)."""
+
+    n, a, b = K.shape
+
+    return np.einsum('eij,cd->eicjd', K, np.eye(nc)).reshape(n, a * nc, b * nc)
+
+
+def vector_mass(disc, c, nc=None):
+
+    return expand_components(mass(disc, c), disc.dim if nc is None else nc)
+
+
+def vector_diffusion(disc, mu):
+
+    return expand_components(diffusion(disc, mu), disc.dim)
+
+
+def viscous(disc, mu):
+
+    """integral of 2 mu eps(u) : eps(v) = integral of mu (grad(u) + grad(u)^T) : grad(v).
+
+    K[(i, a), (j, c)] = integral of mu (delta_ac grad(N_i) . grad(N_j) + dN_i/dx_c dN_j/dx_a).
+    """
+
+    nel, _, nne, dim = disc.B.shape
+    w = disc.detJw * at_gauss(disc, mu)
+
+    cross = np.einsum('eg,egic,egja->eiajc', w, disc.B, disc.B).reshape(nel, nne * dim, nne * dim)
+
+    return expand_components(np.einsum('eg,egia,egja->eij', w, disc.B, disc.B), dim) + cross
+
+
+def divergence(disc, c=1.0):
+
+    nel, _, nne, dim = disc.B.shape
+
+    return np.einsum('eg,gi,egjb->eijb', disc.detJw * at_gauss(disc, c), disc.N, disc.B).reshape(nel, nne, nne * dim)
+
+
+def vector_source(disc, f):
+
+    nel, _, nne, dim = disc.B.shape
+
+    return np.einsum('eg,gi,ega->eia', disc.detJw, disc.N, _velocity(disc, f)).reshape(nel, nne * dim)
+
+
+def facet_vector_source(facets, t):
+
+    """t: constant vector (dim,), array (nf, nq, dim) or function of the coordinates returning the components."""
+
+    dim = facets.x.shape[-1]
+
+    if callable(t):
+        t = np.stack(np.broadcast_arrays(*t(*_coordinates(facets.x))), axis=-1)
+
+    t = np.broadcast_to(np.asarray(t, dtype=float), facets.detJw.shape + (dim,))
+
+    return np.einsum('fq,qi,fqa->fia', facets.detJw, facets.N, t).reshape(len(facets.detJw), -1)

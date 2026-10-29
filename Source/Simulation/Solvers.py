@@ -195,7 +195,8 @@ class modelSolver():
 
         layout = self.model.layout
         for name in layout.names:
-            self.model.physics.var[name].updateTimeValues(Y[layout.dofs(name)[:, 0], :])
+            d = layout.dofs(name)
+            self.model.physics.var[name].updateTimeValues(Y[d[:, 0], :] if d.shape[1] == 1 else Y[d, :])
 
     def linearSolver(self):
 

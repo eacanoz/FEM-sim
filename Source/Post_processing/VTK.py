@@ -1,6 +1,6 @@
 """Output of results for ParaView: VTK XML unstructured grids (.vtu) and time series (.pvd).
 
-Written directly (ASCII XML, no extra dependencies). Any scalar nodal field can be exported; a transient
+Written directly (ASCII XML, no extra dependencies). Any nodal field can be exported, scalar (n,) or vector (n, k) with k <= 3; a transient
 solution gives one .vtu per exported step plus a .pvd collection that ParaView opens as an animation.
 
     files = write_vtu('out/plate.vtu', mesh, {'T': values})
@@ -58,8 +58,14 @@ def write_vtu(path, mesh, point_data=None):
         f.write('<PointData>\n')
         for name, values in (point_data or {}).items():
             values = np.asarray(values, dtype=float)
+            if values.ndim == 2 and values.shape[0] == len(points) and values.shape[1] <= 3:
+                vector = np.zeros((len(points), 3))     # ParaView expects 3 components for a vector
+                vector[:, :values.shape[1]] = values
+                f.write(_array_xml(name, vector, np.float64, 3))
+                continue
             if values.shape != (len(points),):
-                raise ValueError(f"El campo '{name}' tiene forma {values.shape}; se esperaba ({len(points)},).")
+                raise ValueError(f"El campo '{name}' tiene forma {values.shape}; se esperaba ({len(points)},) "
+                                 f"o ({len(points)}, k) con k <= 3.")
             f.write(_array_xml(name, values, np.float64))
         f.write('</PointData>\n')
 
@@ -107,18 +113,16 @@ def export_model(model, base, every=1, fields=None):
     if unknown:
         raise KeyError(f"Campos desconocidos: {unknown} (disponibles: {list(model.sol)}).")
 
-    first = np.asarray(model.sol[names[0]])
-
-    if first.ndim == 1:
+    if model.timeVector is None:
         return [write_vtu(f"{base}.vtu", model.mesh, {n: np.asarray(model.sol[n]) for n in names})]
 
-    n_steps = first.shape[1]
+    n_steps = len(model.timeVector)
     steps = sorted(set(range(0, n_steps, max(1, int(every)))) | {n_steps - 1})
     times = np.asarray(model.timeVector)
 
     files, entries = [], []
     for k, step in enumerate(steps):
-        file = write_vtu(f"{base}_{k:04d}.vtu", model.mesh, {n: np.asarray(model.sol[n])[:, step] for n in names})
+        file = write_vtu(f"{base}_{k:04d}.vtu", model.mesh, {n: np.asarray(model.sol[n])[..., step] for n in names})
         files.append(file)
         entries.append((times[step], file))
 

@@ -89,6 +89,37 @@ class Discretization:
 
         return np.einsum('gi,eik->egk', self.N, nodal[self.conn])
 
+    def gradient(self, nodal):
+
+        """Gradient of nodal values (n_nodes,) or (n_nodes, k) at the Gauss points: (nel, ngp, dim) or (nel, ngp, k, dim)."""
+
+        nodal = np.asarray(nodal, dtype=float)
+
+        if nodal.ndim == 1:
+            return np.einsum('egia,ei->ega', self.B, nodal[self.conn])
+
+        return np.einsum('egia,eik->egka', self.B, nodal[self.conn])
+
+    def project(self, values):
+
+        """Gauss-point values (nel, ngp) or (nel, ngp, ...) to nodal values by lumped L2 projection.
+
+        v_i = sum_e integral(N_i v) / sum_e integral(N_i). Exact for fields that are constant on the
+        mesh; a gradient of a linear field (Darcy velocity of a linear pressure) is recovered exactly.
+        """
+
+        values = np.asarray(values, dtype=float)
+        tail = values.shape[2:]
+
+        weights = np.zeros(self.n_nodes)
+        np.add.at(weights, self.conn.ravel(), np.einsum('eg,gi->ei', self.detJw, self.N).ravel())
+
+        nodal = np.zeros((self.n_nodes,) + tail)
+        contrib = np.einsum('eg,gi,eg...->ei...', self.detJw, self.N, values)
+        np.add.at(nodal, self.conn.ravel(), contrib.reshape((-1,) + tail))
+
+        return nodal / weights.reshape((-1,) + (1,) * len(tail))
+
     # ----- boundary facets -----
 
     def _owners(self):

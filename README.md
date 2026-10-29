@@ -26,6 +26,9 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Triángulos T3 y mallas de gmsh (geometría no rectangular, grupos físicos con nombre) | Operativo: parche exacto, orden 2, anillo frente a solución logarítmica |
 | Solvers iterativos (CG, BiCGSTAB, GMRES) con AMG (pyamg), iLU o Jacobi sobre el sistema reducido; reutilización de factorizaciones | Operativo: AMG con iteraciones casi independientes de la malla |
 | Exportación a ParaView (`.vtu` y series `.pvd`) | Operativo; XDMF no implementado |
+| Base de fluidos (Etapa 9): campos vectoriales, operadores viscoso y divergencia, leyes con gradientes `f(u, ∇u)`, Dirichlet por componente, tracciones, VTK vectorial | Operativo: MMS vectorial de orden 2, jacobiano frente a diferencias finitas, ley de potencia en canal |
+| Flujo de Darcy (`darcy`): permeabilidad escalar, función o tensor, gravedad, fuente, almacenamiento; velocidad hacia la convección de `ht`/`mt` | Operativo, exacto en 1D y 2D, hidrostática, inyección |
+| Stokes, Navier–Stokes, no newtonianos, turbulencia | En curso: ver [docs/PLAN_FLUIDOS.md](docs/PLAN_FLUIDOS.md) |
 | `rho Cp(T)`, elementos de orden superior, 3D | No implementado |
 
 ## Requisitos
@@ -191,6 +194,7 @@ Las aristas se seleccionan con un predicado sobre su punto medio: `mesh.boundary
 | `2DFEM.py` | Generación de malla 2D (referencia de numeración) |
 | `Example_Solver_Scaling.py` | Poisson 2D hasta 160 mil incógnitas: PARDISO frente a CG y CG+AMG, factorización reutilizada y exportación a ParaView |
 | `Example_Gmsh_Geometry.py` | Cuarto de anillo (convergencia frente a la solución logarítmica) y placa con orificio, con mallas T3 de gmsh |
+| `Example_Darcy_Transport.py` | Darcy en un medio con una inclusión de baja permeabilidad, conservación del caudal y pluma de un trazador arrastrada por la velocidad de Darcy |
 | `readMesh.py` | Lectura de información de un archivo `.msh` con gmsh |
 
 Algunos ejemplos abren ventanas de Matplotlib (`plt.show()`). Para ejecutarlos sin ventanas use `MPLBACKEND=Agg`.
@@ -219,6 +223,7 @@ python Test/test_multifield_diffusion.py  # D(c), D(T), k(c): soluciones exactas
 python Test/test_solver_scaling_output.py # AMG, solvers iterativos, reutilización de factorización y salida VTK (10)
 python Test/test_triangles_gmsh.py        # triángulos T3 y gmsh: parche, manufacturada, anillo, grupos, Q4 de gmsh (10)
 python Test/test_convection_supg.py       # velocidad compartida y SUPG: exactitud 1D, 2D = 1D, manufacturada, transitorio (9)
+python Test/test_fluids_foundation.py     # Etapa 9: operadores vectoriales, leyes con gradientes, ley de potencia, Darcy (11)
 ```
 
 Todas deben pasar antes de hacer un commit que toque el núcleo (`Source/`).
@@ -240,13 +245,14 @@ Source/
     Coupled.py                 CoupledPhysics: varias físicas en un modelo (Model(psc=[ht, mt]))
     HeatTransfer.py            ht: conducción, convección, radiación, BC en nodos y aristas
     MassTransfer.py            mt: especies, reacciones acopladas, BC en nodos y aristas
+    Darcy.py                   darcy: flujo en medios porosos (presión) y velocidad de Darcy
   Primals/                     campos escalares y vectoriales (valores nodales)
   Simulation/
     Discretization.py          geometría en los puntos de Gauss y facetas (cualquier dimensión)
     DofLayout.py               campos, componentes y numeración de DOF
-    Operators.py               operadores de forma débil vectorizados (einsum)
+    Operators.py               operadores de forma débil vectorizados (einsum), escalares y vectoriales
     PointwiseLaw.py            leyes no lineales con jacobianos automáticos (JAX)
-    System.py                  matrices, términos no lineales y BC independientes de la física
+    System.py                  matrices, términos no lineales (leyes de valores y de gradientes) y BC
     Solvers.py                 modelSolver: lineal, Newton, θ-método transitorio
     DirectSolver.py            PARDISO / SuperLU
     IterativeSolver.py         BiCGSTAB, GMRES, CG con iLU
