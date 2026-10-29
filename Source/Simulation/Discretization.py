@@ -6,7 +6,8 @@ Volume data (nel elements, ngp Gauss points, nne nodes per element, dim dimensio
     conn    (nel, nne)            global node ids
     N       (ngp, nne)            shape functions
     B       (nel, ngp, nne, dim)  physical gradients dN/dx
-    detJw   (nel, ngp)            |detJ| * Gauss weight
+    detJw   (nel, ngp)            |detJ| * Gauss weight (* r if axisymmetric)
+    area    (nel, ngp)            |detJ| * Gauss weight (plane measure)
     x_gp    (nel, ngp, dim)       physical coordinates of the Gauss points
 
 Boundary data comes as a FacetSet (points in 1D, edges in 2D, faces in 3D).
@@ -44,12 +45,18 @@ class FacetSet:
 
 class Discretization:
 
-    def __init__(self, mesh, order=2):
+    """axisymmetric=True: the 2D mesh is a meridian plane (x = r, y = z, axis at x = 0). Every integral is then
+    integral(... r dr dz): detJw and the facet measures carry the factor r (the 2 pi is left out everywhere).
+    `area` keeps the plane measure (element sizes, recovery patches) and `hoop` = N / r gives the hoop strain
+    u_r / r of vector fields."""
+
+    def __init__(self, mesh, order=2, axisymmetric=False):
 
         self.element = ELEMENTS[element_type_of(mesh)]
         self.dim = self.element.dim
         self.order = order
         self.n_nodes = mesh.getNoN()
+        self.axisymmetric = bool(axisymmetric)
 
         self.conn = np.array([e.getNodesId() for e in mesh.EL], dtype=int)
         self.node_xy = np.array([node.coor[:self.dim] for node in mesh.NL], dtype=float)
@@ -69,10 +76,29 @@ class Discretization:
 
         self.N = N
         self.B = np.einsum('gkb,egba->egka', dN, invJ)
-        self.detJw = np.abs(detJ) * weights
+        self.area = np.abs(detJ) * weights          # plane measure (no r factor)
         self.x_gp = np.einsum('gk,eka->ega', N, coords)
 
+        self.hoop = None
+        if self.axisymmetric:
+            if self.dim != 2:
+                raise ValueError("La formulacion axisimetrica necesita una malla 2D del plano meridiano (x = r, y = z).")
+            if np.any(self.node_xy[:, 0] < -1e-12 * max(1.0, np.abs(self.node_xy).max())):
+                raise ValueError("Malla axisimetrica con radios negativos: el eje de simetria debe estar en x = 0.")
+            r = self.x_gp[..., 0]
+            self.detJw = self.area * r
+            self.hoop = N[None, :, :] / r[..., None]    # (nel, ngp, nne): N_i / r
+        else:
+            self.detJw = self.area
+
         self._facet_owner = None
+
+    @property
+    def radius(self):
+
+        """r at the Gauss points (nel, ngp) of an axisymmetric discretization."""
+
+        return self.x_gp[..., 0]
 
     @property
     def n_elements(self):
@@ -148,9 +174,9 @@ class Discretization:
 
         # Element means: the Gauss values of a gradient carry an O(h) error that is odd inside each element, so the
         # mean (the value at the centre) is accurate to O(h^2); fitting the means keeps that order on one-sided patches.
-        volume = self.detJw.sum(axis=1)
-        centres = np.einsum('eg,ega->ea', self.detJw, self.x_gp) / volume[:, None]
-        mean_weights = self.detJw / volume[:, None]                          # (nel, ngp)
+        volume = self.area.sum(axis=1)                                       # plane measure, also axisymmetric
+        centres = np.einsum('eg,ega->ea', self.area, self.x_gp) / volume[:, None]
+        mean_weights = self.area / volume[:, None]                           # (nel, ngp)
 
         rows, cols, vals = [], [], []
 
@@ -260,4 +286,8 @@ class Discretization:
         else:
             raise NotImplementedError("Las normales de faceta solo estan implementadas en 1D y 2D.")
 
-        return FacetSet(nodes, elems, Nf, measure * weights[None, :], x, normals)
+        detJw = measure * weights[None, :]
+        if self.axisymmetric:
+            detJw = detJw * x[..., 0]                # surface of revolution: ds -> r ds
+
+        return FacetSet(nodes, elems, Nf, detJw, x, normals)

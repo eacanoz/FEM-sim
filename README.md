@@ -32,7 +32,8 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Navier–Stokes estacionario (`ff.setInertia(True)`): convección con Newton o Picard, SUPG/PSPG/LSIC sobre el residuo completo | Operativo: Kovasznay (orden 2 en u y p), cavidad Re = 100 frente a Ghia et al., Newton en 5–7 iteraciones |
 | Fluidos no newtonianos (`ff.setViscosityLaw`): ley de potencia, Carreau–Yasuda, Cross, Cross–WLF, Bingham y Herschel–Bulkley regularizados, desplazamiento de Arrhenius | Operativo: perfiles analíticos de ley de potencia (orden 2) y Bingham (tapón), jacobiano exacto con dμ/dγ̇ y dμ/dT |
 | Acoplamiento flujo–calor (`Model(psc=[ff, ht])`, `setVelocity('u')`, `setViscousHeating`): convección por la velocidad calculada con SUPG, disipación viscosa, μ(T) | Operativo: Brinkman exacto, μ(T) en Couette, equivalencia con velocidad prescrita, jacobiano acoplado completo |
-| Axisimétrico, transitorio NS, turbulencia | En curso: ver [docs/PLAN_FLUIDOS.md](docs/PLAN_FLUIDOS.md) |
+| Axisimétrico r-z (`Model(axisymmetric=True)`): calor, especies, Darcy y flujo (términos de aro en deformación, divergencia y esfuerzo) | Operativo: conducción radial, Hagen–Poiseuille, extensión uniaxial exacta, ley de potencia en tubo, jacobiano acoplado |
+| Transitorio NS, turbulencia | En curso: ver [docs/PLAN_FLUIDOS.md](docs/PLAN_FLUIDOS.md) |
 | `rho Cp(T)`, elementos de orden superior, 3D | No implementado |
 
 ## Requisitos
@@ -202,6 +203,7 @@ Las aristas se seleccionan con un predicado sobre su punto medio: `mesh.boundary
 | `Example_Stokes_Contraction.py` | Contracción plana 4:1 (entrada a un dado) en flujo reptante: conservación del caudal, pérdida de presión de entrada y corrección de Couette en tres mallas, vórtice de esquina |
 | `Example_NavierStokes_Cavity.py` | Cavidad con tapa móvil a Re = 100, 400 y 1000 con continuación en Re; perfil central frente a Ghia et al. y líneas de corriente |
 | `Example_Polymer_Slit_Die.py` | Fundido de polímero en un dado de rendija: Cross–WLF, calentamiento viscoso y acoplamiento térmico; perfil de velocidad, temperatura, balance de energía y curva caudal–presión |
+| `Example_Capillary_Rheometer.py` | Reómetro capilar simulado (axisimétrico, Cross): tasa de corte aparente, esfuerzo en pared, pérdida de entrada (Bagley), corrección de Rabinowitsch; recupera la curva de viscosidad del modelo |
 | `readMesh.py` | Lectura de información de un archivo `.msh` con gmsh |
 
 Algunos ejemplos abren ventanas de Matplotlib (`plt.show()`). Para ejecutarlos sin ventanas use `MPLBACKEND=Agg`.
@@ -234,6 +236,7 @@ python Test/test_fluids_foundation.py     # Etapa 9: operadores vectoriales, ley
 python Test/test_stokes.py                # Etapa 10: Stokes con PSPG: parche, Poiseuille, solución exacta, cavidad, simetría, arranque (8)
 python Test/test_navier_stokes.py         # Etapa 11: Navier–Stokes: tangente, Kovasznay, cavidad frente a Ghia, canal, límite de Stokes, Picard (8)
 python Test/test_non_newtonian.py         # Etapa 12: leyes de viscosidad, ley de potencia, Bingham, Brinkman, μ(T), convección acoplada, jacobiano (8)
+python Test/test_axisymmetric.py          # Etapa 13: medidas r-z, conducción radial, Hagen–Poiseuille, extensión uniaxial, tubo de ley de potencia, jacobiano (6)
 ```
 
 Todas deben pasar antes de hacer un commit que toque el núcleo (`Source/`).

@@ -34,6 +34,11 @@ Pressure stabilization (PSPG) of equal-order velocity-pressure elements:
     recovered_stress(disc, mu)          sparse                  continuous nodal stress recovered from 2 mu eps(u_h)
     recovered_stress_divergence         sparse                  div of the recovered stress at the Gauss points
     gauss_stress_divergence(disc)       sparse                  same from a stress given at the Gauss points (nonlinear mu)
+    hoop_stress_terms(disc, mu)         sparse                  (sigma_rr - sigma_tt)/r, sigma_rz/r of div(sigma) (axisymmetric)
+    pspg_weight(disc, tau)              sparse                  integral of tau grad(N_i) . g, g a vector at the Gauss points
+
+Axisymmetric discretizations (x = r, y = z) carry the factor r in detJw, so every operator integrates over the
+volume of revolution (without 2 pi); viscous, vector_diffusion and divergence add the hoop strain u_r / r.
     lsic_tau(disc, mu, rho, speed)      (nel, ngp)              grad-div stabilization coefficient (Navier-Stokes)
 
 A coefficient is a number, an array already at the quadrature points, or a function of the
@@ -195,9 +200,24 @@ def vector_mass(disc, c, nc=None):
     return expand_components(mass(disc, c), disc.dim if nc is None else nc)
 
 
+def _add_hoop(K, disc, w):
+
+    """Adds integral of w (N_i / r)(N_j / r) to the radial-radial block of vector element matrices (axisymmetric)."""
+
+    nel, _, nne, dim = disc.B.shape
+    K = K.reshape(nel, nne, dim, nne, dim).copy()
+    K[:, :, 0, :, 0] += np.einsum('eg,egi,egj->eij', w, disc.hoop, disc.hoop)
+
+    return K.reshape(nel, nne * dim, nne * dim)
+
+
 def vector_diffusion(disc, mu):
 
-    return expand_components(diffusion(disc, mu), disc.dim)
+    """integral of mu grad(u) : grad(v); axisymmetric: plus integral of mu u_r v_r / r^2 (vector Laplacian)."""
+
+    K = expand_components(diffusion(disc, mu), disc.dim)
+
+    return _add_hoop(K, disc, disc.detJw * at_gauss(disc, mu)) if disc.axisymmetric else K
 
 
 def viscous(disc, mu):
@@ -205,29 +225,39 @@ def viscous(disc, mu):
     """integral of 2 mu eps(u) : eps(v) = integral of mu (grad(u) + grad(u)^T) : grad(v).
 
     K[(i, a), (j, c)] = integral of mu (delta_ac grad(N_i) . grad(N_j) + dN_i/dx_c dN_j/dx_a).
+    Axisymmetric: eps also has the hoop strain u_r / r, which adds integral of 2 mu (N_i / r)(N_j / r) to the r-r block.
     """
 
     nel, _, nne, dim = disc.B.shape
     w = disc.detJw * at_gauss(disc, mu)
 
     cross = np.einsum('eg,egic,egja->eiajc', w, disc.B, disc.B).reshape(nel, nne * dim, nne * dim)
+    K = expand_components(np.einsum('eg,egia,egja->eij', w, disc.B, disc.B), dim) + cross
 
-    return expand_components(np.einsum('eg,egia,egja->eij', w, disc.B, disc.B), dim) + cross
+    return _add_hoop(K, disc, 2.0 * w) if disc.axisymmetric else K
 
 
 def divergence(disc, c=1.0):
 
-    nel, _, nne, dim = disc.B.shape
+    """integral of c N_i div(u); axisymmetric: div u = du_r/dr + u_r / r + du_z/dz."""
 
-    return np.einsum('eg,gi,egjb->eijb', disc.detJw * at_gauss(disc, c), disc.N, disc.B).reshape(nel, nne, nne * dim)
+    nel, _, nne, dim = disc.B.shape
+    w = disc.detJw * at_gauss(disc, c)
+    D = np.einsum('eg,gi,egjb->eijb', w, disc.N, disc.B)
+
+    if disc.axisymmetric:
+        D = D.copy()
+        D[..., 0] += np.einsum('eg,gi,egj->eij', w, disc.N, disc.hoop)
+
+    return D.reshape(nel, nne, nne * dim)
 
 
 def element_size(disc):
 
     """h of each element: the length of the line, the side of the square of the same area (quadrilaterals) or the
-    leg of the right isosceles triangle of the same area (triangles), (nel,)."""
+    leg of the right isosceles triangle of the same area (triangles), (nel,). Uses the plane area (also axisymmetric)."""
 
-    measure = disc.detJw.sum(axis=1)
+    measure = disc.area.sum(axis=1)
 
     if disc.element.name.startswith('tri'):
         measure = 2.0 * measure
@@ -298,28 +328,49 @@ def _stress_rows(disc):
     return disc.conn[:, :, None, None] * dim * dim + np.arange(dim)[:, None] * dim + np.arange(dim)[None, :]
 
 
-def projected_stress_divergence(disc, mu, tau):
+def pspg_weight(disc, tau):
 
-    """Sparse matrices of the viscous part of the PSPG residual, -integral of tau grad(q) . div(sigma~).
-
-    Inside a linear element div(2 mu eps(u_h)) vanishes, which makes plain PSPG inconsistent (a first-order error in
-    the pressure). sigma~ (recovered_stress) is continuous, so its divergence restores the viscous term. Returns (C, P):
-        P (n_nodes*dim*dim, n_nodes*dim)  nodal stress from the nodal velocity (recovered_stress)
-        C (n_nodes, n_nodes*dim*dim)      integral of tau dN_i/dx_a dN_k/dx_b sigma~_k,ab
-    The PSPG term of the continuity equation is then -C @ P @ u.
-    """
+    """Sparse Wp (n_nodes, nel*ngp*dim): integral of tau grad(N_i) . g for a vector g given at the Gauss points,
+    Wp @ g.ravel(). With g = div(sigma~) = V @ u, -Wp @ V is the viscous part of the PSPG term of the continuity
+    equation. Inside a linear element div(2 mu eps(u_h)) vanishes, which makes plain PSPG inconsistent (a first-order
+    error in the pressure); the recovered continuous stress sigma~ restores it."""
 
     import scipy.sparse as sp
 
     nel, ngp, nne, dim = disc.B.shape
-    n, conn, rows = disc.n_nodes, disc.conn, _stress_rows(disc)
+    values = np.einsum('eg,egia->egia', disc.detJw * tau, disc.B)
+    cols = np.arange(nel * ngp).reshape(nel, ngp)[:, :, None] * dim + np.arange(dim)       # (nel, ngp, dim)
 
-    Ce = np.einsum('eg,egia,egkb->eikab', disc.detJw * tau, disc.B, disc.B)
-    C = sp.coo_matrix((Ce.ravel(), (np.broadcast_to(conn[:, :, None, None, None], Ce.shape).ravel(),
-                                    np.broadcast_to(rows[:, None], Ce.shape).ravel())),
-                      shape=(n, n * dim * dim)).tocsr()
+    return sp.coo_matrix((values.ravel(), (np.broadcast_to(disc.conn[:, None, :, None], values.shape).ravel(),
+                                           np.broadcast_to(cols[:, :, None, :], values.shape).ravel())),
+                         shape=(disc.n_nodes, nel * ngp * dim)).tocsr()
 
-    return C, recovered_stress(disc, mu)
+
+def hoop_stress_terms(disc, mu):
+
+    """Sparse E (nel*ngp*dim, n_nodes*dim): the non-derivative terms of div(sigma) in cylindrical coordinates at the
+    Gauss points, (sigma_rr - sigma_tt) / r for the radial and sigma_rz / r for the axial component, with
+    sigma = 2 mu eps(u) and the hoop stress sigma_tt = 2 mu u_r / r. Zero matrix for a plane discretization."""
+
+    import scipy.sparse as sp
+
+    nel, ngp, nne, dim = disc.B.shape
+    shape = (nel * ngp * dim, disc.n_nodes * dim)
+    if not disc.axisymmetric:
+        return sp.csr_matrix(shape)
+
+    r = disc.radius
+    m = at_gauss(disc, mu) / r
+    E = np.zeros((nel, ngp, dim, nne, dim))
+    E[:, :, 0, :, 0] = 2.0 * m[..., None] * (disc.B[..., 0] - disc.hoop)      # (sigma_rr - sigma_tt) / r
+    E[:, :, 1, :, 0] = m[..., None] * disc.B[..., 1]                          # sigma_rz / r, du_r/dz part
+    E[:, :, 1, :, 1] = m[..., None] * disc.B[..., 0]                          # sigma_rz / r, du_z/dr part
+
+    rows = np.arange(nel * ngp).reshape(nel, ngp)[:, :, None] * dim + np.arange(dim)       # (nel, ngp, dim)
+    cols = disc.conn[:, :, None] * dim + np.arange(dim)                                    # (nel, nne, dim)
+
+    return sp.coo_matrix((E.ravel(), (np.broadcast_to(rows[..., None, None], E.shape).ravel(),
+                                      np.broadcast_to(cols[:, None, None], E.shape).ravel())), shape=shape).tocsr()
 
 
 def gauss_stress_divergence(disc):
@@ -349,9 +400,12 @@ def gauss_stress_divergence(disc):
 def recovered_stress_divergence(disc, mu):
 
     """Sparse V (nel*ngp*dim, n_nodes*dim): div(sigma~) at the Gauss points from the nodal velocity for a viscosity
-    mu that does not depend on the flow, (V @ u).reshape(nel, ngp, dim). Rows (e, g, a) -> (e*ngp + g)*dim + a."""
+    mu that does not depend on the flow, (V @ u).reshape(nel, ngp, dim). Rows (e, g, a) -> (e*ngp + g)*dim + a.
+    Axisymmetric: plus the hoop terms (hoop_stress_terms), evaluated directly at the Gauss points."""
 
-    return gauss_stress_divergence(disc) @ _gauss_stress(disc, mu)
+    V = gauss_stress_divergence(disc) @ _gauss_stress(disc, mu)
+
+    return V + hoop_stress_terms(disc, mu) if disc.axisymmetric else V
 
 
 def lsic_tau(disc, mu, rho, speed):

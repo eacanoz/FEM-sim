@@ -88,6 +88,13 @@
 | Convección por la velocidad calculada | flujo tapón de `ff` = velocidad constante en `ht`, con y sin SUPG | `Test/test_non_newtonian.py` | 1e-9 |
 | Jacobiano acoplado u–p–T | Carreau + Arrhenius, inercia, PSPG con esfuerzo recuperado, calentamiento, convección del calor con SUPG, frente a diferencias finitas (τ congelado) | `Test/test_non_newtonian.py` | 1e-7 relativo |
 | Dado de rendija (ejemplo) | caudal conservado; aumento de la temperatura de mezcla (0.29 K) menor que el adiabático Δp/ρCp (0.48 K) | `Example_Polymer_Slit_Die.py` | coherente |
+| Axisimétrico: medidas y operadores | volumen `∫r dr dz`, superficies lateral y de tapa, `div(r, -2z) = 0` con el término de aro, energía viscosa | `Test/test_axisymmetric.py` | exacto (1e-12) |
+| Axisimétrico: conducción radial | cilindro hueco (perfil logarítmico); cilindro macizo con fuente (eje natural) | `Test/test_axisymmetric.py` | orden 1.98; error < 2 % con 8 elementos |
+| Hagen–Poiseuille | caudal conservado; perfil y gradiente de presión con el caudal discreto | `Test/test_axisymmetric.py` | u orden 1.8; p orden 1.95 (Q4) y 1.5 (T3) fuera del eje, orden 1 en el eje (0.4 %) |
+| Extensión uniaxial | `u = (-a r/2, a z)`, presión constante, malla distorsionada | `Test/test_axisymmetric.py` | exacto (1e-10), también la presión |
+| Ley de potencia en tubo (n = 0.5) | perfil analítico y caudal | `Test/test_axisymmetric.py` | orden 2.03 |
+| Jacobiano axisimétrico acoplado | Carreau + Arrhenius, inercia, PSPG con términos de aro, calentamiento, convección del calor | `Test/test_axisymmetric.py` | 1e-7 relativo |
+| Reómetro capilar (ejemplo) | viscosidad "medida" (Rabinowitsch) frente a la ley Cross del modelo | `Example_Capillary_Rheometer.py` | 0.3–1.1 % (2.2 % en el extremo, n' unilateral) |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -184,6 +191,13 @@ Lo que sigue pendiente:
 - Con una ley de viscosidad, cada iteración multiplica `Q @ dσ/dx` (dispersa); es más caro que el caso newtoniano.
   `viscous_projection = False` lo evita a costa de la consistencia de la PSPG.
 
+### Fluidos (Etapa 13, axisimétrico)
+- Coordenadas fijas: `x = r`, `y = z`, eje en `x = 0` (radios negativos se rechazan). Sin giro (`u_θ = 0`).
+- La presión de los nodos del eje converge con orden 1 (las funciones de prueba del eje llevan el peso `r → 0`).
+- `GradientLawTerm` con campos vectoriales no incluye los términos de aro (los escalares sí son correctos).
+- Fluidos inelásticos: la pérdida de entrada de una contracción (corrección de Bagley) es pequeña; en polímeros reales
+  domina la elasticidad del fundido (viscoelástico, Etapa 17 opcional).
+
 ### Física y numérica
 - **Convección:** diferencias centradas sin estabilización. Para Pe alto habrá oscilaciones. `Pe` se calcula pero no se
   usa. El código de estabilización que no estaba conectado se eliminó en la Etapa 5; habrá que implementarlo.
@@ -271,7 +285,7 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
    factorización reutilizada (transitorio lineal y `solve()` repetidos), exportación VTK/PVD. Pendiente: XDMF/HDF5, VTK binario,
    iterativo para sistemas con convección fuerte o varios campos acoplados (AMG por bloques).
 6. ~~**Estabilización de convección.**~~ Hecha (SUPG en 1D y 2D).
-7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 (base vectorial y Darcy), 10 (Stokes con PSPG), 11 (Navier–Stokes estacionario) y 12 (no newtonianos y acoplamiento térmico) hechas; siguiente, axisimétrico.
+7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 (base vectorial y Darcy), 10 (Stokes con PSPG), 11 (Navier–Stokes estacionario), 12 (no newtonianos y acoplamiento térmico) y 13 (axisimétrico) hechas; siguiente, transitorio de Navier–Stokes.
 
 ## 5. Criterio para cerrar una etapa
 

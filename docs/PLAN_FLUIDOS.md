@@ -55,5 +55,6 @@ Fuera de alcance: compresible, superficie libre, multifásico, LES.
 | 10 | hecha: `Test/test_stokes.py` (8 pruebas), `Example_Stokes_Contraction.py`. PSPG con esfuerzo viscoso recuperado por parches |
 | 11 | hecha: `Test/test_navier_stokes.py` (7 pruebas), `Example_NavierStokes_Cavity.py`. SUPG/PSPG/LSIC con Newton (τ congelado) o Picard |
 | 12 | hecha: `Test/test_non_newtonian.py` (8 pruebas), `Example_Polymer_Slit_Die.py`. `Rheology.py`, `FlowTerm`, `FieldConvectionTerm` |
-| 13 | siguiente |
-| 14–17 | pendiente |
+| 13 | hecha: `Test/test_axisymmetric.py` (6 pruebas), `Example_Capillary_Rheometer.py`. `Model(axisymmetric=True)` |
+| 14 | siguiente |
+| 15–17 | pendiente |

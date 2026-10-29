@@ -26,7 +26,8 @@ class Model(object):
 
     area = 1
 
-    def __init__(self, name: str, mtype=None, dim: int = 1, mesh: Mesh = None, mat: material = None, psc=None):
+    def __init__(self, name: str, mtype=None, dim: int = 1, mesh: Mesh = None, mat: material = None, psc=None,
+                 axisymmetric: bool = False):
         """
         Initializes the FEA model with the given parameters.
 
@@ -36,7 +37,10 @@ class Model(object):
         :param mtype: Type of Model (Not defined)
         :param dim: Problem dimension: 1->1D; 2->2D(!); 3->3D(!)
         :param mesh Mesh (Class: Mesh)
+        :param axisymmetric: 2D mesh of the meridian plane of a body of revolution (x = r, y = z, axis at x = 0)
         """
+
+        self.axisymmetric = bool(axisymmetric)
 
         self._mesh = mesh  # Model mesh
         self._PD = dim  # Model dimension
@@ -84,7 +88,7 @@ class Model(object):
 
 
         custom_str = ("Model: " + self.name + 
-                      "\nDimension: " + str(self._PD) + "D" + 
+                      "\nDimension: " + str(self._PD) + "D" + (" axisymmetric (r, z)" if self.axisymmetric else "") +
                       "\nNodes: " + str(self.mesh.getNoN()) + 
                       "\nElements: " + str(self.mesh.getNoE()) + 
                       "\nPhysics: " + self.physics_status)
@@ -107,7 +111,7 @@ class Model(object):
         """Discretization of the mesh (shape functions and gradients at the Gauss points), built once."""
 
         if self._geometry is None:
-            self._geometry = Discretization(self._mesh)
+            self._geometry = Discretization(self._mesh, axisymmetric=self.axisymmetric)
 
         return self._geometry
 
@@ -181,7 +185,7 @@ class Model(object):
 
         sim_logger.info("------- Starting simulation -------")
         sim_logger.info("Model: " + self.name)
-        sim_logger.info("Dimension: " + str(self._PD) + "D")
+        sim_logger.info("Dimension: " + str(self._PD) + "D" + (" axisymmetric (r, z)" if self.axisymmetric else ""))
         sim_logger.info("Nodes: " + str(self.mesh.getNoN()))
         sim_logger.info("Elements: " + str(self.mesh.getNoE()))
         sim_logger.info("Physics: " + self.physics_status)

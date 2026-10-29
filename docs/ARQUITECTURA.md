@@ -22,9 +22,9 @@ Mesh ─► Elements ─► Discretization ─► Operators ─► System ─►
 | Capa | Módulo | Qué hace | Depende de la física |
 |---|---|---|---|
 | Elementos | `Pre_processing/Elements.py` | Registro de elementos de referencia (`line2`, `line3`, `tri3`, `quad4`): funciones de forma, Gauss y facetas | no |
-| Geometría | `Simulation/Discretization.py` | `N`, `B = dN/dx`, `detJw`, `x_gp` en los puntos de Gauss; `FacetSet` (puntos en 1D, aristas en 2D) con medida y normales salientes | no |
+| Geometría | `Simulation/Discretization.py` | `N`, `B = dN/dx`, `detJw` (con el factor `r` si es axisimétrica), `area`, `hoop = N/r`, `x_gp` en los puntos de Gauss; `FacetSet` (puntos en 1D, aristas en 2D) con medida y normales salientes | no |
 | Grados de libertad | `Simulation/DofLayout.py` | Campos con `ncomp` componentes, numeración intercalada por nodo, reparto por bloques | no |
-| Operadores | `Simulation/Operators.py` | Escalares: `diffusion`, `diffusion_tensor`, `convection`, `mass`, `source`, `gradient_source`, `facet_mass`, `facet_source`. Vectoriales: `vector_mass`, `vector_diffusion`, `viscous`, `divergence`, `vector_source`, `facet_vector_source`. PSPG: `element_size`, `pspg_tau`, `pspg_mass`, `recovered_stress`, `projected_stress_divergence`, `recovered_stress_divergence`, `lsic_tau`. Coeficientes por punto de Gauss | no |
+| Operadores | `Simulation/Operators.py` | Escalares: `diffusion`, `diffusion_tensor`, `convection`, `mass`, `source`, `gradient_source`, `facet_mass`, `facet_source`. Vectoriales: `vector_mass`, `vector_diffusion`, `viscous`, `divergence`, `vector_source`, `facet_vector_source`. PSPG: `element_size`, `pspg_tau`, `pspg_mass`, `recovered_stress`, `recovered_stress_divergence`, `gauss_stress_divergence`, `hoop_stress_terms`, `pspg_weight`, `lsic_tau`. Coeficientes por punto de Gauss | no |
 | Leyes puntuales | `Simulation/PointwiseLaw.py` | Función JAX → `vmap` + `jacfwd` compilados una vez, aplicados a todos los puntos | no |
 | Sistema | `Simulation/System.py` | Acumula matrices, términos no lineales y BC; da `linear(x)`, `residual_and_tangent(x)`, `mass()` | no |
 | Física | `Physics/HeatTransfer.py`, `Physics/MassTransfer.py`, `Physics/Darcy.py`, `Physics/FluidFlow.py` (+ `Physics/Rheology.py`) | Añade sus operadores y leyes a un `System` (`add_terms`) | sí |
@@ -193,7 +193,15 @@ El plan completo de fluidos está en [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md).
   `FieldConvectionTerm` (`Physics.py`): convección monolítica por la velocidad calculada, con SUPG y bloques cruzados;
   `CoupledPhysics.setVelocity/setStabilization` omiten la parte de flujo (`computes_velocity = True`).
   `derived_fields` de `ff`: `shear_rate` y, con ley, `viscosity`.
-- **Falta:** axisimétrico (Etapa 13), elementos de orden mixto (`quad9`, `tri6`) y
+- **Ya está (Etapa 13):** `Model(..., axisymmetric=True)` → `Discretization(axisymmetric=True)`: plano meridiano con
+  `x = r`, `y = z` y el eje en `x = 0`. `detJw` y las medidas de faceta llevan el factor `r` (sin `2π`), así que todos los
+  operadores escalares (calor, especies, Darcy, BC, convección) integran sobre el volumen de revolución sin cambios;
+  `area` conserva la medida plana para `element_size` y los parches de recuperación. El flujo añade la deformación de
+  aro `ε_θθ = u_r/r` (`disc.hoop = N/r`) en `viscous`, `vector_diffusion`, `divergence`, `γ̇²` y la disipación, y los
+  términos `(σ_rr - σ_θθ)/r`, `σ_rz/r` de `div σ` (`Operators.hoop_stress_terms`, en el residuo de la PSPG/SUPG). La
+  PSPG lineal de Stokes usa ahora `pspg_weight(disc, τ) @ recovered_stress_divergence(disc, μ)`. El eje es una
+  condición de simetría (`addBC_SymmetryEdges`, `u_r = 0`); `flowRate` devuelve el caudal volumétrico `2π∫u·n r ds`.
+- **Falta:** transitorio de Navier–Stokes (Etapa 14), elementos de orden mixto (`quad9`, `tri6`) y
   `DofLayout` con nodos distintos por campo (Taylor–Hood), estado interno para plasticidad.
 
 ### 5.3 Añadir un elemento o una dimensión

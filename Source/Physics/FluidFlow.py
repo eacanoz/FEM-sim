@@ -209,16 +209,14 @@ class ff(physics):
         if self._nonlinear():
             self._add_flow_term(system, model, disc, layout, f)
         elif self.Stab == 'PSPG':
-            transient = has_density
             tau = ops.pspg_tau(disc, self.mu, self.rho, dt=self._time_step(model))
             system.add_matrix(layout.scatter_matrix(ops.diffusion(disc, tau), rp, rp))
             if f is not None:
                 system.add_vector(layout.scatter_vector(ops.gradient_source(disc, tau[..., None] * f), rp))
-            if transient:
+            if has_density:
                 system.add_mass(layout.scatter_matrix(ops.pspg_mass(disc, tau * ops.at_gauss(disc, self.rho)), rp, ru))
             if self.viscous_projection:
-                C, P = ops.projected_stress_divergence(disc, self.mu, tau)
-                S = (C @ P).tocoo()
+                S = (ops.pspg_weight(disc, tau) @ ops.recovered_stress_divergence(disc, self.mu)).tocoo()
                 p_dofs, u_dofs = layout.dofs('p')[:, 0], layout.dofs('u').ravel()
                 system.add_matrix(sp.coo_matrix((-S.data, (p_dofs[S.row], u_dofs[S.col])),
                                                 shape=(layout.ndof, layout.ndof)).tocsr())
@@ -276,13 +274,18 @@ class ff(physics):
 
     def flowRate(self, edges, u=None):
 
-        """Outgoing flow rate integral of u . n over the edges [m2/s in 2D]; u: nodal velocity (default: current)."""
+        """Outgoing flow rate integral of u . n over the edges; u: nodal velocity (default: current).
 
-        facets = self.modelRef.geometry.facets(edges)
+        Plane: per unit depth [m2/s]. Axisymmetric: the volumetric flow rate through the surface of revolution,
+        2 pi integral of u . n r ds [m3/s]."""
+
+        disc = self.modelRef.geometry
+        facets = disc.facets(edges)
         U = self.var['u'].values if u is None else np.asarray(u, dtype=float)
         uq = np.einsum('qk,fka->fqa', facets.N, U[facets.nodes])
+        q = float(np.sum(np.einsum('fqa,fqa->fq', uq, facets.normals) * facets.detJw))
 
-        return float(np.sum(np.einsum('fqa,fqa->fq', uq, facets.normals) * facets.detJw))
+        return 2.0 * np.pi * q if disc.axisymmetric else q
 
     def derived_fields(self, model):
 
@@ -290,9 +293,12 @@ class ff(physics):
         from the Gauss points)."""
 
         disc = model.geometry
-        G = disc.gradient(np.asarray(self.var['u'].values, dtype=float))
+        U = np.asarray(self.var['u'].values, dtype=float)
+        G = disc.gradient(U)
         eps = 0.5 * (G + np.swapaxes(G, -1, -2))
         g2 = 2.0 * np.einsum('egab,egab->eg', eps, eps)
+        if disc.axisymmetric:
+            g2 = g2 + 2.0 * (disc.interpolate(U)[..., 0] / disc.radius) ** 2      # hoop strain u_r / r
         out = {'shear_rate': disc.project(np.sqrt(g2))}
 
         if self.viscosity_law is not None:
@@ -470,14 +476,31 @@ class FlowTerm:
 
         return fields, u, G, T
 
+    def _strain(self, u, G):
+
+        """eps (in-plane), the hoop strain u_r / r (zero on a plane mesh), gamma2 = 2 eps:eps and d(gamma2)/dU_jc."""
+
+        disc = self.system.disc
+        eps = 0.5 * (G + np.swapaxes(G, -1, -2))
+        dg2 = 4.0 * np.einsum('egcb,egjb->egjc', eps, disc.B)
+        e_hh = np.zeros(disc.detJw.shape)
+
+        if disc.axisymmetric:
+            e_hh = u[..., 0] / disc.radius
+            dg2 = dg2.copy()
+            dg2[..., 0] += 4.0 * e_hh[..., None] * disc.hoop
+
+        g2 = 2.0 * (np.einsum('egab,egab->eg', eps, eps) + e_hh ** 2)
+
+        return eps, e_hh, g2, dg2
+
     def viscosity(self, x):
 
         """mu, dmu/dgamma2, dmu/dT at the Gauss points of the state x (the derivatives are zero for a constant mu)."""
 
         disc = self.system.disc
-        _, _, G, T = self._kinematics(x)
-        eps = 0.5 * (G + np.swapaxes(G, -1, -2))
-        g2 = 2.0 * np.einsum('egab,egab->eg', eps, eps)
+        _, u, G, T = self._kinematics(x)
+        _, _, g2, _ = self._strain(u, G)
 
         if self.law is None:
             zero = np.zeros(disc.detJw.shape)
@@ -500,10 +523,12 @@ class FlowTerm:
         P = np.asarray(fields['p'], dtype=float)[disc.conn]
         gp = np.einsum('egjb,ej->egb', B, P)
 
-        eps = 0.5 * (G + np.swapaxes(G, -1, -2))
-        g2 = 2.0 * np.einsum('egab,egab->eg', eps, eps)
+        eps, e_hh, g2, dg2 = self._strain(u, G)                                   # dg2 = d(gamma2)/dU_jc
         mu, mu_g2, mu_T = self.viscosity(x)
-        dg2 = 4.0 * np.einsum('egcb,egjb->egjc', eps, B)                           # d(gamma2)/dU_jc
+        axi = disc.axisymmetric
+        divB = B.copy()                                                           # div of the vector test function
+        if axi:
+            divB[..., 0] += disc.hoop
 
         state = x if self.tau_state is None else self.tau_state
         mu_tau = mu if self.tau_state is None else self.viscosity(state)[0]
@@ -535,9 +560,29 @@ class FlowTerm:
                 dsigT = 2.0 * np.einsum('egab,eg,gj->egabj', eps, mu_T, N)
                 blocks.append((np.einsum('eg,egib,egabj->eiaj', w, B, dsigT).reshape(nel, nne * dim, nne), ru, rT))
 
+            if axi:
+                # hoop stress sigma_tt = 2 mu u_r / r, tested by v_r / r
+                s_hh = 2.0 * mu * e_hh
+                ds_hh = 2.0 * e_hh[..., None, None] * mu_g2[..., None, None] * dg2               # (e, g, j, c)
+                ds_hh[..., 0] += 2.0 * mu[..., None] * disc.hoop
+                Ru[:, :, 0] += np.einsum('eg,egi,eg->ei', w, disc.hoop, s_hh)
+                Kh = np.zeros((nel, nne, dim, nne, dim))
+                Kh[:, :, 0] = np.einsum('eg,egi,egjc->eijc', w, disc.hoop, ds_hh)
+                blocks.append((Kh.reshape(nel, nne * dim, nne * dim), ru, ru))
+                ds_hhT = None
+                if self.T is not None:
+                    ds_hhT = 2.0 * np.einsum('eg,eg,gj->egj', e_hh, mu_T, N)
+                    KhT = np.zeros((nel, nne, dim, nne))
+                    KhT[:, :, 0] = np.einsum('eg,egi,egj->eij', w, disc.hoop, ds_hhT)
+                    blocks.append((KhT.reshape(nel, nne * dim, nne), ru, rT))
+
             if self.Q is not None:
                 divs = (self.Q @ sigma.ravel()).reshape(nel, ngp, dim)
                 d_divs = self.Q @ self._stress_tangent(dsig, dsigT, ru, rT)
+                if axi:
+                    extra, d_extra = self._hoop_divergence(sigma, s_hh, dsig, ds_hh, dsigT, ds_hhT, ru, rT)
+                    divs = divs + extra
+                    d_divs = d_divs + d_extra
         elif self.V is not None:
             divs = (self.V @ x).reshape(nel, ngp, dim)
             d_divs = self.V
@@ -558,13 +603,13 @@ class FlowTerm:
 
             ws = w * tau * rho
             tau_c = ops.lsic_tau(disc, mu_tau, self.rho, speed)
-            divu = np.einsum('egaa->eg', G)
+            divu = np.einsum('egaa->eg', G) + e_hh
 
             Ru += (np.einsum('eg,gi,ega->eia', w, N, conv) + np.einsum('eg,egi,ega->eia', ws, uB, RM)
-                   + np.einsum('eg,egia->eia', w * tau_c * divu, B))
+                   + np.einsum('eg,egia->eia', w * tau_c * divu, divB))
 
             Juu = (np.einsum('eg,gi,egajc->eiajc', w, N, dconv) + np.einsum('eg,egi,egajc->eiajc', ws, uB, dconv)
-                   + np.einsum('eg,egia,egjc->eiajc', w * tau_c, B, B))
+                   + np.einsum('eg,egia,egjc->eiajc', w * tau_c, divB, divB))
             if self.newton:
                 Juu = Juu + np.einsum('eg,gj,egic,ega->eiajc', ws, N, B, RM)        # derivative of the SUPG weight
             blocks.append((Juu.reshape(nel, nne * dim, nne * dim), ru, ru))
@@ -630,3 +675,30 @@ class FlowTerm:
                                                    np.broadcast_to(rT[:, None, None, None, :], dsigT.shape).ravel())),
                                   shape=D.shape).tocsr()
         return D
+
+    def _hoop_divergence(self, sigma, s_hh, dsig, ds_hh, dsigT, ds_hhT, ru, rT):
+
+        """Non-derivative terms of div(sigma) in cylindrical coordinates at the Gauss points, (sigma_rr - sigma_tt) / r
+        and sigma_rz / r, and their sparse derivative (nel*ngp*dim, ndof)."""
+
+        disc, layout = self.system.disc, self.system.layout
+        nel, ngp, nne, dim = disc.B.shape
+        r = disc.radius
+
+        extra = np.stack([(sigma[..., 0, 0] - s_hh) / r, sigma[..., 1, 0] / r], axis=-1)
+
+        rows = np.arange(nel * ngp).reshape(nel, ngp)[:, :, None] * dim + np.arange(dim)       # (nel, ngp, dim)
+        dU = np.stack([(dsig[:, :, 0, 0] - ds_hh) / r[..., None, None], dsig[:, :, 1, 0] / r[..., None, None]],
+                      axis=2)                                                                   # (e, g, a, j, c)
+        cols_u = ru.reshape(nel, nne, dim)
+        D = sp.coo_matrix((dU.ravel(), (np.broadcast_to(rows[..., None, None], dU.shape).ravel(),
+                                        np.broadcast_to(cols_u[:, None, None], dU.shape).ravel())),
+                          shape=(nel * ngp * dim, layout.ndof)).tocsr()
+
+        if dsigT is not None:
+            dT = np.stack([(dsigT[:, :, 0, 0] - ds_hhT) / r[..., None], dsigT[:, :, 1, 0] / r[..., None]], axis=2)
+            D = D + sp.coo_matrix((dT.ravel(), (np.broadcast_to(rows[..., None], dT.shape).ravel(),
+                                                np.broadcast_to(rT[:, None, None, :], dT.shape).ravel())),
+                                  shape=D.shape).tocsr()
+
+        return extra, D
