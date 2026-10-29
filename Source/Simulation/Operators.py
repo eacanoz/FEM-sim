@@ -31,6 +31,9 @@ Pressure stabilization (PSPG) of equal-order velocity-pressure elements:
     element_size(disc)                  (nel,)                  h of each element
     pspg_tau(disc, mu, rho, speed, dt)  (nel, ngp)              tau of the term integral of tau grad(q) . (momentum residual)
     pspg_mass(disc, c)                  (nel, nne, nne*dim)     integral of c grad(N_i) . u   (test: scalar, trial: vector)
+    recovered_stress(disc, mu)          sparse                  continuous nodal stress recovered from 2 mu eps(u_h)
+    recovered_stress_divergence         sparse                  div of the recovered stress at the Gauss points
+    lsic_tau(disc, mu, rho, speed)      (nel, ngp)              grad-div stabilization coefficient (Navier-Stokes)
 
 A coefficient is a number, an array already at the quadrature points, or a function of the
 coordinates f(x), f(x, y), ... that is evaluated at the quadrature points. A vector coefficient is a
@@ -250,24 +253,19 @@ def pspg_tau(disc, mu, rho=0.0, speed=0.0, dt=None):
     return 1.0 / np.sqrt(inv2)
 
 
-def projected_stress_divergence(disc, mu, tau):
+def recovered_stress(disc, mu):
 
-    """Sparse matrices of the viscous part of the PSPG residual, -integral of tau grad(q) . div(sigma~).
+    """Sparse P (n_nodes*dim*dim, n_nodes*dim): continuous nodal stress sigma~ recovered from 2 mu eps(u_h).
 
-    Inside a linear element div(2 mu eps(u_h)) vanishes, which makes plain PSPG inconsistent (a first-order error in
-    the pressure). sigma~ is a continuous nodal stress recovered from 2 mu eps(u_h) at the Gauss points by
-    Discretization.recovery (patch least squares, second-order also on the boundary), so its divergence restores
-    the viscous term. Returns (C, P):
-        P (n_nodes*dim*dim, n_nodes*dim)  nodal stress from the nodal velocity (node-major, u dofs (j, c) -> j*dim + c)
-        C (n_nodes, n_nodes*dim*dim)      integral of tau dN_i/dx_a dN_k/dx_b sigma~_k,ab
-    The PSPG term of the continuity equation is then -C @ P @ u.
+    The Gauss-point stress is passed through Discretization.recovery (patch least squares of the element means,
+    second order also on the boundary). Rows are node-major (k, a, b) -> k*dim*dim + a*dim + b; columns are the
+    nodal velocity (j, c) -> j*dim + c.
     """
 
     import scipy.sparse as sp
 
     nel, ngp, nne, dim = disc.B.shape
     n, dd = disc.n_nodes, dim * dim
-    conn = disc.conn
 
     # Stress at the Gauss points: S[(e, g), a, b; j, c] = mu (dN_j/dx_b delta_ac + dN_j/dx_a delta_bc)
     eye = np.eye(dim)
@@ -276,20 +274,74 @@ def projected_stress_divergence(disc, mu, tau):
 
     point = np.arange(nel * ngp).reshape(nel, ngp)
     r = (point[:, :, None, None] * dd + np.arange(dim)[:, None] * dim + np.arange(dim)[None, :])
-    c = conn[:, :, None] * dim + np.arange(dim)
+    c = disc.conn[:, :, None] * dim + np.arange(dim)
     S = sp.coo_matrix((Se.ravel(), (np.broadcast_to(r[..., None, None], Se.shape).ravel(),
                                      np.broadcast_to(c[:, None, None, None], Se.shape).ravel())),
                       shape=(nel * ngp * dd, n * dim)).tocsr()
 
-    P = sp.kron(disc.recovery(), sp.identity(dd), format='csr') @ S
+    return sp.kron(disc.recovery(), sp.identity(dd), format='csr') @ S
 
-    rows = conn[:, :, None, None] * dd + np.arange(dim)[:, None] * dim + np.arange(dim)[None, :]
+
+def _stress_rows(disc):
+    dim = disc.dim
+    return disc.conn[:, :, None, None] * dim * dim + np.arange(dim)[:, None] * dim + np.arange(dim)[None, :]
+
+
+def projected_stress_divergence(disc, mu, tau):
+
+    """Sparse matrices of the viscous part of the PSPG residual, -integral of tau grad(q) . div(sigma~).
+
+    Inside a linear element div(2 mu eps(u_h)) vanishes, which makes plain PSPG inconsistent (a first-order error in
+    the pressure). sigma~ (recovered_stress) is continuous, so its divergence restores the viscous term. Returns (C, P):
+        P (n_nodes*dim*dim, n_nodes*dim)  nodal stress from the nodal velocity (recovered_stress)
+        C (n_nodes, n_nodes*dim*dim)      integral of tau dN_i/dx_a dN_k/dx_b sigma~_k,ab
+    The PSPG term of the continuity equation is then -C @ P @ u.
+    """
+
+    import scipy.sparse as sp
+
+    nel, ngp, nne, dim = disc.B.shape
+    n, conn, rows = disc.n_nodes, disc.conn, _stress_rows(disc)
+
     Ce = np.einsum('eg,egia,egkb->eikab', disc.detJw * tau, disc.B, disc.B)
     C = sp.coo_matrix((Ce.ravel(), (np.broadcast_to(conn[:, :, None, None, None], Ce.shape).ravel(),
                                     np.broadcast_to(rows[:, None], Ce.shape).ravel())),
-                      shape=(n, n * dd)).tocsr()
+                      shape=(n, n * dim * dim)).tocsr()
 
-    return C, P
+    return C, recovered_stress(disc, mu)
+
+
+def recovered_stress_divergence(disc, mu):
+
+    """Sparse V (nel*ngp*dim, n_nodes*dim): div(sigma~) at the Gauss points from the nodal velocity,
+    (V @ u).reshape(nel, ngp, dim). Rows (e, g, a) -> (e*ngp + g)*dim + a."""
+
+    import scipy.sparse as sp
+
+    nel, ngp, nne, dim = disc.B.shape
+    rows_k = _stress_rows(disc)                                                   # (nel, nne, dim, dim)
+
+    # D[(e, g, a), (k, a, b)] = dN_k/dx_b
+    values = np.broadcast_to(disc.B[:, :, :, None, :], (nel, ngp, nne, dim, dim))  # (e, g, k, a, b)
+    r = (np.arange(nel * ngp).reshape(nel, ngp)[:, :, None, None, None] * dim
+         + np.arange(dim)[None, None, None, :, None])
+    c = rows_k[:, None]
+    D = sp.coo_matrix((values.ravel(), (np.broadcast_to(r, values.shape).ravel(),
+                                        np.broadcast_to(c, values.shape).ravel())),
+                      shape=(nel * ngp * dim, disc.n_nodes * dim * dim)).tocsr()
+
+    return D @ recovered_stress(disc, mu)
+
+
+def lsic_tau(disc, mu, rho, speed):
+
+    """Grad-div (LSIC) coefficient [Pa s] (nel, ngp): rho |u| h / 2 * min(Re_h / 3, 1), Re_h = rho |u| h / (2 mu)."""
+
+    h = element_size(disc)[:, None]
+    rho, mu = at_gauss(disc, rho), at_gauss(disc, mu)
+    Re_h = rho * speed * h / (2.0 * mu)
+
+    return 0.5 * rho * speed * h * np.minimum(Re_h / 3.0, 1.0)
 
 
 def pspg_mass(disc, c):

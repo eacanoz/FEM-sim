@@ -74,6 +74,12 @@
 | Stokes: cavidad | `ψ_min = -0.1001` en `y ≈ 0.764` (Shankar y Deshpande 2000), simetría especular, caudal neto nulo en `x = 0.5` | `Test/test_stokes.py` | -0.10011 en y = 0.766 (64×64); simetría 1e-12 |
 | Stokes: plano de simetría | media canal con simetría = canal completo en los nodos comunes | `Test/test_stokes.py` | 1e-12 |
 | Stokes: arranque entre placas | serie de Fourier con Crank-Nicolson; límite estacionario con Euler | `Test/test_stokes.py` | u 1.2e-3 relativo; estacionario exacto, p → 0 |
+| Navier–Stokes: tangente | convección + SUPG + PSPG + LSIC + esfuerzo recuperado frente a diferencias finitas (τ congelado), Q4 y T3 | `Test/test_navier_stokes.py` | 1e-10 relativo |
+| Navier–Stokes: Kovasznay (Re = 40) | solución exacta, tracción exacta en la salida, mallas 8 a 32 | `Test/test_navier_stokes.py` | u orden 1.8–2.1, p orden 1.9–2.0; Newton 5–7 iteraciones |
+| Navier–Stokes: cavidad Re = 100 | u en x = 0.5 frente a Ghia et al. (1982) | `Test/test_navier_stokes.py`, `Example_NavierStokes_Cavity.py` | 0.006 (32×32 y 64×64); u_min = -0.2143 |
+| Navier–Stokes: cavidad Re = 400 y 1000 (ejemplo) | u_min en x = 0.5 frente a Ghia (-0.3273 en y = 0.281; -0.3829 en y = 0.172) | `Example_NavierStokes_Cavity.py` | -0.3305 en y = 0.281; -0.3925 en y = 0.172 (64×64); vórtice principal en (0.53, 0.56) |
+| Navier–Stokes: canal desarrollado | Poiseuille con inercia (Re = 100) nodalmente exacto en Q4 | `Test/test_navier_stokes.py` | 1e-10 |
+| Navier–Stokes: límites | ρ → 0 igual a Stokes; Picard converge a la misma solución (17 frente a 6 iteraciones) | `Test/test_navier_stokes.py` | pasa |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -147,6 +153,16 @@ Lo que sigue pendiente:
   Con Euler implícito se amortigua.
 - Simetría y deslizamiento solo en aristas alineadas con los ejes (se fija una componente).
 - `rho` debe ser un número (masa y `tau`); `mu` puede ser número o función de las coordenadas.
+
+### Fluidos (Etapa 11, Navier–Stokes)
+- Solo estacionario validado. En transitorio con inercia, las masas estabilizadas (SUPG y PSPG de `ρ u_t`) usan `τ`
+  y la velocidad del estado inicial del solve, y el θ-método linealiza una sola vez por paso: el transitorio de
+  Navier–Stokes se completa en la Etapa 14 (Newton dentro del paso, BDF2).
+- A Re alto Newton necesita continuación (resolver con velocidades o Re crecientes). Picard es más robusto lejos de
+  la solución pero converge linealmente.
+- El tangente omite `dτ/du`: la convergencia no es estrictamente cuadrática, pero 5–7 iteraciones bastan en los casos
+  probados.
+- Sin estabilización de captura de discontinuidades (no hace falta en flujo incompresible laminar).
 
 ### Física y numérica
 - **Convección:** diferencias centradas sin estabilización. Para Pe alto habrá oscilaciones. `Pe` se calcula pero no se
@@ -235,7 +251,7 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
    factorización reutilizada (transitorio lineal y `solve()` repetidos), exportación VTK/PVD. Pendiente: XDMF/HDF5, VTK binario,
    iterativo para sistemas con convección fuerte o varios campos acoplados (AMG por bloques).
 6. ~~**Estabilización de convección.**~~ Hecha (SUPG en 1D y 2D).
-7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 (base vectorial y Darcy) y 10 (Stokes con PSPG) hechas; siguiente, Navier–Stokes estacionario.
+7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 (base vectorial y Darcy), 10 (Stokes con PSPG) y 11 (Navier–Stokes estacionario) hechas; siguiente, no newtonianos con acoplamiento térmico.
 
 ## 5. Criterio para cerrar una etapa
 

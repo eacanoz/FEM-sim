@@ -207,6 +207,7 @@ class Model(object):
 
         self.timeVector = solver.timeVector
         self.solver_iterations = solver.iterations   # Krylov iterations of every linear solve (empty with direct solvers)
+        self.newton_iterations = getattr(solver, 'newton_iterations', None)   # steady nonlinear solves
 
         if self.solverOptions['Study'] == StudyType.steady_state:
             self.sol.update(self.physics.derived_fields(self))

@@ -319,6 +319,7 @@ class modelSolver():
         else:
             sim_logger.warning("Solver did not converge at the specified tolerance and number of iterations.")
 
+        self.newton_iterations = iteration
         self.x0 = x
         self.updateSolution(x)
 

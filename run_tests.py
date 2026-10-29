@@ -26,6 +26,7 @@ SUITES = [
     "Test/test_solver_scaling_output.py",
     "Test/test_fluids_foundation.py",
     "Test/test_stokes.py",
+    "Test/test_navier_stokes.py",
 ]
 
 

@@ -305,6 +305,12 @@ class System:
 
         self._terms.append(GradientLawTerm(self, law, list(inputs), list(outputs), sign))
 
+    def add_term(self, term):
+
+        """Any nonlinear term with contribution(x) -> (R, J), e.g. a physics-specific vectorized term."""
+
+        self._terms.append(term)
+
     def add_facet_law(self, law, facets, inputs, outputs, sign=1.0):
         self._terms.append(FacetLawTerm(self, law, facets, list(inputs), list(outputs), sign))
 

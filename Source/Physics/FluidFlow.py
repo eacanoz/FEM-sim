@@ -6,17 +6,21 @@
 
 # Incompressible viscous flow: velocity u (vector) and pressure p on the same nodes (Q1/P1 equal order).
 #
-#     rho du/dt - div(2 mu eps(u)) + grad p = f,      div u = 0,      eps(u) = (grad u + grad u^T) / 2
+#     rho (du/dt + (u . grad) u) - div(2 mu eps(u)) + grad p = f,      div u = 0,      eps(u) = (grad u + grad u^T) / 2
 #
+# Creeping flow (Stokes, default) leaves out the inertia (u . grad) u; setInertia(True) solves Navier-Stokes.
 # Equal-order elements do not satisfy the inf-sup condition, so the continuity equation carries the
-# pressure-stabilizing Petrov-Galerkin term (PSPG, Hughes-Franca-Balestra / Tezduyar):
+# pressure-stabilizing Petrov-Galerkin term (PSPG, Hughes-Franca-Balestra / Tezduyar), with the momentum residual
+# R_M = rho (du/dt + (u . grad) u) + grad p - f - div(sigma~):
 #
-#     R_u = integral 2 mu eps(u):eps(v) - integral p div v + integral rho du/dt . v - integral f . v - boundary integral t . v
-#     R_p = integral q div u + integral tau grad(q) . (rho du/dt + grad p - f)
+#     R_u = integral 2 mu eps(u):eps(v) - integral p div v + integral rho (du/dt + (u . grad) u) . v - integral f . v
+#           - boundary integral t . v  [+ integral tau rho (u . grad v) . R_M + integral tau_c div u div v]
+#     R_p = integral q div u + integral tau grad(q) . R_M
 #
-# The viscous second derivatives of the momentum residual are left out of the PSPG term (they vanish on linear
-# triangles and are small on bilinear quadrilaterals). tau = h^2 / (12 mu) for creeping flow (Operators.pspg_tau).
-# A constant q gives integral div u = 0 exactly: the discrete flow rate is conserved globally.
+# The bracket (SUPG and grad-div/LSIC) is added only with inertia. div(2 mu eps(u_h)) vanishes inside a linear
+# element, so R_M uses a recovered continuous stress sigma~ (viscous_projection, default) to stay consistent.
+# tau = 1 / sqrt((2 rho / dt)^2 + (2 rho |u| / h)^2 + (12 mu / h^2)^2) (Operators.pspg_tau): h^2 / (12 mu) for creeping
+# flow. A constant q gives integral div u = 0 exactly: the discrete flow rate is conserved globally.
 #
 # Boundary conditions: velocity (any component, None leaves it free), no slip, symmetry/slip on walls aligned
 # with the axes (normal component fixed), outlet (normal traction -p n, optionally fully developed: tangential
@@ -57,6 +61,8 @@ class ff(physics):
         self.body_force = None                       # force per unit volume [N/m3]: vector or f(x, y) -> components
         self.Stab = 'PSPG'
         self.viscous_projection = True               # PSPG with the projected viscous stress (consistent on linear elements)
+        self.inertia = False                         # Navier-Stokes convection (setInertia)
+        self.linearization = 'newton'                # 'newton' or 'picard'
 
         self.pressure_reference = None               # (node id, value)
 
@@ -88,6 +94,22 @@ class ff(physics):
             raise ValueError(f"Estabilizacion desconocida: {method!r} (use 'PSPG' o None).")
 
         self.Stab = method
+
+    def setInertia(self, on=True, linearization='newton'):
+
+        """Navier-Stokes: adds the convection rho (u . grad) u (with SUPG and grad-div stabilization). The problem
+        becomes nonlinear (ProblemType.nonlinear). linearization: 'newton' (full tangent of the convection, fast near
+        the solution) or 'picard' (u_old . grad u, slower but more robust). For high Reynolds numbers solve a sequence
+        of increasing velocities, each starting from the previous solution."""
+
+        if linearization not in ('newton', 'picard'):
+            raise ValueError(f"Linealizacion desconocida: {linearization!r} (use 'newton' o 'picard').")
+        if on and not np.all(np.asarray(self.rho) > 0):
+            raise ValueError("Navier-Stokes necesita una densidad positiva (material rho o setDensity).")
+
+        self.inertia = bool(on)
+        self.linearization = linearization
+        self.physics_description = 'Laminar flow (Navier-Stokes)' if on else 'Creeping flow (Stokes)'
 
     def setVelocity(self, v):
         raise AttributeError("La velocidad de 'ff' es una incognita: use condiciones de contorno (addBC_Velocity...).")
@@ -130,7 +152,9 @@ class ff(physics):
         if transient:
             system.add_mass(layout.scatter_matrix(ops.vector_mass(disc, self.rho), ru, ru))
 
-        if self.Stab == 'PSPG':
+        if self.inertia:
+            self._add_navier_stokes(system, model, disc, layout, f)
+        elif self.Stab == 'PSPG':
             tau = ops.pspg_tau(disc, self.mu, self.rho, dt=self._time_step(model))
             system.add_matrix(layout.scatter_matrix(ops.diffusion(disc, tau), rp, rp))
             if f is not None:
@@ -150,6 +174,28 @@ class ff(physics):
             sim_logger.info("Ningun contorno fija la presion: p = 0 en el nodo 0 (use setPressureReference).")
         if reference is not None:
             system.set_dirichlet(layout.node_dofs('p', reference[0])[0], reference[1])
+
+    def _add_navier_stokes(self, system, model, disc, layout, f):
+
+        """Convection and the residual-based stabilization (PSPG, SUPG, LSIC) as one nonlinear term. With a time step
+        the stabilized mass terms use tau and the SUPG weight of the state at the start of the solve."""
+
+        V = ops.recovered_stress_divergence(disc, self.mu) if self.viscous_projection else None
+        system.add_term(NavierStokesTerm(system, self.mu, self.rho, f, V, self.linearization, self.Stab == 'PSPG'))
+
+        dt = self._time_step(model)
+        if dt is not None:
+            nel, _, nne, dim = disc.B.shape
+            ru = layout.element_dofs(disc.conn, 'u')
+            rp = layout.element_dofs(disc.conn, 'p')
+            u = disc.interpolate(np.asarray(self.var['u'].values, dtype=float))
+            tau = ops.pspg_tau(disc, self.mu, self.rho, speed=np.linalg.norm(u, axis=-1), dt=dt)
+            rho = ops.at_gauss(disc, self.rho)
+            uB = np.einsum('egb,egib->egi', u, disc.B)
+            supg = np.einsum('eg,egi,gj,ac->eiajc', disc.detJw * tau * rho * rho, uB, disc.N, np.eye(dim))
+            system.add_mass(layout.scatter_matrix(supg.reshape(nel, nne * dim, nne * dim), ru, ru))
+            if self.Stab == 'PSPG':
+                system.add_mass(layout.scatter_matrix(ops.pspg_mass(disc, tau * rho), rp, ru))
 
     def _pressure_level_set(self, model):
 
@@ -276,3 +322,114 @@ class ff(physics):
         """Traction t = sigma . n [N/m2] acting on the fluid through the edges: a vector or a function t(x, y)."""
 
         self.facet_bcs.append({'type': 'Traction', 'field': 'u', 'facets': list(edges), 'traction': t})
+
+
+class NavierStokesTerm:
+
+    """Nonlinear part of the stabilized Navier-Stokes equations, assembled on all elements at once.
+
+    With the momentum residual at the Gauss points R_M = rho (u . grad) u + grad p - f - div(sigma~):
+
+        R_u += integral rho ((u . grad) u) . v  +  integral tau rho (u . grad v) . R_M  +  integral tau_c div u div v
+        R_p += integral tau grad(q) . R_M
+
+    tau (PSPG/SUPG, Operators.pspg_tau) and tau_c (grad-div, Operators.lsic_tau) depend on |u|; the tangent keeps them
+    frozen (their derivative is left out), the usual practice. 'picard' also leaves out the derivative of the
+    convecting velocity (u_old . grad u) and of the SUPG weight. div(sigma~) is linear in u (V, a sparse matrix that
+    couples the elements of each recovery patch); without the recovered stress it is zero.
+    """
+
+    def __init__(self, system, mu, rho, f, V, linearization='newton', pspg=True):
+
+        self.system = system
+        self.mu, self.rho = mu, rho
+        self.f = f
+        self.newton = linearization == 'newton'
+        self.pspg = pspg
+        self.tau_state = None        # evaluate tau at this state instead of x (to test the tangent)
+
+        layout = system.layout
+        self.V = None
+        if V is not None:
+            V = V.tocoo()
+            u_dofs = layout.dofs('u').ravel()
+            self.V = sp.coo_matrix((V.data, (V.row, u_dofs[V.col])), shape=(V.shape[0], layout.ndof)).tocsr()
+
+    def contribution(self, x):
+
+        disc, layout = self.system.disc, self.system.layout
+        nel, ngp, nne, dim = disc.B.shape
+        N, B, w = disc.N, disc.B, disc.detJw
+
+        fields = layout.split(x)
+        U = np.asarray(fields['u'], dtype=float)[disc.conn]                       # (nel, nne, dim)
+        P = np.asarray(fields['p'], dtype=float)[disc.conn]                       # (nel, nne)
+
+        u = np.einsum('gj,ejc->egc', N, U)
+        G = np.einsum('egjb,eja->egab', B, U)                                     # G_ab = du_a/dx_b
+        gp = np.einsum('egjb,ej->egb', B, P)
+
+        u_tau = u if self.tau_state is None else disc.interpolate(layout.split(self.tau_state)['u'])
+        speed = np.linalg.norm(u_tau, axis=-1)
+        rho = ops.at_gauss(disc, self.rho)
+        tau = ops.pspg_tau(disc, self.mu, self.rho, speed=speed)
+        tau_c = ops.lsic_tau(disc, self.mu, self.rho, speed)
+
+        conv = rho[..., None] * np.einsum('egb,egab->ega', u, G)
+        RM = conv + gp
+        if self.f is not None:
+            RM = RM - self.f
+        if self.V is not None:
+            RM = RM - (self.V @ x).reshape(nel, ngp, dim)
+
+        uB = np.einsum('egb,egib->egi', u, B)                                     # u . grad N_i
+        divu = np.einsum('egaa->eg', G)
+        ws = w * tau * rho                                                         # SUPG weight factor
+
+        # ----- residual -----
+        Ru = (np.einsum('eg,gi,ega->eia', w, N, conv)
+              + np.einsum('eg,egi,ega->eia', ws, uB, RM)
+              + np.einsum('eg,egia->eia', w * tau_c * divu, B))
+
+        ru = layout.element_dofs(disc.conn, 'u')
+        rp = layout.element_dofs(disc.conn, 'p')
+        R = layout.scatter_vector(Ru.reshape(nel, -1), ru)
+        if self.pspg:
+            R = R + layout.scatter_vector(np.einsum('eg,egia,ega->ei', w * tau, B, RM), rp)
+
+        # ----- tangent (tau frozen) -----
+        eye = np.eye(dim)
+        dconv = np.einsum('eg,ac,egj->egajc', rho, eye, uB)                        # rho u . grad N_j (Picard part)
+        if self.newton:
+            dconv = dconv + np.einsum('eg,gj,egac->egajc', rho, N, G)              # rho N_j du_a/dx_c
+
+        Juu = (np.einsum('eg,gi,egajc->eiajc', w, N, dconv)
+               + np.einsum('eg,egi,egajc->eiajc', ws, uB, dconv)
+               + np.einsum('eg,egia,egjc->eiajc', w * tau_c, B, B))
+        if self.newton:
+            Juu = Juu + np.einsum('eg,gj,egic,ega->eiajc', ws, N, B, RM)            # derivative of the SUPG weight
+        Jup = np.einsum('eg,egi,egja->eiaj', ws, uB, B)
+
+        J = (layout.scatter_matrix(Juu.reshape(nel, nne * dim, nne * dim), ru, ru)
+             + layout.scatter_matrix(Jup.reshape(nel, nne * dim, nne), ru, rp))
+
+        if self.pspg:
+            Jpu = np.einsum('eg,egia,egajc->eijc', w * tau, B, dconv)
+            Jpp = np.einsum('eg,egia,egja->eij', w * tau, B, B)
+            J = J + layout.scatter_matrix(Jpu.reshape(nel, nne, nne * dim), rp, ru) + layout.scatter_matrix(Jpp, rp, rp)
+
+        if self.V is not None:
+            # -(SUPG and PSPG weights) @ V: the recovered stress couples the elements of each patch
+            cols = np.arange(nel * ngp).reshape(nel, ngp)[:, :, None] * dim + np.arange(dim)    # (nel, ngp, dim)
+            Ws = np.einsum('eg,egi,ac->egiac', ws, uB, eye)                                      # (e, g, i, a, a')
+            rows = np.broadcast_to(ru.reshape(nel, nne, dim)[:, None, :, :, None], Ws.shape)
+            W = sp.coo_matrix((Ws.ravel(), (rows.ravel(), np.broadcast_to(cols[:, :, None, None, :], Ws.shape).ravel())),
+                              shape=(layout.ndof, nel * ngp * dim)).tocsr()
+            if self.pspg:
+                Wp = np.einsum('eg,egia->egia', w * tau, B)
+                W = W + sp.coo_matrix((Wp.ravel(), (np.broadcast_to(rp[:, None, :, None], Wp.shape).ravel(),
+                                                    np.broadcast_to(cols[:, :, None, :], Wp.shape).ravel())),
+                                      shape=(layout.ndof, nel * ngp * dim)).tocsr()
+            J = J - W @ self.V
+
+        return R, J
