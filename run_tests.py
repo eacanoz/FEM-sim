@@ -25,6 +25,7 @@ SUITES = [
     "Test/test_triangles_gmsh.py",
     "Test/test_solver_scaling_output.py",
     "Test/test_fluids_foundation.py",
+    "Test/test_stokes.py",
 ]
 
 

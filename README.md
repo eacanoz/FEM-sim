@@ -28,7 +28,8 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Exportación a ParaView (`.vtu` y series `.pvd`) | Operativo; XDMF no implementado |
 | Base de fluidos (Etapa 9): campos vectoriales, operadores viscoso y divergencia, leyes con gradientes `f(u, ∇u)`, Dirichlet por componente, tracciones, VTK vectorial | Operativo: MMS vectorial de orden 2, jacobiano frente a diferencias finitas, ley de potencia en canal |
 | Flujo de Darcy (`darcy`): permeabilidad escalar, función o tensor, gravedad, fuente, almacenamiento; velocidad hacia la convección de `ht`/`mt` | Operativo, exacto en 1D y 2D, hidrostática, inyección |
-| Stokes, Navier–Stokes, no newtonianos, turbulencia | En curso: ver [docs/PLAN_FLUIDOS.md](docs/PLAN_FLUIDOS.md) |
+| Flujo reptante (Stokes, `ff`): velocidad y presión de igual orden (Q4/T3) con PSPG y esfuerzo viscoso recuperado; no deslizamiento, entrada, salida, simetría, tracción; transitorio | Operativo: Poiseuille nodalmente exacto (Q4), solución exacta (u orden 2, p orden 1–1.5), cavidad frente a la referencia, arranque frente a la serie de Fourier |
+| Navier–Stokes, no newtonianos, turbulencia | En curso: ver [docs/PLAN_FLUIDOS.md](docs/PLAN_FLUIDOS.md) |
 | `rho Cp(T)`, elementos de orden superior, 3D | No implementado |
 
 ## Requisitos
@@ -195,6 +196,7 @@ Las aristas se seleccionan con un predicado sobre su punto medio: `mesh.boundary
 | `Example_Solver_Scaling.py` | Poisson 2D hasta 160 mil incógnitas: PARDISO frente a CG y CG+AMG, factorización reutilizada y exportación a ParaView |
 | `Example_Gmsh_Geometry.py` | Cuarto de anillo (convergencia frente a la solución logarítmica) y placa con orificio, con mallas T3 de gmsh |
 | `Example_Darcy_Transport.py` | Darcy en un medio con una inclusión de baja permeabilidad, conservación del caudal y pluma de un trazador arrastrada por la velocidad de Darcy |
+| `Example_Stokes_Contraction.py` | Contracción plana 4:1 (entrada a un dado) en flujo reptante: conservación del caudal, pérdida de presión de entrada y corrección de Couette en tres mallas, vórtice de esquina |
 | `readMesh.py` | Lectura de información de un archivo `.msh` con gmsh |
 
 Algunos ejemplos abren ventanas de Matplotlib (`plt.show()`). Para ejecutarlos sin ventanas use `MPLBACKEND=Agg`.
@@ -224,6 +226,7 @@ python Test/test_solver_scaling_output.py # AMG, solvers iterativos, reutilizaci
 python Test/test_triangles_gmsh.py        # triángulos T3 y gmsh: parche, manufacturada, anillo, grupos, Q4 de gmsh (10)
 python Test/test_convection_supg.py       # velocidad compartida y SUPG: exactitud 1D, 2D = 1D, manufacturada, transitorio (9)
 python Test/test_fluids_foundation.py     # Etapa 9: operadores vectoriales, leyes con gradientes, ley de potencia, Darcy (11)
+python Test/test_stokes.py                # Etapa 10: Stokes con PSPG: parche, Poiseuille, solución exacta, cavidad, simetría, arranque (8)
 ```
 
 Todas deben pasar antes de hacer un commit que toque el núcleo (`Source/`).
@@ -246,6 +249,7 @@ Source/
     HeatTransfer.py            ht: conducción, convección, radiación, BC en nodos y aristas
     MassTransfer.py            mt: especies, reacciones acopladas, BC en nodos y aristas
     Darcy.py                   darcy: flujo en medios porosos (presión) y velocidad de Darcy
+    FluidFlow.py               ff: flujo incompresible (Stokes) con PSPG, BC de velocidad, salida, simetría y tracción
   Primals/                     campos escalares y vectoriales (valores nodales)
   Simulation/
     Discretization.py          geometría en los puntos de Gauss y facetas (cualquier dimensión)

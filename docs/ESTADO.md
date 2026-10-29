@@ -67,6 +67,13 @@
 | Ley de potencia en canal (`p`-Laplaciano) | perfil analítico, Newton desde el perfil newtoniano | `Test/test_fluids_foundation.py` | n = 0.5: orden 2.00; n = 1.5: orden 1.6 (regularidad `C^{1,2/3}` del perfil exacto) |
 | Darcy | 1D con fuente (exacto en nodos); 2D lineal con permeabilidad tensorial y gravedad; inyección; hidrostática sin flujo | `Test/test_fluids_foundation.py` | pasa (1e-11) |
 | Darcy → convección | `ht` y `mt` con la velocidad de Darcy en Gauss = con la velocidad constante equivalente | `Test/test_fluids_foundation.py` | pasa (1e-12) |
+| Stokes: parche | `u = (y, x)`, `p = 2x + 3y` con fuerza de cuerpo, mallas distorsionadas Q4 y T3 | `Test/test_stokes.py` | exacto (1e-10) |
+| Stokes: Poiseuille | entrada parabólica, salida desarrollada; caudal entrante = saliente | `Test/test_stokes.py` | Q4 nodalmente exacto (1e-11); T3 orden 2 en u y en la caída de presión; caudal 1e-12 |
+| Stokes: PSPG sin esfuerzo recuperado | misma prueba | `Test/test_stokes.py` | caída de presión orden 1.5 (error 1.1 % con 16 elementos en la altura) |
+| Stokes: solución exacta | `ψ = x eˣ sin y`, tracción exacta en un lado | `Test/test_stokes.py` | u orden 2; p orden 1 (máximo) y 1.5 (cuadrático), Q4 y T3 |
+| Stokes: cavidad | `ψ_min = -0.1001` en `y ≈ 0.764` (Shankar y Deshpande 2000), simetría especular, caudal neto nulo en `x = 0.5` | `Test/test_stokes.py` | -0.10011 en y = 0.766 (64×64); simetría 1e-12 |
+| Stokes: plano de simetría | media canal con simetría = canal completo en los nodos comunes | `Test/test_stokes.py` | 1e-12 |
+| Stokes: arranque entre placas | serie de Fourier con Crank-Nicolson; límite estacionario con Euler | `Test/test_stokes.py` | u 1.2e-3 relativo; estacionario exacto, p → 0 |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -124,6 +131,22 @@ Lo que sigue pendiente:
   un operador dedicado. Para Navier–Stokes en mallas grandes conviene un operador de convección vectorizado propio.
 - `derived_fields` solo se añade en estudios estacionarios.
 - La ley de potencia con `n < 1` necesita regularización (`(γ̇² + ε²)^((n-1)/2)`) y un punto inicial no nulo.
+
+### Fluidos (Etapa 10, Stokes)
+- **Presión de igual orden:** la teoría de P1/Q1 estabilizados da presión O(h) en norma máxima y O(h^1.5) en L2, y es
+  lo que se mide. El esfuerzo recuperado vuelve exacta la caída de presión en canales (Q4) pero no mejora el orden
+  general. Para presión de orden 2 hacen falta Taylor–Hood (Etapa 17).
+- **Contorno totalmente Dirichlet:** el caudal discreto de la velocidad interpolada `∮u_h·n` no es cero exactamente;
+  la incompatibilidad cae en el nodo donde se fija la presión (pico local que no converge) y contamina la velocidad.
+  Con al menos una salida o tracción no ocurre. Si todo el contorno tiene velocidad, use datos con caudal nulo exacto
+  (paredes, tapa deslizante).
+- **Esfuerzo recuperado cerca de paredes:** con fuerzas viscosas normales grandes en la pared equilibradas por una
+  fuerza de cuerpo (casos manufacturados artificiales) la presión en la pared empeora respecto a PSPG simple.
+  Se puede desactivar con `physics.viscous_projection = False`.
+- **Transitorio:** la presión es algebraica; con Crank-Nicolson oscila de paso a paso (la velocidad sigue de orden 2).
+  Con Euler implícito se amortigua.
+- Simetría y deslizamiento solo en aristas alineadas con los ejes (se fija una componente).
+- `rho` debe ser un número (masa y `tau`); `mu` puede ser número o función de las coordenadas.
 
 ### Física y numérica
 - **Convección:** diferencias centradas sin estabilización. Para Pe alto habrá oscilaciones. `Pe` se calcula pero no se
@@ -212,7 +235,7 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
    factorización reutilizada (transitorio lineal y `solve()` repetidos), exportación VTK/PVD. Pendiente: XDMF/HDF5, VTK binario,
    iterativo para sistemas con convección fuerte o varios campos acoplados (AMG por bloques).
 6. ~~**Estabilización de convección.**~~ Hecha (SUPG en 1D y 2D).
-7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapa 9 hecha (base vectorial y Darcy); siguiente, Stokes con PSPG.
+7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 (base vectorial y Darcy) y 10 (Stokes con PSPG) hechas; siguiente, Navier–Stokes estacionario.
 
 ## 5. Criterio para cerrar una etapa
 

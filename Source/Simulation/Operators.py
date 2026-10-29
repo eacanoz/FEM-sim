@@ -26,6 +26,12 @@ the order of DofLayout.element_dofs:
 The pressure term of the momentum equation, -integral of p div(v), is minus the transpose of `divergence`:
 np.swapaxes(divergence(disc), 1, 2) has the shape (nel, nne*dim, nne) of a block (test: vector, trial: scalar).
 
+Pressure stabilization (PSPG) of equal-order velocity-pressure elements:
+
+    element_size(disc)                  (nel,)                  h of each element
+    pspg_tau(disc, mu, rho, speed, dt)  (nel, ngp)              tau of the term integral of tau grad(q) . (momentum residual)
+    pspg_mass(disc, c)                  (nel, nne, nne*dim)     integral of c grad(N_i) . u   (test: scalar, trial: vector)
+
 A coefficient is a number, an array already at the quadrature points, or a function of the
 coordinates f(x), f(x, y), ... that is evaluated at the quadrature points. A vector coefficient is a
 constant vector (dim,), an array (n, nq, dim) or a function returning its components.
@@ -210,6 +216,87 @@ def divergence(disc, c=1.0):
     nel, _, nne, dim = disc.B.shape
 
     return np.einsum('eg,gi,egjb->eijb', disc.detJw * at_gauss(disc, c), disc.N, disc.B).reshape(nel, nne, nne * dim)
+
+
+def element_size(disc):
+
+    """h of each element: the length of the line, the side of the square of the same area (quadrilaterals) or the
+    leg of the right isosceles triangle of the same area (triangles), (nel,)."""
+
+    measure = disc.detJw.sum(axis=1)
+
+    if disc.element.name.startswith('tri'):
+        measure = 2.0 * measure
+
+    return measure ** (1.0 / disc.dim)
+
+
+def pspg_tau(disc, mu, rho=0.0, speed=0.0, dt=None):
+
+    """PSPG parameter (nel, ngp): tau = 1 / sqrt((2 rho / dt)^2 + (2 rho |u| / h)^2 + (12 mu / h^2)^2).
+
+    It multiplies the momentum residual (force per unit volume) in integral of tau grad(q) . R_M, so it has units
+    of time / density; this is the tau of Tezduyar and Shakib divided by rho, which stays defined for Stokes flow
+    (rho = 0). Creeping flow: tau = h^2 / (12 mu). speed: |u| at the Gauss points (Navier-Stokes); dt: time step.
+    """
+
+    h = element_size(disc)[:, None]
+    rho = at_gauss(disc, rho)
+
+    inv2 = (12.0 * at_gauss(disc, mu) / h ** 2) ** 2 + (2.0 * rho * np.asarray(speed) / h) ** 2
+    if dt is not None:
+        inv2 = inv2 + (2.0 * rho / dt) ** 2
+
+    return 1.0 / np.sqrt(inv2)
+
+
+def projected_stress_divergence(disc, mu, tau):
+
+    """Sparse matrices of the viscous part of the PSPG residual, -integral of tau grad(q) . div(sigma~).
+
+    Inside a linear element div(2 mu eps(u_h)) vanishes, which makes plain PSPG inconsistent (a first-order error in
+    the pressure). sigma~ is a continuous nodal stress recovered from 2 mu eps(u_h) at the Gauss points by
+    Discretization.recovery (patch least squares, second-order also on the boundary), so its divergence restores
+    the viscous term. Returns (C, P):
+        P (n_nodes*dim*dim, n_nodes*dim)  nodal stress from the nodal velocity (node-major, u dofs (j, c) -> j*dim + c)
+        C (n_nodes, n_nodes*dim*dim)      integral of tau dN_i/dx_a dN_k/dx_b sigma~_k,ab
+    The PSPG term of the continuity equation is then -C @ P @ u.
+    """
+
+    import scipy.sparse as sp
+
+    nel, ngp, nne, dim = disc.B.shape
+    n, dd = disc.n_nodes, dim * dim
+    conn = disc.conn
+
+    # Stress at the Gauss points: S[(e, g), a, b; j, c] = mu (dN_j/dx_b delta_ac + dN_j/dx_a delta_bc)
+    eye = np.eye(dim)
+    m = at_gauss(disc, mu)
+    Se = (np.einsum('eg,egjb,ac->egabjc', m, disc.B, eye) + np.einsum('eg,egja,bc->egabjc', m, disc.B, eye))
+
+    point = np.arange(nel * ngp).reshape(nel, ngp)
+    r = (point[:, :, None, None] * dd + np.arange(dim)[:, None] * dim + np.arange(dim)[None, :])
+    c = conn[:, :, None] * dim + np.arange(dim)
+    S = sp.coo_matrix((Se.ravel(), (np.broadcast_to(r[..., None, None], Se.shape).ravel(),
+                                     np.broadcast_to(c[:, None, None, None], Se.shape).ravel())),
+                      shape=(nel * ngp * dd, n * dim)).tocsr()
+
+    P = sp.kron(disc.recovery(), sp.identity(dd), format='csr') @ S
+
+    rows = conn[:, :, None, None] * dd + np.arange(dim)[:, None] * dim + np.arange(dim)[None, :]
+    Ce = np.einsum('eg,egia,egkb->eikab', disc.detJw * tau, disc.B, disc.B)
+    C = sp.coo_matrix((Ce.ravel(), (np.broadcast_to(conn[:, :, None, None, None], Ce.shape).ravel(),
+                                    np.broadcast_to(rows[:, None], Ce.shape).ravel())),
+                      shape=(n, n * dd)).tocsr()
+
+    return C, P
+
+
+def pspg_mass(disc, c):
+
+    nel, _, nne, dim = disc.B.shape
+
+    return np.einsum('eg,egia,gj->eija', disc.detJw * at_gauss(disc, c), disc.B, disc.N).reshape(nel, nne, nne * dim)
 
 
 def vector_source(disc, f):

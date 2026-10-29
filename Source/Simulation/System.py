@@ -319,6 +319,12 @@ class System:
         rows = self.layout.element_dofs(facets.nodes, field)
         self.add_vector(self.layout.scatter_vector(ops.facet_vector_source(facets, t), rows))
 
+    def add_normal_pressure(self, field, facets, p):
+
+        """Normal traction t = -p n (p a number or a function of the coordinates): a pressure pushing on the boundary."""
+
+        self.add_traction(field, facets, -ops.at_facets(facets, p)[..., None] * facets.normals)
+
     # ----- boundary conditions on facets (any scalar field) -----
 
     def add_flux(self, field, facets, q):
@@ -352,7 +358,8 @@ class System:
 
         Node conditions: Dirichlet on any dimension; Newton and Neumann on a node (1D only, where
         the boundary facet is a point). Facet conditions: dicts with 'type', 'field', 'facets' and
-        the values ('h' and 'var_ext' for Newton, 'flux' for Neumann, 'traction' for Traction).
+        the values ('h' and 'var_ext' for Newton, 'flux' for Neumann, 'traction' for Traction, 'pressure' for
+        NormalTraction).
 
         A Dirichlet value of a vector field is a sequence with one entry per component; None leaves that
         component free (a symmetry or slip wall fixes only the normal component).
@@ -401,6 +408,8 @@ class System:
                 self.add_flux(entry['field'], facets, entry['flux'])
             elif entry['type'] == 'Traction':
                 self.add_traction(entry['field'], facets, entry['traction'])
+            elif entry['type'] == 'NormalTraction':
+                self.add_normal_pressure(entry['field'], facets, entry['pressure'])
             else:
                 raise ValueError(f"Tipo de condicion de contorno desconocido: {entry['type']!r}.")
 

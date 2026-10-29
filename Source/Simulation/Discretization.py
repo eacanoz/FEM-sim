@@ -120,6 +120,61 @@ class Discretization:
 
         return nodal / weights.reshape((-1,) + (1,) * len(tail))
 
+    def recovery(self):
+
+        """Sparse W (n_nodes, nel * ngp): nodal values recovered from Gauss-point values, v_k = sum_m W[k, m] v_m.
+
+        Superconvergent patch recovery (Zienkiewicz-Zhu): a linear least-squares fit of the Gauss-point values of a
+        patch of elements, evaluated at the node. The patch of an interior node is its elements; a boundary node
+        uses the patches of its interior neighbours as well, so the fit sees two element layers across the
+        boundary and also recovers the normal slope (a one-sided average would be first order there).
+        Depends only on the geometry; built once.
+        """
+
+        if getattr(self, '_recovery', None) is not None:
+            return self._recovery
+
+        import scipy.sparse as sp
+
+        nel, ngp = self.detJw.shape
+        node_elems = [[] for _ in range(self.n_nodes)]
+        for e, nodes in enumerate(self.conn):
+            for k in nodes:
+                node_elems[k].append(e)
+
+        boundary = np.zeros(self.n_nodes, dtype=bool)
+        for nodes in self.boundary_facet_nodes():
+            boundary[list(nodes)] = True
+
+        # Element means: the Gauss values of a gradient carry an O(h) error that is odd inside each element, so the
+        # mean (the value at the centre) is accurate to O(h^2); fitting the means keeps that order on one-sided patches.
+        volume = self.detJw.sum(axis=1)
+        centres = np.einsum('eg,ega->ea', self.detJw, self.x_gp) / volume[:, None]
+        mean_weights = self.detJw / volume[:, None]                          # (nel, ngp)
+
+        rows, cols, vals = [], [], []
+
+        for k in range(self.n_nodes):
+            patch = set(node_elems[k])
+            if boundary[k]:
+                neighbours = {int(j) for e in node_elems[k] for j in self.conn[e]}
+                interior = [j for j in neighbours if not boundary[j]] or list(neighbours)
+                for j in interior:
+                    patch.update(node_elems[j])
+
+            elems = np.array(sorted(patch))
+            A = np.hstack([np.ones((len(elems), 1)), centres[elems] - self.node_xy[k]])
+            w = np.linalg.pinv(A)[0]           # value at the node of the linear function fitted to the means
+
+            rows.append(np.full(len(elems) * ngp, k))
+            cols.append((elems[:, None] * ngp + np.arange(ngp)).ravel())
+            vals.append((w[:, None] * mean_weights[elems]).ravel())
+
+        self._recovery = sp.coo_matrix((np.concatenate(vals), (np.concatenate(rows), np.concatenate(cols))),
+                                       shape=(self.n_nodes, nel * ngp)).tocsr()
+
+        return self._recovery
+
     # ----- boundary facets -----
 
     def _owners(self):

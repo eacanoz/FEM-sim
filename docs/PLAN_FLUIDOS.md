@@ -52,5 +52,6 @@ Fuera de alcance: compresible, superficie libre, multifásico, LES.
 | Etapa | Estado |
 |---|---|
 | 9 | hecha: `Test/test_fluids_foundation.py` (11 pruebas), `Example_Darcy_Transport.py` |
-| 10 | siguiente |
-| 11–17 | pendiente |
+| 10 | hecha: `Test/test_stokes.py` (8 pruebas), `Example_Stokes_Contraction.py`. PSPG con esfuerzo viscoso recuperado por parches |
+| 11 | siguiente |
+| 12–17 | pendiente |

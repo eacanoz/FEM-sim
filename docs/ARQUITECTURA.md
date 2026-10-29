@@ -24,10 +24,10 @@ Mesh ─► Elements ─► Discretization ─► Operators ─► System ─►
 | Elementos | `Pre_processing/Elements.py` | Registro de elementos de referencia (`line2`, `line3`, `tri3`, `quad4`): funciones de forma, Gauss y facetas | no |
 | Geometría | `Simulation/Discretization.py` | `N`, `B = dN/dx`, `detJw`, `x_gp` en los puntos de Gauss; `FacetSet` (puntos en 1D, aristas en 2D) con medida y normales salientes | no |
 | Grados de libertad | `Simulation/DofLayout.py` | Campos con `ncomp` componentes, numeración intercalada por nodo, reparto por bloques | no |
-| Operadores | `Simulation/Operators.py` | Escalares: `diffusion`, `diffusion_tensor`, `convection`, `mass`, `source`, `gradient_source`, `facet_mass`, `facet_source`. Vectoriales: `vector_mass`, `vector_diffusion`, `viscous`, `divergence`, `vector_source`, `facet_vector_source`. Coeficientes por punto de Gauss | no |
+| Operadores | `Simulation/Operators.py` | Escalares: `diffusion`, `diffusion_tensor`, `convection`, `mass`, `source`, `gradient_source`, `facet_mass`, `facet_source`. Vectoriales: `vector_mass`, `vector_diffusion`, `viscous`, `divergence`, `vector_source`, `facet_vector_source`. PSPG: `element_size`, `pspg_tau`, `pspg_mass`, `projected_stress_divergence`. Coeficientes por punto de Gauss | no |
 | Leyes puntuales | `Simulation/PointwiseLaw.py` | Función JAX → `vmap` + `jacfwd` compilados una vez, aplicados a todos los puntos | no |
 | Sistema | `Simulation/System.py` | Acumula matrices, términos no lineales y BC; da `linear(x)`, `residual_and_tangent(x)`, `mass()` | no |
-| Física | `Physics/HeatTransfer.py`, `Physics/MassTransfer.py`, `Physics/Darcy.py` | Añade sus operadores y leyes a un `System` (`add_terms`) | sí |
+| Física | `Physics/HeatTransfer.py`, `Physics/MassTransfer.py`, `Physics/Darcy.py`, `Physics/FluidFlow.py` | Añade sus operadores y leyes a un `System` (`add_terms`) | sí |
 | Composición | `Physics/Coupled.py` | Reúne varias físicas en un modelo: un `DofLayout` y un `System` compartidos | no |
 | Solvers | `Simulation/Solvers.py` | Lineal, Newton con line search, θ-método transitorio, todo sobre vectores de DOF | no |
 
@@ -60,6 +60,7 @@ Mesh ─► Elements ─► Discretization ─► Operators ─► System ─►
 | DOF | `dof = nodo * n_total + desplazamiento_del_campo + componente` (intercalado) |
 | Campos vectoriales | `vectorField(..., ncomp)`: valores `(nodos, ncomp)`, transitorio `(nodos, ncomp, tiempos)`; DOF de elemento ordenados por nodo `(i, a) -> i * nc + a` |
 | Dirichlet vectorial | `node.BC['u'] = {'type': 'Dirichlet', 'value': [ux, None]}`: `None` deja libre la componente (simetría, deslizamiento) |
+| Flujo incompresible | `R_u = ∫2μ ε(u):ε(v) - ∫p div v + ∫ρ u_t·v - ∫f·v - ∮t·v`; `R_p = ∫q div u + ∫τ ∇q·(ρ u_t + ∇p - f - div σ̃)`. La forma de esfuerzo exige, en una salida con perfil desarrollado, fijar la velocidad tangencial (`addBC_OutletEdges(fully_developed=True)`) |
 | Tracción | BC de faceta `{'type': 'Traction', 'field': 'u', 'facets': ..., 'traction': t}`: fuerza por unidad de área **sobre** el dominio (`b += ∫ t·v`) |
 | Elementos | Q4 antihorarios: BL, BR, TR, TL. Líneas de menor a mayor coordenada |
 | Gauss | 2 puntos por dirección (`Discretization(mesh, order=2)`) |
@@ -86,7 +87,8 @@ Toda física debe implementar `build_system`; la antigua ruta por elemento (JAX 
   (`nc * dim`, fila a fila); por cada salida devuelve una fuente `s` (`nc`) y un flujo `F` (`nc * dim`). El jacobiano
   sale por autodiff respecto a valores y gradientes. Sirve para `p`-Laplaciano/ley de potencia, convección por un campo
   calculado, `μ(γ̇)` y modelos de turbulencia. `value_gradient_basis` da a la vez la interpolación y las funciones de prueba.
-- `add_traction(campo, facetas, t)`: tracción sobre un campo vectorial.
+- `add_traction(campo, facetas, t)`: tracción sobre un campo vectorial. `add_normal_pressure(campo, facetas, p)`:
+  tracción `-p n` (BC `NormalTraction`, salidas).
 - `add_flux(campo, facetas, q)` y `add_robin(campo, facetas, h, ext)`: BC sobre facetas, con `h` o `q` numéricos o
   funciones del campo (leyes puntuales de faceta).
 - `add_boundary_conditions(mesh, facet_bcs)`: lee Dirichlet de los nodos y las BC Newton/Neumann (nodos en 1D, facetas en general).
@@ -167,7 +169,14 @@ El plan completo de fluidos está en [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md).
   concentrada), `physics.derived_fields(model)` (cantidades derivadas que `solve()` añade a `model.sol`), VTK vectorial.
   `darcy` (`Physics/Darcy.py`): presión como incógnita, `velocity('gauss')` lista para `setVelocity` de otra física en
   la misma malla, `velocity('nodes')` para salida.
-- **Falta:** física de Stokes/Navier–Stokes con PSPG (Etapas 10–11), elementos de orden mixto (`quad9`, `tri6`) y
+- **Ya está (Etapa 10):** `ff` (`Physics/FluidFlow.py`), Stokes con velocidad y presión en los mismos nodos y PSPG.
+  `tau = 1/sqrt((2ρ/dt)² + (2ρ|u|/h)² + (12μ/h²)²)` (el de Tezduyar/Shakib dividido por ρ, definido con ρ = 0). Como
+  `div(2μ ε(u_h))` se anula dentro de un elemento lineal, la PSPG pierde consistencia; `viscous_projection=True`
+  (por defecto) usa el esfuerzo recuperado `σ̃` (`Discretization.recovery`: ajuste lineal por mínimos cuadrados de los
+  promedios por elemento de un parche; en los nodos de contorno el parche incluye el de sus vecinos interiores) y
+  hace exacto el Poiseuille en Q4. Con todas las velocidades prescritas la presión se fija en un nodo
+  (`setPressureReference`, o el nodo 0 automáticamente). `flowRate(aristas)` integra `u·n`.
+- **Falta:** Navier–Stokes (Etapa 11), elementos de orden mixto (`quad9`, `tri6`) y
   `DofLayout` con nodos distintos por campo (Taylor–Hood), estado interno para plasticidad.
 
 ### 5.3 Añadir un elemento o una dimensión
