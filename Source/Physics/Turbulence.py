@@ -218,3 +218,208 @@ class sa(physics):
 
         law = cached_law(('spalart-allmaras', self.nu), lambda: PointwiseLaw(sa_law(self.nu)))
         system.add_gradient_law(law, ['nut', 'u', 'wall_distance'], ['nut'])
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# k-omega SST (Menter, Kuntz & Langtry 2003). EXPERIMENTAL: the tangent is exact, but the model does not converge yet
+# in the channel test (see docs/PLAN_ETAPA17.md).
+#
+#     dk/dt + u . grad k = P~_k - beta* k omega + div((nu + sigma_k nu_t) grad k)
+#     domega/dt + u . grad omega = alpha S^2 - beta omega^2 + div((nu + sigma_w nu_t) grad omega)
+#                                  + 2 (1 - F1) sigma_w2 grad k . grad omega / omega
+#     nu_t = a1 k / max(a1 omega, S F2),   P~_k = min(nu_t S^2, 10 beta* k omega),   S = sqrt(2 S_ij S_ij)
+#
+# with the constants blended by F1 (inner k-omega set 1, outer k-epsilon set 2). At walls k = 0 and
+# omega = 60 nu / (beta1 dy^2), dy the distance of the first node off the wall. k and omega enter the nonlinear terms
+# through their positive parts, so a Newton iterate that overshoots below zero stays finite.
+# ----------------------------------------------------------------------------------------------------------------
+
+BETA_STAR, A1 = 0.09, 0.31
+SK1, SW1, BETA1, ALPHA1 = 0.85, 0.5, 0.075, 5.0 / 9.0
+SK2, SW2, BETA2, ALPHA2 = 1.0, 0.856, 0.0828, 0.44
+_EPS = 1e-30
+
+
+def _sst_functions(k, w, grad_k, grad_w, d, nu):
+
+    """Positive parts of k and omega, the blending functions F1, F2 and the cross-diffusion grad k . grad w / w."""
+
+    kp = jnp.maximum(k, 0.0)
+    wp = jnp.maximum(w, 1e-12)
+    d = jnp.maximum(d, 1e-12)
+    sqrt_k = jnp.sqrt(kp + _EPS)
+    cross = grad_k @ grad_w / wp
+    cd = jnp.maximum(2.0 * SW2 * cross, 1e-20)
+    arg1 = jnp.minimum(jnp.maximum(sqrt_k / (BETA_STAR * wp * d), 500.0 * nu / (d ** 2 * wp)),
+                       4.0 * SW2 * kp / (cd * d ** 2))
+    arg2 = jnp.maximum(2.0 * sqrt_k / (BETA_STAR * wp * d), 500.0 * nu / (d ** 2 * wp))
+
+    return kp, wp, jnp.tanh(arg1 ** 4), jnp.tanh(arg2 ** 2), cross
+
+
+def _sst_nut(kp, wp, strain, f2):
+    return A1 * kp / jnp.maximum(A1 * wp, strain * f2)
+
+
+class SSTViscosity(ViscosityLaw):
+
+    """Effective viscosity of k-omega SST, mu + rho a1 k / max(a1 omega, S F2): a law of several fields,
+    ff.setViscosityLaw(law, fields=('k', 'omega', 'wall_distance')) (sst.coupleFlow does it)."""
+
+    def __init__(self, mu, rho):
+        self.mu, self.rho = float(mu), float(rho)
+        self.nu = self.mu / self.rho
+
+    def __call__(self, gamma2, k, w, d):
+        kp, wp = jnp.maximum(k, 0.0), jnp.maximum(w, 1e-12)
+        d = jnp.maximum(d, 1e-12)
+        arg2 = jnp.maximum(2.0 * jnp.sqrt(kp + _EPS) / (BETA_STAR * wp * d), 500.0 * self.nu / (d ** 2 * wp))
+        strain = jnp.sqrt(gamma2 + _EPS)
+        return self.mu + self.rho * _sst_nut(kp, wp, strain, jnp.tanh(arg2 ** 2))
+
+
+def sst_law(nu):
+
+    """Pointwise law of the k and omega equations for GradientLawTerm.
+
+    Inputs: k, grad k (2), omega, grad omega (2), u (2), grad u (4, row by row), d, grad d (2).
+    Outputs: for k and for omega a source s (tested by N) and a flux F (2, tested by grad N), the residual being
+    integral N s + grad N . F (convection is a separate term).
+    """
+
+    def law(w):
+        k, g_k, om, g_w = w[0], w[1:3], w[3], w[4:6]
+        G = w[8:12].reshape(2, 2)
+        d = w[12]
+
+        kp, wp, f1, f2, cross = _sst_functions(k, om, g_k, g_w, d, nu)
+        E = 0.5 * (G + G.T)
+        s2 = 2.0 * jnp.sum(E * E)                                   # S^2
+        nut = _sst_nut(kp, wp, jnp.sqrt(s2 + _EPS), f2)
+
+        sigma_k = f1 * SK1 + (1.0 - f1) * SK2
+        sigma_w = f1 * SW1 + (1.0 - f1) * SW2
+        alpha = f1 * ALPHA1 + (1.0 - f1) * ALPHA2
+        beta = f1 * BETA1 + (1.0 - f1) * BETA2
+
+        production_k = jnp.minimum(nut * s2, 10.0 * BETA_STAR * kp * wp)
+        s_k = -production_k + BETA_STAR * k * wp
+        s_w = -alpha * s2 + beta * om * wp - 2.0 * (1.0 - f1) * SW2 * cross
+        flux_k = (nu + sigma_k * nut) * g_k
+        flux_w = (nu + sigma_w * nut) * g_w
+
+        return jnp.concatenate([jnp.array([s_k]), flux_k, jnp.array([s_w]), flux_w])
+
+    return law
+
+
+class sst(physics):
+
+    part_name = 'turbulence'
+    ConstRel = 'k-omega SST (Menter 2003)'
+
+    def __init__(self, model):
+        super().__init__(model)
+
+        self.physics_description = 'Turbulence (k-omega SST)'
+        mesh = model.mesh
+        self.var = {'k': scalarField('k', 'Turbulent kinetic energy', 'm2/s2', ShapeFunctionType.linear, mesh),
+                    'omega': scalarField('omega', 'Specific dissipation rate', '1/s', ShapeFunctionType.linear, mesh),
+                    'wall_distance': scalarField('wall_distance', 'Wall distance', 'm', ShapeFunctionType.linear, mesh)}
+
+        self.mu = float(getattr(self.mat, 'miu', 1.0))
+        self.rho = float(getattr(self.mat, 'rho', 1.0))
+        self.nu = self.mu / self.rho
+
+        self.walls = []
+        self.vel = 'u'
+        self.Convection = True
+        self.Stab = 'SUPG'
+        self.C_const = 1.0
+        self.M_const = 1.0
+
+        if getattr(model, 'axisymmetric', False):
+            raise NotImplementedError("k-omega SST solo esta implementado en 2D plano.")
+
+    def setWalls(self, edges):
+
+        """Walls: k = 0 and omega = 60 nu / (beta1 dy^2) (set when the system is built); distance measured from them."""
+
+        self.walls = list(self.walls) + list(edges)
+        nodes = self.modelRef._mesh.NL
+        for edge in edges:
+            for node_id in edge:
+                nodes[node_id].BC['k'] = self.setDirichletBC(0.0)
+
+    def addBC_TurbulenceEdges(self, edges, k, omega):
+
+        """k and omega on the edges (inlets): e.g. k = 1.5 (I U)^2 with the turbulence intensity I, and
+        omega = k / nu_t for a chosen ratio nu_t / nu."""
+
+        nodes = self.modelRef._mesh.NL
+        for edge in edges:
+            for node_id in edge:
+                nodes[node_id].BC['k'] = self.setDirichletBC(float(k))
+                nodes[node_id].BC['omega'] = self.setDirichletBC(float(omega))
+
+    def coupleFlow(self):
+
+        """Gives the flow physics of the same model the effective viscosity mu + rho nu_t(k, omega)."""
+
+        flow = next(part for part in self.modelRef.physics.parts.values() if getattr(part, 'computes_velocity', False))
+        flow.setViscosityLaw(SSTViscosity(self.mu, self.rho), fields=('k', 'omega', 'wall_distance'))
+
+    def _wall_omega(self, mesh, d):
+
+        """Wall value of omega at each wall node: 60 nu / (beta1 dy^2), dy the wall distance of its nearest neighbour."""
+
+        wall_nodes = np.unique(np.ravel(self.walls))
+        conn = np.array([e.getNodesId() for e in mesh.EL], dtype=int)
+        dy = np.full(len(d), np.inf)
+        for element in conn:
+            others = d[element][d[element] > 1e-14]
+            if others.size:
+                for a in element:
+                    dy[a] = min(dy[a], others.min())
+
+        return wall_nodes, 60.0 * self.nu / (BETA1 * dy[wall_nodes] ** 2)
+
+    def eddyViscosity(self):
+
+        """Nodal turbulent viscosity mu_t = rho a1 k / max(a1 omega, S F2), with S from the current velocity."""
+
+        model = self.modelRef
+        disc = model.geometry
+        G = disc.gradient(np.asarray(model.physics.var['u'].values, dtype=float))
+        E = 0.5 * (G + np.swapaxes(G, -1, -2))
+        g2 = 2.0 * np.einsum('egab,egab->eg', E, E)
+        values = [disc.interpolate(np.asarray(self.var[n].values, dtype=float)) for n in ('k', 'omega', 'wall_distance')]
+        law = SSTViscosity(self.mu, self.rho)
+        mu_eff = np.asarray(jax.vmap(law)(jnp.asarray(g2.ravel()), *[jnp.asarray(v.ravel()) for v in values]))
+
+        return disc.project(mu_eff.reshape(g2.shape) - self.mu)
+
+    def derived_fields(self, model):
+        return {'eddy_viscosity': self.eddyViscosity()}
+
+    def add_terms(self, system, model, disc, layout):
+
+        if not self.walls:
+            raise ValueError("k-omega SST necesita las paredes: model.physics.turbulence.setWalls(aristas).")
+
+        d = wall_distance(model.mesh, self.walls)
+        self.var['wall_distance'].updateField(d)
+        system.set_dirichlet(layout.dofs('wall_distance')[:, 0], d)
+
+        wall_nodes, omega_wall = self._wall_omega(model.mesh, d)
+        system.set_dirichlet(layout.node_dofs('omega', wall_nodes)[:, 0], omega_wall)
+        system.require_positive(layout.dofs('k')[:, 0])
+        system.require_positive(layout.dofs('omega')[:, 0])
+
+        for name in ('k', 'omega'):
+            rows = layout.element_dofs(disc.conn, name)
+            system.add_mass(layout.scatter_matrix(ops.mass(disc, self.M_const), rows, rows))
+            self.add_convection(system, layout, disc, name, k=self.nu)
+
+        law = cached_law(('k-omega-sst', self.nu), lambda: PointwiseLaw(sst_law(self.nu)))
+        system.add_gradient_law(law, ['k', 'omega', 'u', 'wall_distance'], ['k', 'omega'])

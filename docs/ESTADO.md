@@ -238,7 +238,9 @@ Lo que sigue pendiente:
 - Solo 2D plano (`GradientLawTerm` no tiene los términos de aro del axisimétrico).
 - Newton directo converge en el canal desde un perfil aproximado; en flujos con separación puede hacer falta
   avanzar en pseudo-tiempo (transitorio BDF2 con pasos grandes) hasta el estacionario.
-- k-ω SST: pendiente (Etapa 16b).
+- k-ω SST (`sst`): **experimental, sin validar**. Jacobiano exacto (4e-9 frente a diferencias finitas), pero no converge
+  en el canal con Newton, con recorte de k y ω ni en pseudo-tiempo de paso fijo (ω ~ 1e6 junto a la pared). Ver
+  [PLAN_ETAPA17.md](PLAN_ETAPA17.md).
 
 ### Física y numérica
 - **Convección:** diferencias centradas sin estabilización. Para Pe alto habrá oscilaciones. `Pe` se calcula pero no se
@@ -327,7 +329,7 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
    factorización reutilizada (transitorio lineal y `solve()` repetidos), exportación VTK/PVD. Pendiente: XDMF/HDF5, VTK binario,
    iterativo para sistemas con convección fuerte o varios campos acoplados (AMG por bloques).
 6. ~~**Estabilización de convección.**~~ Hecha (SUPG en 1D y 2D).
-7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 a 15 y 16a (Spalart–Allmaras) hechas; siguiente, k-ω SST (Etapa 16b) y escalado (Etapa 17).
+7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 a 15 y 16a (Spalart–Allmaras) hechas; siguiente, la Etapa 17 ([PLAN_ETAPA17.md](PLAN_ETAPA17.md)), que incluye la convergencia de k-ω SST.
 
 ## 5. Criterio para cerrar una etapa
 

@@ -70,7 +70,7 @@ class ff(physics):
         self.inertia = False                         # Navier-Stokes convection (setInertia)
         self.linearization = 'newton'                # 'newton' or 'picard'
         self.viscosity_law = None                    # generalized Newtonian mu(gamma_dot, T) (setViscosityLaw)
-        self.temperature_field = None                # field read by a temperature-dependent law
+        self.viscosity_fields = []                   # fields read by the viscosity law (T, nut, k and omega, ...)
         self.heating_field = None                    # field that receives the viscous dissipation (setViscousHeating)
         self.buoyancy = []                           # Boussinesq terms (field, beta, reference, g) (setBoussinesq)
 
@@ -98,19 +98,30 @@ class ff(physics):
 
         self.mu = mu
         self.viscosity_law = None
-        self.temperature_field = None
+        self.viscosity_fields = []
 
-    def setViscosityLaw(self, law, temperature='T'):
+    def setViscosityLaw(self, law, temperature='T', fields=None):
 
         """Generalized Newtonian fluid: mu(gamma_dot, T) from Source.Physics.Rheology (power law, Carreau-Yasuda,
         Cross, Cross-WLF, Bingham, Herschel-Bulkley, Arrhenius shift, ...). The problem becomes nonlinear
         (ProblemType.nonlinear). A law that reads a field (uses_temperature) takes it from the scalar field named
         `temperature`: 'T' for the heat physics (Model(psc=[ff, ht])), or any other one, e.g. 'nut' for the eddy
-        viscosity of a turbulence model. Shear-thinning laws converge best starting from a Newtonian solution (solve
-        with setViscosity first, then switch the law on and solve again)."""
+        viscosity of a turbulence model. A law of several fields, law(gamma2, f1, f2, ...), names them in `fields`
+        (e.g. ('k', 'omega', 'wall_distance') for k-omega SST). Shear-thinning laws converge best starting from a
+        Newtonian solution (solve with setViscosity first, then switch the law on and solve again)."""
 
         self.viscosity_law = law
-        self.temperature_field = temperature if getattr(law, 'uses_temperature', False) else None
+        if fields is not None:
+            self.viscosity_fields = list(fields)
+        else:
+            self.viscosity_fields = [temperature] if getattr(law, 'uses_temperature', False) else []
+
+    @property
+    def temperature_field(self):
+
+        """The field read by a one-field viscosity law (None if the law reads none or several)."""
+
+        return self.viscosity_fields[0] if len(self.viscosity_fields) == 1 else None
 
     def setViscousHeating(self, on=True, field='T'):
 
@@ -199,7 +210,7 @@ class ff(physics):
         ru = layout.element_dofs(disc.conn, 'u')
         rp = layout.element_dofs(disc.conn, 'p')
 
-        for name in (self.temperature_field, self.heating_field, *(b[0] for b in self.buoyancy)):
+        for name in (*self.viscosity_fields, self.heating_field, *(b[0] for b in self.buoyancy)):
             if name is not None and name not in layout.names:
                 raise ValueError(f"La fisica de flujo usa el campo '{name}', que no existe en el modelo "
                                  "(combine con la fisica de calor: Model(psc=[ff, ht])).")
@@ -324,12 +335,10 @@ class ff(physics):
         out = {'shear_rate': disc.project(np.sqrt(g2))}
 
         if self.viscosity_law is not None:
-            law = self.viscosity_law
-            if self.temperature_field is not None:
-                T = disc.interpolate(np.asarray(model.physics.var[self.temperature_field].values, dtype=float))
-            else:
-                T = np.zeros(g2.shape)
-            out['viscosity'] = disc.project(law.viscosity(np.sqrt(g2), T))
+            F = [disc.interpolate(np.asarray(model.physics.var[name].values, dtype=float)) for name in self.viscosity_fields]
+            law = _pointwise_viscosity(self.viscosity_law, len(F))
+            values, _ = law(np.stack([g2] + (F or [np.zeros(g2.shape)]), axis=-1).reshape(-1, max(len(F), 1) + 1))
+            out['viscosity'] = disc.project(values.reshape(g2.shape))
 
         return out
 
@@ -440,6 +449,17 @@ class ff(physics):
 
 
 
+
+def _pointwise_viscosity(law, n_fields):
+
+    """PointwiseLaw of a viscosity law with input (gamma2, f_1, ..., f_n); with no field a dummy zero column is passed
+    (one-field laws are written as law(gamma2, T))."""
+
+    if n_fields == 0:
+        return cached_law(('viscosity', law, 0), lambda: PointwiseLaw(lambda w: law(w[0], w[1])))
+    return cached_law(('viscosity', law, n_fields), lambda: PointwiseLaw(lambda w: law(w[0], *[w[1 + i] for i in range(n_fields)])))
+
+
 class FlowTerm:
 
     """Nonlinear part of the stabilized incompressible flow equations, assembled on all elements at once.
@@ -469,7 +489,7 @@ class FlowTerm:
         self.inertia = flow.inertia
         self.newton = flow.linearization == 'newton'
         self.pspg = flow.Stab == 'PSPG'
-        self.T = flow.temperature_field
+        self.fields = list(flow.viscosity_fields)       # fields read by the viscosity law
         self.heating = flow.heating_field
         # Boussinesq body forces f_b = c (phi - reference), c = -rho0 beta g
         self.buoyancy = [(name, -float(flow.rho) * beta * g, ref) for name, beta, ref, g in flow.buoyancy]
@@ -477,8 +497,7 @@ class FlowTerm:
 
         self.law = None
         if flow.viscosity_law is not None:
-            law = flow.viscosity_law
-            self.law = cached_law(('viscosity', law), lambda: PointwiseLaw(lambda w: law(w[0], w[1])))
+            self.law = _pointwise_viscosity(flow.viscosity_law, len(self.fields))
 
         layout = system.layout
         self.V = None
@@ -497,9 +516,9 @@ class FlowTerm:
         U = np.asarray(fields['u'], dtype=float)[disc.conn]                       # (nel, nne, dim)
         u = np.einsum('gj,ejc->egc', disc.N, U)
         G = np.einsum('egjb,eja->egab', disc.B, U)                                # G_ab = du_a/dx_b
-        T = disc.interpolate(fields[self.T]) if self.T is not None else np.zeros(disc.detJw.shape)
+        F = np.stack([disc.interpolate(np.asarray(fields[name], dtype=float)) for name in self.fields], axis=-1)             if self.fields else np.zeros(disc.detJw.shape + (0,))                 # (nel, ngp, n_fields)
 
-        return fields, u, G, T
+        return fields, u, G, F
 
     def _strain(self, u, G):
 
@@ -521,19 +540,22 @@ class FlowTerm:
 
     def viscosity(self, x):
 
-        """mu, dmu/dgamma2, dmu/dT at the Gauss points of the state x (the derivatives are zero for a constant mu)."""
+        """mu, dmu/dgamma2 (nel, ngp) and dmu/df (nel, ngp, n_fields) at the Gauss points of the state x, for the fields
+        read by the viscosity law (the derivatives are zero for a constant mu)."""
 
         disc = self.system.disc
-        _, u, G, T = self._kinematics(x)
+        _, u, G, F = self._kinematics(x)
         _, _, g2, _ = self._strain(u, G)
+        shape = disc.detJw.shape
+        nf = F.shape[-1]
 
         if self.law is None:
-            zero = np.zeros(disc.detJw.shape)
-            return ops.at_gauss(disc, self.mu_const), zero, zero
+            return ops.at_gauss(disc, self.mu_const), np.zeros(shape), np.zeros(shape + (nf,))
 
-        values, derivatives = self.law(np.stack([g2.ravel(), T.ravel()], axis=-1))
-        shape = disc.detJw.shape
-        return values.reshape(shape), derivatives[:, 0, 0].reshape(shape), derivatives[:, 0, 1].reshape(shape)
+        inputs = np.concatenate([g2[..., None], F if nf else np.zeros(shape + (1,))], axis=-1)
+        values, derivatives = self.law(inputs.reshape(-1, inputs.shape[-1]))
+        return (values.reshape(shape), derivatives[:, 0, 0].reshape(shape),
+                derivatives[:, 0, 1:1 + nf].reshape(shape + (nf,)))
 
     # ----- residual and tangent -----
 
@@ -549,7 +571,7 @@ class FlowTerm:
         gp = np.einsum('egjb,ej->egb', B, P)
 
         eps, e_hh, g2, dg2 = self._strain(u, G)                                   # dg2 = d(gamma2)/dU_jc
-        mu, mu_g2, mu_T = self.viscosity(x)
+        mu, mu_g2, mu_F = self.viscosity(x)
         axi = disc.axisymmetric
         divB = B.copy()                                                           # div of the vector test function
         if axi:
@@ -566,7 +588,7 @@ class FlowTerm:
 
         ru = layout.element_dofs(disc.conn, 'u')
         rp = layout.element_dofs(disc.conn, 'p')
-        rT = layout.element_dofs(disc.conn, self.T) if self.T is not None else None
+        rF = [layout.element_dofs(disc.conn, name) for name in self.fields]   # dofs of the viscosity fields
 
         R = np.zeros(layout.ndof)
         blocks = []                                                               # (Ke, rows, cols)
@@ -583,10 +605,10 @@ class FlowTerm:
             Ru += np.einsum('eg,egib,egab->eia', w, B, sigma)
             blocks.append((np.einsum('eg,egib,egabjc->eiajc', w, B, dsig).reshape(nel, nne * dim, nne * dim), ru, ru))
 
-            dsigT = None
-            if self.T is not None:
-                dsigT = 2.0 * np.einsum('egab,eg,gj->egabj', eps, mu_T, N)
-                blocks.append((np.einsum('eg,egib,egabj->eiaj', w, B, dsigT).reshape(nel, nne * dim, nne), ru, rT))
+            dsigF = []                                                            # d sigma / d f_j per field
+            for i, r_f in enumerate(rF):
+                dsigF.append(2.0 * np.einsum('egab,eg,gj->egabj', eps, mu_F[..., i], N))
+                blocks.append((np.einsum('eg,egib,egabj->eiaj', w, B, dsigF[-1]).reshape(nel, nne * dim, nne), ru, r_f))
 
             if axi:
                 # hoop stress sigma_tt = 2 mu u_r / r, tested by v_r / r
@@ -597,18 +619,18 @@ class FlowTerm:
                 Kh = np.zeros((nel, nne, dim, nne, dim))
                 Kh[:, :, 0] = np.einsum('eg,egi,egjc->eijc', w, disc.hoop, ds_hh)
                 blocks.append((Kh.reshape(nel, nne * dim, nne * dim), ru, ru))
-                ds_hhT = None
-                if self.T is not None:
-                    ds_hhT = 2.0 * np.einsum('eg,eg,gj->egj', e_hh, mu_T, N)
-                    KhT = np.zeros((nel, nne, dim, nne))
-                    KhT[:, :, 0] = np.einsum('eg,egi,egj->eij', w, disc.hoop, ds_hhT)
-                    blocks.append((KhT.reshape(nel, nne * dim, nne), ru, rT))
+                ds_hhF = []
+                for i, r_f in enumerate(rF):
+                    ds_hhF.append(2.0 * np.einsum('eg,eg,gj->egj', e_hh, mu_F[..., i], N))
+                    KhF = np.zeros((nel, nne, dim, nne))
+                    KhF[:, :, 0] = np.einsum('eg,egi,egj->eij', w, disc.hoop, ds_hhF[-1])
+                    blocks.append((KhF.reshape(nel, nne * dim, nne), ru, r_f))
 
             if self.Q is not None:
                 divs = (self.Q @ sigma.ravel()).reshape(nel, ngp, dim)
-                d_divs = self.Q @ self._stress_tangent(dsig, dsigT, ru, rT)
+                d_divs = self.Q @ self._stress_tangent(dsig, dsigF, ru, rF)
                 if axi:
-                    extra, d_extra = self._hoop_divergence(sigma, s_hh, dsig, ds_hh, dsigT, ds_hhT, ru, rT)
+                    extra, d_extra = self._hoop_divergence(sigma, s_hh, dsig, ds_hh, dsigF, ds_hhF, ru, rF)
                     divs = divs + extra
                     d_divs = d_divs + d_extra
         elif self.V is not None:
@@ -706,8 +728,8 @@ class FlowTerm:
             R -= layout.scatter_vector(np.einsum('eg,gi,eg->ei', w, N, mu * g2), rH)
             dphi = np.einsum('eg,egjc->egjc', mu + g2 * mu_g2, dg2)
             blocks.append((-np.einsum('eg,gi,egjc->eijc', w, N, dphi).reshape(nel, nne, nne * dim), rH, ru))
-            if self.T is not None:
-                blocks.append((-np.einsum('eg,gi,eg,gj->eij', w, N, g2 * mu_T, N), rH, rT))
+            for i, r_f in enumerate(rF):
+                blocks.append((-np.einsum('eg,gi,eg,gj->eij', w, N, g2 * mu_F[..., i], N), rH, r_f))
 
         J = sp.csr_matrix((layout.ndof, layout.ndof))
         for Ke, rows, cols in blocks:
@@ -732,7 +754,7 @@ class FlowTerm:
 
         return R, J
 
-    def _stress_tangent(self, dsig, dsigT, ru, rT):
+    def _stress_tangent(self, dsig, dsigF, ru, rF):
 
         """Sparse d(sigma at the Gauss points)/dx (nel*ngp*dim*dim, ndof) from the local derivatives."""
 
@@ -746,13 +768,13 @@ class FlowTerm:
         D = sp.coo_matrix((dsig.ravel(), (np.broadcast_to(rows[..., None, None], dsig.shape).ravel(),
                                           np.broadcast_to(cols_u[:, None, None, None], dsig.shape).ravel())),
                           shape=(nel * ngp * dd, layout.ndof)).tocsr()
-        if dsigT is not None:
+        for dsigT, rT in zip(dsigF, rF):
             D = D + sp.coo_matrix((dsigT.ravel(), (np.broadcast_to(rows[..., None], dsigT.shape).ravel(),
                                                    np.broadcast_to(rT[:, None, None, None, :], dsigT.shape).ravel())),
                                   shape=D.shape).tocsr()
         return D
 
-    def _hoop_divergence(self, sigma, s_hh, dsig, ds_hh, dsigT, ds_hhT, ru, rT):
+    def _hoop_divergence(self, sigma, s_hh, dsig, ds_hh, dsigF, ds_hhF, ru, rF):
 
         """Non-derivative terms of div(sigma) in cylindrical coordinates at the Gauss points, (sigma_rr - sigma_tt) / r
         and sigma_rz / r, and their sparse derivative (nel*ngp*dim, ndof)."""
@@ -771,7 +793,7 @@ class FlowTerm:
                                         np.broadcast_to(cols_u[:, None, None], dU.shape).ravel())),
                           shape=(nel * ngp * dim, layout.ndof)).tocsr()
 
-        if dsigT is not None:
+        for dsigT, ds_hhT, rT in zip(dsigF, ds_hhF, rF):
             dT = np.stack([(dsigT[:, :, 0, 0] - ds_hhT) / r[..., None], dsigT[:, :, 1, 0] / r[..., None]], axis=2)
             D = D + sp.coo_matrix((dT.ravel(), (np.broadcast_to(rows[..., None], dT.shape).ravel(),
                                                 np.broadcast_to(rT[:, None, None, :], dT.shape).ravel())),

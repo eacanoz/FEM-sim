@@ -263,12 +263,31 @@ class System:
         self._M = sp.csr_matrix((n, n))
         self._terms = []
 
-        # Time derivative of the current step, set by the transient solver: x' = alpha x + beta, with the factor
-        # `scale` for the terms that add it to their residual and the step `dt`. None in steady studies.
+        # The current time step, set by the transient solver (x' = alpha x + beta, theta, x_old, dt). None in steady studies.
         self.time = None
+
+        # Dofs that must stay positive (turbulent k and omega, ...): the Newton solvers limit their steps accordingly
+        self.positive = np.zeros(n, dtype=bool)
 
         self.is_dirichlet = np.zeros(n, dtype=bool)
         self.dirichlet_value = np.zeros(n)
+
+    def require_positive(self, dofs):
+
+        """Marks dofs whose values must stay positive: the Newton updates clip them (clip_positive)."""
+
+        self.positive[np.asarray(dofs, dtype=int)] = True
+
+    def clip_positive(self, x, floor=1e-10):
+
+        """x with its positive dofs raised to at least `floor` (local clipping of a Newton update)."""
+
+        if not np.any(self.positive):
+            return x
+
+        x = x.copy()
+        x[self.positive] = np.maximum(x[self.positive], floor)
+        return x
 
     @property
     def is_linear(self):

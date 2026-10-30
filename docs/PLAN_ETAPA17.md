@@ -1,0 +1,114 @@
+# Etapa 17: prioridades de mejora (calidad y robustez)
+
+## Contexto
+
+Las Etapas 9–16a dejaron una base de fluidos validada (Darcy, Stokes, Navier–Stokes, no newtonianos con
+acoplamiento térmico, axisimétrico, transitorio BDF2, convección natural, Spalart–Allmaras). Quedó abierto **k-ω SST**:
+la física está escrita y su jacobiano es exacto (4e-9 frente a diferencias finitas), pero no converge en el canal con
+Newton, con Newton limitado o recortado ni en pseudo-tiempo. El diagnóstico apunta a **condicionamiento y globalización
+del solver no lineal**, no a las ecuaciones: cerca de la pared ω ~ 10⁶ y su residuo ~ 10¹², frente a u ~ 10.
+
+La Etapa 17 reúne las limitaciones documentadas en `docs/ESTADO.md` (secciones «Fluidos (Etapa 9…16a)»). Este plan las
+ordena por **impacto en la calidad del proyecto** y por **aporte al reto de SST**. Criterio: primero lo que desbloquea
+más casos con menos riesgo; después la calidad numérica de fondo; al final lo deseable.
+
+Paso previo (sin código nuevo): dejar SST en el repositorio como **experimental, sin validar**, junto con la
+generalización de leyes de viscosidad a varios campos (`ff.setViscosityLaw(..., fields=...)`, ya probada: 21/21
+suites) y el recorte de campos positivos (`System.require_positive` / `clip_positive`).
+
+## Prioridad 1: robustez del solver no lineal (desbloquea SST)
+
+Impacto: **muy alto**. Es la causa directa del fallo de SST, y además hace más fiables Navier–Stokes a Re alto,
+Bingham con `m` grande, Cross–WLF a baja temperatura y SA en flujos con separación, que hoy dependen de continuación
+manual y de buenos puntos de partida.
+
+1. **Escalado por campo de incógnitas y ecuaciones.** Normalizar cada campo (u, p, T, ν̃, k, ω) con una escala
+   característica antes de Newton y de la búsqueda de línea. Hoy el escalado es fila a fila con la diagonal del
+   jacobiano inicial (`modelSolver.newtonSolver`, `_nonlinear_transient` en `Source/Simulation/Solvers.py`). Con ω ~ 10⁶
+   el residuo de ω domina la norma y la búsqueda de línea rechaza pasos buenos para el resto.
+2. **Pseudo-transitorio con CFL creciente (SER: switched evolution relaxation).** Paso de pseudo-tiempo local por
+   elemento, `Δt_e = CFL · h_e / (|u| + ν/h_e)`, que crece con la caída del residuo (`CFL_{n+1} = CFL_n · ‖R_{n-1}‖/‖R_n‖`).
+   Reutiliza el contexto `System.time` y la masa ya existentes. Es el método estándar de los códigos RANS y sustituye a
+   la «continuación manual» actual.
+3. **Subrelajación por campo** como alternativa, sobre todo para la turbulencia: `x ← x + λ_campo Δx`.
+4. **Resolución segregada opcional (flujo ↔ turbulencia).** Resolver primero el flujo con μ_t congelado y luego la
+   turbulencia con u congelada, alternando. Es más lento por iteración pero muy robusto, y sirve de arranque para el
+   Newton monolítico.
+
+Archivos: `Source/Simulation/Solvers.py` (estrategias), `Source/Simulation/System.py` (escalas por campo),
+`Source/core.py` (`solverConfiguration`: opciones `globalization='newton'|'pseudo-transient'`, `cfl0`, `relaxation`).
+
+## Prioridad 2: SST robusto sobre lo anterior
+
+Impacto: **alto para turbulencia**. Cierra el reto encontrado.
+
+1. **Variable ln ω** en lugar de ω (Ilinca y Pelletier; Bassi et al.). Garantiza ω > 0 sin recortes, reduce el rango de
+   10⁶ a ~14 y suaviza el jacobiano cerca de la pared. Cambio local en `sst_law` y en la condición de pared
+   (`Source/Physics/Turbulence.py`), ya que `GradientLawTerm` da el jacobiano automáticamente.
+2. **k ≥ 0 con recorte** (`System.clip_positive`, ya implementado).
+3. **Validación**: canal Re_τ = 180, 395 y 590 frente a la DNS (Moser–Kim–Mansour) y a la ley de pared, con los
+   mismos criterios que SA (`Test/test_turbulence.py`); después, una placa plana o un escalón (C_f, readherencia).
+
+## Prioridad 3: rendimiento del ensamblado
+
+Impacto: **alto y transversal**. Hoy cada iteración reensambla en Python; el cilindro tarda 15 min. Además acelera
+los experimentos de las Prioridades 1–2.
+
+1. **Patrón disperso precalculado.** `DofLayout.scatter_matrix` construye un COO→CSR completo en cada bloque e
+   iteración. Calcular una vez los índices CSR de cada bloque (`FlowTerm`, `GradientLawTerm`, `FieldConvectionTerm`)
+   y en cada iteración solo rellenar `data`. Ganancia esperada ×2–3 en el ensamblado.
+2. **Newton modificado / reutilización de la factorización** durante varias iteraciones (`FactorizedSolver` en
+   `Source/Simulation/DirectSolver.py` ya cachea por matriz idéntica): refactorizar solo si la convergencia se degrada.
+3. **Operador de convección dedicado** en lugar de `GradientLawTerm` para escalares convectados con gradiente
+   (su arreglo `W` es genérico y pesado).
+
+## Prioridad 4: calidad numérica de fondo (Taylor–Hood)
+
+Impacto: **alto, esfuerzo alto**. Resuelve de raíz varias limitaciones de la presión:
+
+- presión de orden 2 (hoy O(h) en norma máxima y O(h^1.5) en L2);
+- presión en el eje axisimétrico;
+- robustez en presión (corrientes espurias en T3 con flotación);
+- sin depender del esfuerzo recuperado ni de la PSPG.
+
+Requiere elementos `tri6` / `quad9` en `Source/Pre_processing/Elements.py`, mallas con nodos intermedios (gmsh de
+orden 2) y un `DofLayout` con nodos distintos por campo (hoy todos los campos viven en los mismos nodos). Es la mejora
+de mayor calidad para el foco de polímeros (caída de presión en dados y reómetros), pero no ayuda a SST.
+
+## Prioridad 5: mejoras puntuales de impacto medio
+
+| Mejora | Por qué |
+|---|---|
+| Distancia a la pared eikonal (o p-Poisson) | Spalding sobreestima ≈ d/(2R) en paredes convexas (SA y SST) |
+| Crank–Nicolson de segundo orden limpio | Aislar el término O(dt) residual; hoy se recomienda BDF2 |
+| Paso de tiempo adaptativo (estimador BDF2/BDF1) | Arranques y transitorios con escalas muy distintas |
+| Términos de aro en `GradientLawTerm` vectorial | SA y SST axisimétricos (boquillas, tuberías) |
+| Condiciones de contorno dependientes del tiempo | Arranques de bomba, pulsos de entrada |
+| Solvers iterativos con precondicionador de bloques (punto de silla) | Mallas de 10⁵–10⁶ incógnitas (hoy PARDISO directo) |
+
+## Prioridad 6: deseable / nuevas capacidades
+
+- **Viscoelástico (Oldroyd-B, Giesekus)**: muy relevante para polímeros (pérdida de entrada de Bagley, hinchamiento
+  del extrudado), pero es una física nueva y difícil (alto Weissenberg). Mejor después de Taylor–Hood.
+- VTK binario / XDMF, materiales por región, Cross–WLF con presión (`D3`).
+- Limpieza de `docs/ESTADO.md`: varias entradas de las Etapas 10–12 quedaron superadas por la 14 (Crank–Nicolson ya no
+  oscila, ya no hay masas estabilizadas congeladas).
+
+## Orden recomendado
+
+1. Commit de SST experimental + generalización de viscosidad.
+2. Prioridad 1 (escalado por campo + pseudo-transitorio con CFL; segregado como respaldo).
+3. Prioridad 2 (SST con ln ω) → SST validado.
+4. Prioridad 3 (rendimiento). Puede adelantarse a la 2 si las pruebas de SST resultan lentas.
+5. Prioridad 4 (Taylor–Hood).
+6. Prioridades 5 y 6 según necesidad.
+
+## Verificación de cada bloque
+
+- `python run_tests.py` en verde (hoy 21 suites) y la documentación actualizada en el mismo commit.
+- Prioridad 1: casos hoy frágiles que converjan sin continuación manual: cavidad Re = 1000 desde el reposo, Bingham con
+  `m` alto, Cross–WLF en frío y SA arrancando desde un estado uniforme.
+- Prioridad 2: canal SST a Re_τ = 180/395/590 con U_c⁺ a ≤ 3 % de la DNS y ley de pared ≤ 7 %, igual que SA.
+- Prioridad 3: mismos resultados a 1e-10 y tiempos medidos (cilindro de Schäfer–Turek, reómetro).
+- Prioridad 4: Poiseuille, Kovasznay y cavidad con presión de orden 2; corrientes espurias de la estratificación en
+  T3 a nivel de redondeo; presión en el eje axisimétrico de orden 2.

@@ -306,12 +306,13 @@ class modelSolver():
                     dx = self._solve_system(J, -F)
                     lam = 1.0
                     while True:
-                        J_try, F_try = step_residual(x + lam * dx)
+                        x_try = system.clip_positive(x + lam * dx)          # positive fields stay positive
+                        J_try, F_try = step_residual(x_try)
                         norm_try = np.linalg.norm(F_try / scale)
                         if (np.isfinite(norm_try) and norm_try < (1.0 - 1e-4 * lam) * norm) or lam <= 1.0 / 64:
                             break
                         lam *= 0.5
-                    x, J, F, norm = x + lam * dx, J_try, F_try, norm_try
+                    x, J, F, norm = x_try, J_try, F_try, norm_try
 
                 if norm > atol and norm > rtol * norm0:
                     sim_logger.warning(f"Paso {step + 1}: Newton no convergio en {max_iterations} iteraciones "
@@ -414,10 +415,11 @@ class modelSolver():
 
             dX = self._solve_newton_step(J, -R)
 
+            system = self.model._system()
             lam = 1.0
             while True:
 
-                x_try = x + lam * dX
+                x_try = system.clip_positive(x + lam * dX)                  # positive fields stay positive
                 self.updateSolution(x_try)
 
                 J_try, R_try = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
