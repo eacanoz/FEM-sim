@@ -427,8 +427,9 @@ class modelSolver():
         temperature of 300, omega ~ 1e6) would dominate the norm over a field of order 1 (a concentration).
         Only the norm is scaled: the Newton step is computed with the unscaled system.
 
-        Stops when ||R|| <= rtol * ||R0|| or ||R|| <= atol (scaled norms). The residual and the tangent come
-        from the model; trial states are written to the field, and the last accepted state is kept.
+        Stops when ||R|| <= rtol * ||R0|| or ||R|| <= atol (scaled norms), or at the round-off floor: ||R|| <= 1e-6 ||R0||
+        and three iterations in a row without progress. The residual and the tangent come from the model; trial states
+        are written to the field, and the last accepted state is kept.
         """
 
         sim_logger.info("------- Starting Newton-Raphson nonlinear solver -------")
@@ -464,8 +465,10 @@ class modelSolver():
 
         iteration = 0
         diverged = False
+        no_progress = 0
 
-        while norm_R > atol and norm_R > rtol * norm_R0 and iteration < max_iterations:
+        while (norm_R > atol and norm_R > rtol * norm_R0 and iteration < max_iterations
+               and not (no_progress >= 3 and norm_R <= 1e-6 * norm_R0)):
 
             iteration += 1
 
@@ -494,13 +497,15 @@ class modelSolver():
             if diverged:
                 break
 
+            no_progress = no_progress + 1 if norm_try > 0.99 * norm_R else 0
             x, J, R, norm_R = x_try, J_try, R_try, norm_try
 
             sim_logger.info(f"| {iteration:^6} | {norm_R:^15.4e} | {norm_R / norm_R0:^15.4e} | {lam:^12.4f}")
 
         sim_logger.info(separator)
 
-        self.nonlinear_converged = bool(norm_R <= atol or norm_R <= rtol * norm_R0)
+        self.nonlinear_converged = bool(norm_R <= atol or norm_R <= rtol * norm_R0
+                                        or (no_progress >= 3 and norm_R <= 1e-6 * norm_R0))
 
         if self.nonlinear_converged:
             sim_logger.info(f"Succefully converged in {iteration} iterations.")
@@ -555,8 +560,10 @@ class modelSolver():
 
         norm_R0 = norm_R = np.linalg.norm(R / scale)
         iteration = 0
+        no_progress = 0
 
-        while norm_R > atol and norm_R > rtol * norm_R0 and iteration < max_iterations and cfl >= cfl_min:
+        while (norm_R > atol and norm_R > rtol * norm_R0 and iteration < max_iterations and cfl >= cfl_min
+               and not (no_progress >= 3 and norm_R <= 1e-6 * norm_R0)):
 
             iteration += 1
 
@@ -579,11 +586,13 @@ class modelSolver():
                 cfl = min(cfl * np.clip(ratio, 1.05, cfl_growth), cfl_max)
             else:
                 cfl = cfl * max(ratio, 0.5)
+            no_progress = no_progress + 1 if norm_try > 0.99 * norm_R else 0
             x, J, R, norm_R = x_try, J_try, R_try, norm_try
 
             sim_logger.info(f"| {iteration:^6} | ||R|| {norm_R:.4e} | ||R||/||R0|| {norm_R / norm_R0:.4e} | CFL {cfl:.3e}")
 
-        self.nonlinear_converged = bool(norm_R <= atol or norm_R <= rtol * norm_R0)
+        self.nonlinear_converged = bool(norm_R <= atol or norm_R <= rtol * norm_R0
+                                        or (no_progress >= 3 and norm_R <= 1e-6 * norm_R0))
 
         if self.nonlinear_converged:
             sim_logger.info(f"Pseudo-transient solver converged in {iteration} iterations.")

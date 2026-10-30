@@ -127,6 +127,9 @@
 | Taylor–Hood: Schäfer–Turek 2D-1 (Re = 20, elementos curvos) | C_D 5.57–5.59; C_L 0.0104–0.0110; Δp 0.1172–0.1176 | `Test/test_taylor_hood.py` | P2/P1, 40 554 incógnitas: 5.5794, 0.0107, 0.1174 (dentro). T3, 40 236: 5.5804, 0.0109, 0.1180 (Δp fuera, y sigue en 0.1180 con 157 629) |
 | Taylor–Hood: tangente, ley de potencia, transitorio | inercia, Carreau, calentamiento, flotación y calor frente a diferencias finitas; canal n = 0.5; BDF2 hasta el estacionario | `Test/test_taylor_hood.py` | 1e-10; u 9e-6 y 2e-5 con 32 elementos (igual orden 1e-3); 1e-6 |
 | Taylor–Hood: corrientes espurias con flotación | estratificación en malla graduada | `Test/test_taylor_hood.py` | orden 3; **no llegan a redondeo** (5e-4 en P2/P1 frente a 1.4e-3 en T3; Q4 da 9e-5, mejor que Q2/Q1, 4e-4) |
+| Dados: contracción plana 4:1 | corrección de Couette y caída con Cross; igual orden frente a Taylor–Hood | `Test/test_taylor_hood.py` (newtoniano); Cross a mano | C ≈ 0.374: Q2 con 7 455 incógnitas, 0.3737; T3 con 397 545, 0.3754. Cross: Q2 con 26 649 (7.6 s), 11.738 bar; T3 con 397 545 (281 s), 11.739 bar (convergido 11.737) |
+| Dados: reómetro capilar (Cross, axisimétrico) | viscosidad recuperada y pérdida de entrada, 5 caudales | a mano | Q2 con 6 198 (4.7 s) iguala a T3 con 74 793 (88 s): caída 61.38 frente a 61.37 bar; pérdida de entrada 2.51 y 2.50 bar |
+| Dados: rendija (Cross–WLF, calentamiento) | gradiente desarrollado frente al exacto; temperatura; caída total | a mano | gradiente: Q2 con 15 939, 0.0001 %; Q4 con 62 595, 0.0044 %. T de mezcla igual (230.284 °C). **Caída total: Q4 mejor**: Q4 estable en 9.7426 bar; Q2 aún sube lentamente (9.7355 con 248 067), por la entrada |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -300,6 +303,11 @@ Lo que sigue pendiente:
   (`System.restrict_to_linear_subspace`), de modo que `DofLayout`, las salidas y `FlowTerm` no cambian; cuesta incógnitas
   extra de presión, triviales para el solver directo. Galerkin con LSIC, sin PSPG, SUPG ni esfuerzo recuperado. LSIC se
   queda: sin él, la cavidad a Re = 5000 no terminó en 200 s (con él, ~30 s).
+- **Elección de elemento en dados:** Taylor–Hood es la opción por defecto para esquinas, contracciones y gradientes
+  (10 a 15 veces menos incógnitas en contracción y reómetro). Con un perfil de entrada incompatible con el fluido (parábola
+  newtoniana con adelgazamiento) la presión en la propia entrada es singular y Q2 la converge más despacio que Q4: conviene
+  medir la caída entre secciones alejadas de la entrada, o alargar el tramo. Newton para además en el piso de redondeo:
+  en Taylor–Hood el residuo relativo se queda en ~1e-9 y antes giraba hasta 200 iteraciones.
 - **Taylor–Hood, sin validar:** solvers iterativos (filas de presión con diagonal nula; solo se ha probado PARDISO),
   turbulencia (SA, SST) y especies en Q9/T6, y flujo con Re alto y capas sin resolver (sin SUPG). El SUPG del calor deja fuera
   la difusión, que en elementos cuadráticos no se anula. Los ejemplos que dibujan con `mtri.Triangulation` esperan T3.

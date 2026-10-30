@@ -335,6 +335,80 @@ def test_spurious_currents_with_buoyancy_on_a_graded_mesh():
         assert coarse > 1e-4 and np.log2(coarse / fine) > 2.5
 
 
+# ----- polymer dies -----
+
+def test_plane_contraction_entrance_loss():
+
+    """Couette correction of the 4:1 contraction, creeping Newtonian flow. A coarse Taylor-Hood mesh beats a much finer
+    equal-order one; the reference is the converged Taylor-Hood value (0.3740 with 402 531 unknowns, 0.3754 and falling
+    with 397 545 of equal order)."""
+
+    H, h, length, mu, q = 4.0e-3, 1.0e-3, 16.0e-3, 1000.0, 1.0e-6
+
+    def correction(lc, order):
+        gmsh.initialize()
+        gmsh.option.setNumber("General.Terminal", 0)
+        try:
+            geo = gmsh.model.geo
+            points = [(-length, 0, lc), (length, 0, lc), (length, h, lc), (0, h, 0.15 * lc), (0, H, lc), (-length, H, lc)]
+            tags = [geo.addPoint(x, y, 0, size) for x, y, size in points]
+            lines = [geo.addLine(tags[i], tags[(i + 1) % 6]) for i in range(6)]
+            geo.addPlaneSurface([geo.addCurveLoop(lines)])
+            geo.synchronize()
+            for name, group in (('axis', lines[:1]), ('outlet', lines[1:2]), ('walls', lines[2:5]), ('inlet', lines[5:])):
+                gmsh.model.addPhysicalGroup(1, group, name=name)
+            gmsh.model.mesh.generate(2)
+            if order == 2:
+                gmsh.model.mesh.setOrder(2)
+            mesh = Mesh.from_gmsh_model()
+        finally:
+            gmsh.finalize()
+
+        model = Model(name='contraction', dim=2, mesh=mesh, mat=material('X', miu=mu), psc=ff)
+        flow = model.physics
+        flow.addBC_OutletEdges(mesh.boundary_edges('outlet'), 0.0)
+        flow.addBC_SymmetryEdges(mesh.boundary_edges('axis'))
+        flow.addBC_VelocityEdges(mesh.boundary_edges('inlet'), lambda x, y: (1.5 * q / H * (1 - (y / H) ** 2), 0.0))
+        flow.addBC_NoSlipEdges(mesh.boundary_edges('walls'))
+        steady(model, ProblemType.linear)
+
+        rate = flow.flowRate(mesh.boundary_edges('outlet'))
+        dp = model.sol['p'][np.unique(np.ravel(mesh.boundary_edges('inlet')))].mean()
+        loss = dp - 3 * mu * rate / H ** 3 * length - 3 * mu * rate / h ** 3 * length
+        return loss / (2 * 3 * mu * rate / h ** 2), 3 * mesh.getNoN()
+
+    reference = 0.3740
+    coarse, n_coarse = correction(h / 2, 2)
+    fine, n_fine = correction(h / 8, 1)
+    print(f"   C: Taylor-Hood {coarse:.4f} with {n_coarse} unknowns, equal order {fine:.4f} with {n_fine}")
+    assert n_fine > 3 * n_coarse
+    assert abs(coarse - reference) < 0.002 and abs(coarse - reference) < abs(fine - reference)
+
+
+def test_newton_stops_at_the_round_off_floor():
+
+    """A linear problem in the nonlinear solver: Taylor-Hood reaches a relative residual of about 1e-9 in one iteration
+    and cannot go below it. It used to go on to the 200 iterations and report no convergence."""
+
+    mesh = mesh2((20.0e-3, 1.0e-3), (20, 4), ElementType.quadrilateral)
+    model = Model(name='slit', dim=2, mesh=mesh, mat=material('X', miu=1000.0, rho=750.0, Cp=2700.0, k=0.17), psc=[ff, ht])
+    fluid, heat = model.physics.fluid, model.physics.heat
+    inlet = mesh.boundary_edges(lambda x, y: x < 1e-12)
+    wall = mesh.boundary_edges(lambda x, y: y > 1.0e-3 - 1e-12)
+    fluid.addBC_VelocityEdges(inlet, lambda x, y: (0.15 * (1 - (y / 1.0e-3) ** 2), 0.0))
+    fluid.addBC_SymmetryEdges(mesh.boundary_edges(lambda x, y: y < 1e-12))
+    fluid.addBC_NoSlipEdges(wall)
+    fluid.addBC_OutletEdges(mesh.boundary_edges(lambda x, y: x > 20.0e-3 - 1e-12), 0.0)
+    heat.addBC_TemperatureEdges(inlet, 230.0)
+    heat.addBC_TemperatureEdges(wall, 230.0)
+    model.physics.setVelocity('u')
+    model.physics.setStabilization('SUPG')
+    model.physics.initField('T', 230.0)
+    steady(model)
+    print(f"   {model.newton_iterations} iterations")
+    assert model.nonlinear_converged and model.newton_iterations < 15
+
+
 # ----- the rest of the flow physics -----
 
 def test_tangent_with_every_term():
@@ -445,7 +519,8 @@ if __name__ == "__main__":
     tests = [test_shape_functions_and_quadrature, test_quadratic_mesh_and_geometry, test_vtk_output_of_quadratic_cells,
              test_poiseuille_is_exact, test_hagen_poiseuille_also_on_the_axis, test_kovasznay_orders,
              test_lid_driven_cavity_against_ghia, test_schafer_turek_on_curved_elements,
-             test_spurious_currents_with_buoyancy_on_a_graded_mesh, test_tangent_with_every_term, test_power_law_channel,
+             test_spurious_currents_with_buoyancy_on_a_graded_mesh, test_plane_contraction_entrance_loss,
+             test_newton_stops_at_the_round_off_floor, test_tangent_with_every_term, test_power_law_channel,
              test_transient_reaches_the_steady_state, test_pressure_reference_and_errors,
              test_equal_order_meshes_stay_as_they_were]
     failed = 0

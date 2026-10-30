@@ -117,7 +117,11 @@ de mayor calidad para el foco de polímeros (caída de presión en dados y reóm
 - **Corrientes espurias: la expectativa estaba mal.** Una presión lineal no equilibra una flotación lineal. El reposo a
   redondeo solo aparece en mallas uniformes, por cancelación entre elementos; en malla graduada quedan corrientes de orden 3.
 - LSIC se conserva por robustez a Re alto, aunque en P2/P1 empeora algo la presión en mallas gruesas.
-- La presión en dados y reómetros reales (contracción, Cross–WLF) no se ha comparado todavía.
+
+**Comparación en dados: Taylor–Hood gana en contracción y reómetro, no en todo.** Contracción 4:1 y reómetro capilar: 10 a 15
+veces menos incógnitas y unas 20 a 35 veces menos tiempo para la misma caída de presión. Rendija con Cross–WLF: mejor en el
+gradiente desarrollado y en la temperatura de mezcla, pero peor en la caída total, porque el perfil impuesto en la entrada
+es singular para un fluido que adelgaza.
 
 ## Prioridad 5: mejoras puntuales de impacto medio
 

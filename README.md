@@ -241,7 +241,7 @@ python Test/test_triangles_gmsh.py        # triángulos T3 y gmsh: parche, manuf
 python Test/test_convection_supg.py       # velocidad compartida y SUPG: exactitud 1D, 2D = 1D, manufacturada, transitorio (9)
 python Test/test_fluids_foundation.py     # Etapa 9: operadores vectoriales, leyes con gradientes, ley de potencia, Darcy (11)
 python Test/test_stokes.py                # Etapa 10: Stokes con PSPG: parche, Poiseuille, solución exacta, cavidad, simetría, arranque (8)
-python Test/test_taylor_hood.py           # Etapa 17: Taylor-Hood: elementos, soluciones exactas, Kovasznay, Ghia, Schafer-Turek, tangente (14)
+python Test/test_taylor_hood.py           # Etapa 17: Taylor-Hood: elementos, soluciones exactas, Kovasznay, Ghia, Schafer-Turek, contraccion, tangente (16)
 python Test/test_navier_stokes.py         # Etapa 11: Navier–Stokes: tangente, Kovasznay, cavidad frente a Ghia, canal, límite de Stokes, Picard (8)
 python Test/test_non_newtonian.py         # Etapa 12: leyes de viscosidad, ley de potencia, Bingham, Brinkman, μ(T), convección acoplada, jacobiano (8)
 python Test/test_axisymmetric.py          # Etapa 13: medidas r-z, conducción radial, Hagen–Poiseuille, extensión uniaxial, tubo de ley de potencia, jacobiano (6)
