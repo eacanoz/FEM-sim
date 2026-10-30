@@ -37,6 +37,41 @@ def build_preconditioner(A, kind):
     raise ValueError(f"Precondicionador no implementado: {kind}")
 
 
+def saddle_point_preconditioner(A, velocity, pressure, schur, modes=None):
+
+    """Upper triangular block preconditioner of a velocity-pressure system with GMRES.
+
+    A: matrix, velocity and pressure: its indices of each block, schur: diagonal of the Schur complement approximation,
+    the pressure mass matrix over the viscosity. One AMG V-cycle replaces the velocity block. For Stokes flow the Schur
+    approximation is spectrally equivalent to the exact one, so the iterations do not grow with the mesh (Silvester &
+    Wathen 1994). The diagonal of the pressure-pressure block is not used: only the rows it couples go through `coupling`
+    (the non-vertex pressures of Taylor-Hood, tied to the vertices).
+    """
+
+    import pyamg
+
+    A = A.tocsr()
+    A_uu = A[velocity][:, velocity]
+    A_up = A[velocity][:, pressure]
+    coupling = A[pressure][:, pressure].tolil()
+    coupling.setdiag(0.0)
+    coupling = coupling.tocsr()
+    has_row = np.diff(coupling.indptr) > 0          # a row with its own relation: it does not take part in the mass
+
+    amg = pyamg.smoothed_aggregation_solver(A_uu, B=modes, smooth='energy',
+                                            max_coarse=500).aspreconditioner(cycle='V')
+
+    def apply(r):
+        p = r[pressure] / schur
+        p = p - coupling @ (np.where(has_row, 0.0, p)) / schur
+        z = np.zeros_like(r)
+        z[velocity] = amg @ (r[velocity] - A_up @ p)
+        z[pressure] = p
+        return z
+
+    return spla.LinearOperator(A.shape, apply)
+
+
 class IterativeSolver:
 
     """Krylov solver (CG, BiCGSTAB, GMRES) with an optional preconditioner.
@@ -83,6 +118,8 @@ class IterativeSolver:
         if method is spla.gmres:
             kwargs['callback'] = count
             kwargs['callback_type'] = 'pr_norm'
+            if self.options.get('Preconditioner') == Preconditioners.SaddlePoint:
+                kwargs['restart'] = 200
         else:
             kwargs['callback'] = count
 

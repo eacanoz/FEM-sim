@@ -73,8 +73,7 @@ def channel(re_tau, ny, beta, element=ElementType.quadrilateral):
 
 def test_wall_distance():
 
-    """Spalding's approximation is exact between parallel plates; around a cylinder it is close to the true distance
-    near the wall, where the turbulence model needs it."""
+    """Exact between parallel plates; around a cylinder, close to the true distance (the error of the chords)."""
 
     for element, tol in ((ElementType.quadrilateral, 1e-12), (ElementType.triangle, 1e-2)):
         mesh = Mesh()
@@ -103,11 +102,7 @@ def test_wall_distance():
     xy = np.array([n.coor for n in disk.NL])
     d = wall_distance(disk, disk.boundary_edges('inner'))
     true = np.hypot(xy[:, 0], xy[:, 1]) - 0.2
-    # Spalding's approximation overestimates the distance from a convex wall by about d / (2 R): small next to the
-    # wall, where the turbulence model uses it, and independent of the mesh
-    for a, b in ((0.02, 0.05), (0.05, 0.1)):
-        band = (true > a) & (true <= b)
-        assert np.max(np.abs(d[band] / true[band] - 1)) < b / (2 * 0.2) + 0.02
+    assert np.max(np.abs(d - true)) < 2e-3
 
 
 def test_turbulent_channel():

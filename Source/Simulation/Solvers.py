@@ -5,8 +5,8 @@ import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 
 from Source.Simulation.DirectSolver import FactorizedSolver, _same_sparse
-from Source.Simulation.IterativeSolver import IterativeSolver, build_preconditioner
-from Source.enums import SolverType, StudyType, ProblemType
+from Source.Simulation.IterativeSolver import IterativeSolver, build_preconditioner, saddle_point_preconditioner
+from Source.enums import SolverType, StudyType, ProblemType, Preconditioners
 from Source.logger_config import sim_logger
 
 
@@ -87,7 +87,10 @@ class modelSolver():
 
         cached_A, preconditioner = self._iterative_cache
         if preconditioner is None or not _same_sparse(A_ff, cached_A):
-            preconditioner = build_preconditioner(A_ff, self.solverOptions.get('Preconditioner'))
+            if self.solverOptions.get('Preconditioner') == Preconditioners.SaddlePoint:
+                preconditioner = self._saddle_point(A_ff, free)
+            else:
+                preconditioner = build_preconditioner(A_ff, self.solverOptions.get('Preconditioner'))
             self._iterative_cache = (A_ff, preconditioner)
 
         x0 = None if guess is None else guess[free]
@@ -96,6 +99,29 @@ class modelSolver():
         self.iterations.append(solver.iterations)
 
         return x
+
+    def _saddle_point(self, A_ff, free):
+
+        """Block preconditioner of the flow: velocity and pressure of the free dofs, Schur diagonal from the flow physics."""
+
+        model = self.model
+        flow = next((part for part in getattr(model.physics, 'parts', {'flow': model.physics}).values()
+                     if getattr(part, 'computes_velocity', False)), None)
+        if flow is None or set(model.layout.names) != {'u', 'p'}:
+            raise ValueError("El precondicionador de bloques es para el flujo solo: campos u y p.")
+
+        number = np.cumsum(free) - 1
+        u, p = model.layout.dofs('u').ravel(), model.layout.dofs('p')[:, 0]
+        schur = flow.schur_diagonal(model._system(), model._state())
+
+        # Near-null space of the viscous block: the rigid motions of the velocity
+        xy = model.geometry.node_xy
+        
+        modes = np.zeros((2 * len(xy), 3))
+        modes[0::2, 0], modes[1::2, 1] = 1.0, 1.0
+        modes[0::2, 2], modes[1::2, 2] = -xy[:, 1], xy[:, 0]
+
+        return saddle_point_preconditioner(A_ff, number[u[free[u]]], number[p[free[p]]], schur[free[p]], modes[free[u]])
 
     def construcProblem(self):
 
@@ -162,7 +188,8 @@ class modelSolver():
 
         self.getInitialField()
 
-        if scheme != 'theta' or not self.model._system().is_linear:
+        system = self.model._system()
+        if scheme != 'theta' or not system.is_linear or system.time_dependent:
             return self._nonlinear_transient(scheme, theta, n_steps, dt, total_time)
 
         dirichlet = self.model.dirichletDofs()
@@ -213,9 +240,9 @@ class modelSolver():
         sim_logger.info(f"Paso {done}/{n_steps} (t = {done * dt:.6g}, {100 * done / n_steps:.0f} %): "
                         f"{elapsed:.1f} s transcurridos, ~{remaining:.1f} s restantes")
 
-    def _store_history(self, Y, total_time, n_steps):
+    def _store_history(self, Y, total_time, n_steps, times=None):
 
-        self.timeVector = np.linspace(0.0, total_time, n_steps + 1)
+        self.timeVector = np.linspace(0.0, total_time, n_steps + 1) if times is None else np.asarray(times)
 
         layout = self.model.layout
         for name in layout.names:
@@ -229,7 +256,8 @@ class modelSolver():
         Semi-discrete system M x' + R(x) = 0 (R: residual of the System, nonlinear terms included). Each step solves
 
             theta:  F(x) = M (x - x_n) / dt + theta R(x) + (1 - theta) R(x_n) = 0
-            BDF2:   F(x) = M (3 x - 4 x_n + x_{n-1}) / (2 dt) + R(x) = 0          (first step: implicit Euler)
+            BDF2:   F(x) = M (alpha x + beta) + R(x) = 0,  alpha = (1 + 2 r) / ((1 + r) dt), r = dt / dt_old
+                    beta = (-(1 + r) x_n + r^2 / (1 + r) x_{n-1}) / dt                 (first step: implicit Euler)
 
         with the tangent dF/dx = alpha M + theta J. Algebraic rows (no mass: the incompressibility constraint) are always
         fully implicit, F = R(x), and the algebraic unknowns (the pressure) enter the old-level residual with their new
@@ -240,91 +268,145 @@ class modelSolver():
         residual-based stabilization (PSPG/SUPG of the flow, SUPG of a convected field) uses the time-discrete residual
         of the step, x' + theta R_space(x) + (1 - theta) R_space(x_n), once and at full weight; the old-level residual is
         evaluated with {'old_level': True} and leaves that stabilization out. Dirichlet dofs keep their values. Newton
-        stops when the scaled residual drops by 1e-8 or below 1e-10.
+        stops when the scaled residual drops by 1e-8 or below 1e-10, or when the update moves the differential dofs of
+        every field by less than 1e-10 of its size: the round-off of the residual grows with alpha and a good initial guess
+        starts near that floor, so the residual alone can never report the step as solved. The algebraic unknowns do not
+        count: they follow the others, and a pressure that is exactly zero has no size to compare with.
+
+        With theta < 1 the implicit pressure of the step balances the time-centred momentum, so it belongs to t_n + theta dt,
+        an error dt (1 - theta) dp/dt in a value reported at t_{n+1}. The velocity does not notice. The history reports the
+        algebraic unknowns at t_{n+1}, p^{n+1} + (1 - theta) (p^{n+1} - p^n), from the second step on; the iteration keeps
+        its own values. Crank-Nicolson is thus second order in the pressure as well.
 
         Modified Newton (option 'Reuse Tangent'): the tangent and its factorization stay in use, also from one time step
         to the next, while each iteration reduces the residual at least by half; otherwise the iteration is discarded
         and the tangent rebuilt. An assembly with its factorization costs several residual evaluations, and the state
-        changes little between iterations of a step. A change of alpha or theta (first step of BDF2) also rebuilds it.
+        changes little between iterations of a step. A change of alpha by more than 30 % or of theta also rebuilds it.
+
+        Adaptive steps (BDF2, option 'Adaptive Tolerance'): the local truncation error comes from the difference with a
+        quadratic extrapolation of the last three states, h (h + k) / ((2 h + k) (h + k + l)) (x - x_pred) for the steps
+        h, k, l, measured per field relative to its size, the largest value it has reached and the amplitude of its time
+        functions (a field that starts at zero has no size of its own), over the differential dofs. A step above the
+        tolerance is repeated; dt follows (tol / e)^(1/3). dt never more than doubles (zero stability needs a ratio below
+        1 + sqrt(2)), nor exceeds 'Adaptive Max Step'. The first steps, without enough history, use the given time step:
+        choose it small.
         """
 
         system = self.model._system()
         dirichlet = system.is_dirichlet
+        timed = system.time_dependent
+        tolerance = self.solverOptions.get('Adaptive Tolerance')
+
+        if timed:
+            system.set_time(0.0)
 
         x = self.x0.copy()
         x[dirichlet] = system.dirichlet_value[dirichlet]
         self.updateSolution(x)
 
         free = sp.diags((~dirichlet).astype(float))
-        M = (free @ system.mass().tocsr() @ free).tocsr()
+        # A moving boundary value has x' != 0: its column of the mass matrix stays
+        M = (free @ system.mass().tocsr() @ (sp.identity(len(x)) if timed else free)).tocsr()
         algebraic = (np.diff(M.indptr) == 0) & ~dirichlet
+        differential_dofs = ~(dirichlet | algebraic)
+        differential = sp.diags(differential_dofs.astype(float))
+        to_algebraic = sp.diags(algebraic.astype(float))
 
-        Y = np.zeros((len(x), n_steps + 1))
-        Y[:, 0] = x
-        x_prev = None
+        times = [0.0]
+        history = [x.copy()]
+        x_prev, dt_prev = None, None
         self.step_iterations = []
+        self.rejected_steps = 0
 
         rtol, atol, max_iterations = 1e-8, 1e-10, 30
         weights = system.relaxation_weights(self.solverOptions.get('Relaxation'))
         reuse = self.solverOptions.get('Reuse Tangent', True)
 
         self.tangent_assemblies = 0
-        J, J_key = None, None
+        J, J_alpha, J_theta = None, None, None
+
+        fields = [self.model.layout.dofs(name).ravel() for name in self.model.layout.names]
+
+        amplitude = np.zeros(len(x))
+        for dofs, values, _ in system._timed_dirichlet:
+            amplitude[dofs] = np.abs(values)
+        sizes = [max(np.abs(x[dofs]).max(), amplitude[dofs].max()) for dofs in fields]
+
+        def negligible(update, state):
+            return all(np.abs(update[dofs[differential_dofs[dofs]]]).max(initial=0.0)
+                       <= 1e-10 * max(np.abs(state[dofs]).max(), 1e-30) for dofs in fields)
 
         clock = time.time()
+        step = 0
         try:
-            for step in range(n_steps):
+            while (step < n_steps) if tolerance is None else (times[-1] < total_time * (1.0 - 1e-12)):
+
+                t_n = times[-1]
+                if tolerance is None:
+                    t_new = (step + 1) * dt
+                else:
+                    dt = min(dt, total_time - t_n)
+                    t_new = t_n + dt
+
+                if timed:
+                    system.set_time(t_new)
 
                 x_n = x.copy()
                 if scheme == 'BDF2' and x_prev is not None:
-                    alpha, beta, th = 1.5 / dt, (-2.0 * x_n + 0.5 * x_prev) / dt, 1.0
-                    x = 2.0 * x_n - x_prev                                     # extrapolated initial guess
-                    x[dirichlet] = x_n[dirichlet]
+                    r = dt / dt_prev
+                    alpha = (1.0 + 2.0 * r) / ((1.0 + r) * dt)
+                    beta = (-(1.0 + r) * x_n + r ** 2 / (1.0 + r) * x_prev) / dt
+                    th = 1.0
+                    x = x_n + r * (x_n - x_prev)                               # extrapolated initial guess
                 else:
                     alpha, beta = 1.0 / dt, -x_n / dt
                     th = 1.0 if scheme == 'BDF2' else theta
+                x[dirichlet] = system.dirichlet_value[dirichlet]
 
                 weight = np.where(algebraic, 1.0, th)                          # theta per row
                 context = {'alpha': alpha, 'beta': beta, 'theta': th, 'x_old': x_n, 'dt': dt}
-                differential = sp.diags((~(dirichlet | algebraic)).astype(float))
-                to_algebraic = sp.diags(algebraic.astype(float))
+
+                def at_old_level(evaluate, state):
+                    # (1 - theta) R at the old level, with the algebraic unknowns (pressure) of the new level:
+                    # they act as Lagrange multipliers and stay fully implicit (no oscillating pressure)
+                    old = x_n.copy()
+                    old[algebraic] = state[algebraic]
+                    system.time = {'old_level': True}
+                    if timed:
+                        system.set_time(t_n)
+                    value = evaluate(old)
+                    if timed:
+                        system.set_time(t_new)
+                    system.time = context
+                    return value
 
                 def step_residual(state):
                     system.time = context
                     F = M @ (alpha * state + beta) + weight * system.residual(state)
                     if th < 1.0:
-                        # (1 - theta) R at the old level, with the algebraic unknowns (pressure) of the new level:
-                        # they act as Lagrange multipliers and stay fully implicit (no oscillating pressure)
-                        old = x_n.copy()
-                        old[algebraic] = state[algebraic]
-                        system.time = {'old_level': True}
-                        F = F + (1.0 - th) * (differential @ system.residual(old))
-                        system.time = context
+                        F = F + (1.0 - th) * (differential @ at_old_level(system.residual, state))
                     return F
 
                 def step_tangent(state):
                     self.tangent_assemblies += 1
                     system.time = context
-                    J, _ = system.residual_and_tangent(state)
-                    J = alpha * M + sp.diags(weight) @ J
+                    tangent, _ = system.residual_and_tangent(state)
+                    tangent = alpha * M + sp.diags(weight) @ tangent
                     if th < 1.0:
-                        old = x_n.copy()
-                        old[algebraic] = state[algebraic]
-                        system.time = {'old_level': True}
-                        J_old, _ = system.residual_and_tangent(old)
-                        system.time = context
-                        J = J + (1.0 - th) * (differential @ J_old @ to_algebraic)
-                    return J.tocsr()
+                        J_old = at_old_level(lambda old: system.residual_and_tangent(old)[0], state)
+                        tangent = tangent + (1.0 - th) * (differential @ J_old @ to_algebraic)
+                    return tangent.tocsr()
 
-                key = (alpha, th)
-                fresh = J is None or J_key != key or not reuse                 # the tangent belongs to this state
+                # The tangent belongs to this state?
+                fresh = J is None or J_theta != th or abs(alpha / J_alpha - 1.0) > 0.3 or not reuse
                 if fresh:
-                    J, J_key = step_tangent(x), key
+                    J, J_alpha, J_theta = step_tangent(x), alpha, th
 
                 F = step_residual(x)
                 scale = np.maximum(np.abs(J.diagonal()), 1.0) * system.field_scales(x)
                 norm0 = norm = np.linalg.norm(F / scale)
                 iteration = 0
+                settled = False
 
                 while norm > atol and norm > rtol * norm0 and iteration < max_iterations:
                     iteration += 1
@@ -335,12 +417,17 @@ class modelSolver():
                         x_try = system.clip_positive(x + weights * dx)
                         F_try = step_residual(x_try)
                         norm_try = np.linalg.norm(F_try / scale)
+                        settled = np.isfinite(norm_try) and negligible(dx, x)
+                        if settled:
+                            x, F, norm = x_try, F_try, norm_try
+                            break
                         if np.isfinite(norm_try) and norm_try <= 0.5 * norm:
                             x, F, norm = x_try, F_try, norm_try
                             continue
-                        J, fresh = step_tangent(x), True
+                        J, J_alpha, J_theta, fresh = step_tangent(x), alpha, th, True
                         dx = self._solve_system(J, -F)
 
+                    settled = negligible(dx, x)
                     lam = 1.0
                     while True:
                         x_try = system.clip_positive(x + lam * weights * dx)   # positive fields stay positive
@@ -350,28 +437,69 @@ class modelSolver():
                             break
                         lam *= 0.5
                     x, F, norm = x_try, F_try, norm_try
+                    if settled and np.isfinite(norm):
+                        break
                     fresh = not reuse
                     if fresh:
-                        J = step_tangent(x)
+                        J, J_alpha, J_theta = step_tangent(x), alpha, th
 
-                if not np.isfinite(norm):                                      # NaN passes the stopping test
+                finite = np.isfinite(norm)
+                solved = finite and (norm <= atol or norm <= rtol * norm0 or settled)
+
+                if tolerance is not None and not solved and dt > 1e-10 * total_time:
+                    self.rejected_steps += 1                                   # repeat the step, shorter
+                    x, dt = x_n, 0.5 * dt
+                    continue
+
+                if not finite:                                                 # NaN passes the stopping test
                     sim_logger.warning(f"Paso {step + 1}: el residuo no es finito. La simulacion se detiene en "
-                                       f"t = {step * dt:.6g}; se conservan los pasos anteriores.")
+                                       f"t = {t_n:.6g}; se conservan los pasos anteriores.")
                     x = x_n
                     self.updateSolution(x)
-                    n_steps, total_time = step, step * dt
-                    Y = Y[:, :step + 1]
                     break
 
-                if norm > atol and norm > rtol * norm0:
+                if not solved:
                     sim_logger.warning(f"Paso {step + 1}: Newton no convergio en {max_iterations} iteraciones "
                                        f"(residuo relativo {norm / max(norm0, 1e-300):.1e}).")
 
+                dt_next = dt
+                if tolerance is not None and len(times) >= 3:
+                    h, k, l = dt, t_n - times[-2], times[-2] - times[-3]
+                    t0, t1, t2 = t_n, times[-2], times[-3]
+                    predicted = (history[-1] * (t_new - t1) * (t_new - t2) / ((t0 - t1) * (t0 - t2))
+                                 + history[-2] * (t_new - t0) * (t_new - t2) / ((t1 - t0) * (t1 - t2))
+                                 + history[-3] * (t_new - t0) * (t_new - t1) / ((t2 - t0) * (t2 - t1)))
+                    error = np.abs(h * (h + k) / ((2 * h + k) * (h + k + l)) * (x - predicted))
+                    relative = 0.0
+                    for dofs, size in zip(fields, sizes):
+                        moving = dofs[differential_dofs[dofs]]
+                        if moving.size:
+                            relative = max(relative, error[moving].max() / max(size, np.abs(x[dofs]).max(), 1e-30))
+
+                    factor = 0.9 * (tolerance / max(relative, 1e-30)) ** (1.0 / 3.0)
+                    if relative > tolerance and dt > 1e-10 * total_time:
+                        self.rejected_steps += 1
+                        x, dt = x_n, dt * max(factor, 0.2)
+                        continue
+                    dt_next = dt * min(max(factor, 0.2), 2.0)
+                    dt_next = min(dt_next, self.solverOptions.get('Adaptive Max Step') or np.inf)
+
                 self.step_iterations.append(iteration)
-                x_prev = x_n
+                sizes = [max(size, np.abs(x[dofs]).max()) for size, dofs in zip(sizes, fields)]
+                x_prev, dt_prev = x_n, dt
                 self.updateSolution(x)
-                Y[:, step + 1] = x
-                self._report_progress(step, n_steps, dt, clock)
+                times.append(t_new)
+                reported = x.copy()
+                if th < 1.0 and step > 0:
+                    reported[algebraic] = x[algebraic] + (1.0 - th) * (x[algebraic] - x_n[algebraic])
+                history.append(reported)
+                step += 1
+                if tolerance is None:
+                    self._report_progress(step - 1, n_steps, dt, clock)
+                elif step % 50 == 0:
+                    sim_logger.info(f"Paso {step}: t = {t_new:.6g} de {total_time:.6g}, dt = {dt:.3g}, "
+                                    f"{time.time() - clock:.1f} s")
+                dt = dt_next
         finally:
             system.time = None
 
@@ -379,7 +507,7 @@ class modelSolver():
             sim_logger.info(f"Newton per step: mean {np.mean(self.step_iterations):.1f}, "
                             f"max {np.max(self.step_iterations)} iterations, {self.tangent_assemblies} tangents")
 
-        self._store_history(Y, total_time, n_steps)
+        self._store_history(np.column_stack(history), times[-1], len(times) - 1, times)
 
     def linearSolver(self):
 

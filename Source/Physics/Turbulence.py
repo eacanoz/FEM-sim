@@ -24,12 +24,11 @@
 # usual f_v1, f_v2, f_w. The convection uses the computed velocity with SUPG (FieldConvectionTerm); diffusion and
 # sources are one pointwise law of nu~, grad nu~, grad u and d with automatic derivatives (GradientLawTerm).
 #
-# The wall distance d comes from Spalding's Poisson approximation: grad^2 phi = -1 with phi = 0 on the walls,
-# d = sqrt(|grad phi|^2 + 2 phi) - |grad phi| (exact between parallel plates). It is stored as the field
-# 'wall_distance', fixed at every node.
+# The wall distance d is the minimum distance to the straight segments of the walls. It is stored as the field
+# 'wall_distance', fixed at every node. Axisymmetric studies need nothing else for the scalars, whose integrals carry r;
+# k-omega SST adds the hoop strain to S^2.
 
 import numpy as np
-import scipy.sparse.linalg as spla
 
 import jax
 jax.config.update("jax_enable_x64", True)
@@ -38,8 +37,6 @@ import jax.numpy as jnp
 from Source.Physics.Physics import physics
 from Source.Physics.Rheology import ViscosityLaw
 from Source.Primals.Scalar import scalarField
-from Source.Simulation.Discretization import Discretization
-from Source.Simulation.DofLayout import DofLayout, FieldSpec
 from Source.Simulation.PointwiseLaw import PointwiseLaw, cached_law
 import Source.Simulation.Operators as ops
 from Source.enums import ShapeFunctionType
@@ -53,24 +50,25 @@ CT3, CV2, CV3, CN1 = 1.2, 0.7, 0.9, 16.0
 
 def wall_distance(mesh, walls):
 
-    """Nodal distance to the walls (list of boundary edges) by Spalding's Poisson approximation, on the plane mesh."""
+    """Nodal distance to the walls (list of boundary edges): the minimum over their straight segments, in the plane of
+    the mesh. Exact for straight walls; on a curved wall the error is that of its chords, O(h^2)."""
 
-    disc = Discretization(mesh)
-    layout = DofLayout([FieldSpec('phi')], disc.n_nodes)
-    rows = layout.element_dofs(disc.conn, 'phi')
-    K = layout.scatter_matrix(ops.diffusion(disc, 1.0), rows, rows).tolil()
-    b = layout.scatter_vector(ops.source(disc, 1.0), rows)
+    xy = np.array([node.coor[:2] for node in mesh.NL], dtype=float)
 
-    wall_nodes = np.unique(np.ravel(walls))
-    for k in wall_nodes:
-        K.rows[k], K.data[k] = [k], [1.0]
-        b[k] = 0.0
+    # An edge of three nodes gives two segments, which follow a curved wall more closely
+    a = np.array([xy[edge[i]] for edge in walls for i in range(len(edge) - 1)])
+    b = np.array([xy[edge[i + 1]] for edge in walls for i in range(len(edge) - 1)])
+    t = b - a
+    length2 = np.sum(t * t, axis=1)
 
-    phi = spla.spsolve(K.tocsr(), b)
-    # nodal gradient by patch recovery (second order also on the boundary, unlike a lumped projection)
-    grad = np.linalg.norm(disc.recovery() @ disc.gradient(phi).reshape(-1, disc.dim), axis=1)
-    d = np.sqrt(grad ** 2 + 2.0 * np.maximum(phi, 0.0)) - grad
-    d[wall_nodes] = 0.0
+    d = np.zeros(len(xy))
+    for start in range(0, len(xy), 2000):                    # by blocks: nodes x segments can be large
+        points = xy[start:start + 2000]
+        s = np.clip(np.einsum('nsa,sa->ns', points[:, None, :] - a[None], t) / length2, 0.0, 1.0)
+        gaps = points[:, None, :] - (a[None] + s[..., None] * t[None])
+        d[start:start + 2000] = np.sqrt(np.min(np.sum(gaps * gaps, axis=-1), axis=1))
+
+    d[np.unique(np.ravel(walls))] = 0.0
 
     return d
 
@@ -163,8 +161,6 @@ class sa(physics):
         self.C_const = 1.0
         self.M_const = 1.0
 
-        if getattr(model, 'axisymmetric', False):
-            raise NotImplementedError("Spalart-Allmaras solo esta implementado en 2D plano.")
 
     # ----- setup -----
 
@@ -278,11 +274,12 @@ class SSTViscosity(ViscosityLaw):
         return self.mu + self.rho * _sst_nut(kp, wp, strain, jnp.tanh(arg2 ** 2))
 
 
-def sst_law(nu):
+def sst_law(nu, axisymmetric=False):
 
     """Pointwise law of the k and ln(omega) equations for GradientLawTerm.
 
-    Inputs: k, grad k (2), g = ln(omega), grad g (2), u (2), grad u (4, row by row), d, grad d (2).
+    Inputs: k, grad k (2), g = ln(omega), grad g (2), u (2), grad u (4, row by row), d, grad d (2); axisymmetric: also r,
+    for the hoop strain u_r / r in S^2. The scalars need no other change: the measure of GradientLawTerm carries r.
     Outputs: for k and for g a source s (tested by N) and a flux F (2, tested by grad N), the residual being
     integral N s + grad N . F (convection is a separate term).
     """
@@ -295,6 +292,8 @@ def sst_law(nu):
         kp, wp, f1, f2, cross = _sst_functions(k, g, g_k, g_g, d, nu)
         E = 0.5 * (G + G.T)
         s2 = 2.0 * jnp.sum(E * E)                                   # S^2
+        if axisymmetric:
+            s2 = s2 + 2.0 * (w[6] / w[15]) ** 2                     # hoop strain: w[6] = u_r, w[15] = r
         nut = _sst_nut(kp, wp, jnp.sqrt(s2 + _EPS), f2)
 
         sigma_k = f1 * SK1 + (1.0 - f1) * SK2
@@ -340,8 +339,6 @@ class sst(physics):
         self.C_const = 1.0
         self.M_const = 1.0
 
-        if getattr(model, 'axisymmetric', False):
-            raise NotImplementedError("k-omega SST solo esta implementado en 2D plano.")
 
     def setWalls(self, edges):
 
@@ -395,6 +392,8 @@ class sst(physics):
         G = disc.gradient(np.asarray(model.physics.var['u'].values, dtype=float))
         E = 0.5 * (G + np.swapaxes(G, -1, -2))
         g2 = 2.0 * np.einsum('egab,egab->eg', E, E)
+        if disc.axisymmetric:
+            g2 = g2 + 2.0 * (disc.interpolate(np.asarray(model.physics.var['u'].values, dtype=float))[..., 0] / disc.radius) ** 2
         values = [disc.interpolate(np.asarray(self.var[n].values, dtype=float)) for n in ('k', 'ln_omega', 'wall_distance')]
         law = SSTViscosity(self.mu, self.rho)
         mu_eff = np.asarray(jax.vmap(law)(jnp.asarray(g2.ravel()), *[jnp.asarray(v.ravel()) for v in values]))
@@ -422,5 +421,7 @@ class sst(physics):
             system.add_mass(layout.scatter_matrix(ops.mass(disc, self.M_const), rows, rows))
             self.add_convection(system, layout, disc, name, k=self.nu)
 
-        law = cached_law(('k-omega-sst', self.nu), lambda: PointwiseLaw(sst_law(self.nu)))
-        system.add_gradient_law(law, ['k', 'ln_omega', 'u', 'wall_distance'], ['k', 'ln_omega'])
+        axisymmetric = disc.axisymmetric
+        law = cached_law(('k-omega-sst', self.nu, axisymmetric), lambda: PointwiseLaw(sst_law(self.nu, axisymmetric)))
+        system.add_gradient_law(law, ['k', 'ln_omega', 'u', 'wall_distance'], ['k', 'ln_omega'],
+                                gauss_inputs=disc.radius[..., None] if axisymmetric else None)

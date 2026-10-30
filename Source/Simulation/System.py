@@ -156,12 +156,13 @@ class GradientLawTerm:
     law's automatic derivatives with respect to every value and gradient, so it couples outputs and inputs.
     """
 
-    def __init__(self, system, law, inputs, outputs, sign=1.0):
+    def __init__(self, system, law, inputs, outputs, sign=1.0, gauss_inputs=None):
         self.system = system
         self.law = law
         self.inputs = inputs
         self.outputs = outputs
         self.sign = sign
+        self.gauss_inputs = gauss_inputs      # known data at the Gauss points (nel, ngp, k), appended to the law's input
         self._basis = {}
 
     def _W(self, nc):
@@ -194,11 +195,14 @@ class GradientLawTerm:
         fields = layout.split(x)
         U = np.concatenate([np.einsum('egjck,ejc->egk', self._W(nc), fields[name][disc.conn].reshape(nel, nne, nc))
                             for name, nc, _ in inputs], axis=-1)
+        if self.gauss_inputs is not None:
+            U = np.concatenate([U, self.gauss_inputs], axis=-1)
+        n_law = U.shape[-1]
 
         if tangent:
-            values, derivatives = self.law(U.reshape(-1, n_in))
+            values, derivatives = self.law(U.reshape(-1, n_law))
         else:
-            values = self.law.values(U.reshape(-1, n_in))
+            values = self.law.values(U.reshape(-1, n_law))
 
         if values.shape[1] != n_out:
             raise ValueError(f"La ley devuelve {values.shape[1]} valores por punto; se esperaban {n_out} "
@@ -214,7 +218,7 @@ class GradientLawTerm:
                 R += layout.scatter_vector(Re.reshape(nel, -1), layout.element_dofs(disc.conn, out))
             return R, None
 
-        derivatives = derivatives.reshape(nel, ngp, n_out, n_in)
+        derivatives = derivatives.reshape(nel, ngp, n_out, n_law)[..., :n_in]
         J = sp.csr_matrix((layout.ndof, layout.ndof))
 
         for out, nc_o, so in outputs:
@@ -311,6 +315,27 @@ class System:
         # Field restricted to the linear subspace of a quadratic mesh (restrict_to_linear_subspace)
         self._restriction = None
         self._subspace_rows = None
+
+        # Boundary conditions multiplied by f(t) in transient studies: (dofs, values at f = 1, f) and (vector at f = 1, f)
+        self._timed_dirichlet = []
+        self._timed_vectors = []
+        self._timed_factors = []
+
+    @property
+    def time_dependent(self):
+        return bool(self._timed_dirichlet or self._timed_vectors)
+
+    def set_time(self, t):
+
+        """Evaluates the boundary conditions with a time function at t. Steady studies never call it: they see f = 1."""
+
+        for dofs, values, f in self._timed_dirichlet:
+            self.dirichlet_value[dofs] = values * float(f(t))
+
+        for k, (vector, f) in enumerate(self._timed_vectors):
+            factor = float(f(t))
+            self._b = self._b + (factor - self._timed_factors[k]) * vector
+            self._timed_factors[k] = factor
 
     def restrict_to_linear_subspace(self, field):
 
@@ -447,14 +472,15 @@ class System:
 
         self._terms.append(DiffusionLawTerm(self, law, field, list(inputs) if inputs else [field]))
 
-    def add_gradient_law(self, law, inputs, outputs, sign=1.0):
+    def add_gradient_law(self, law, inputs, outputs, sign=1.0, gauss_inputs=None):
 
         """Weak residual sign * integral (N s + grad(N) . F) with s, F a law of the values and gradients of the inputs.
 
-        See GradientLawTerm for how the law's inputs and outputs are packed.
+        See GradientLawTerm for how the law's inputs and outputs are packed. gauss_inputs: known data at the Gauss points
+        (nel, ngp, k), such as the radius, appended to the law's input.
         """
 
-        self._terms.append(GradientLawTerm(self, law, list(inputs), list(outputs), sign))
+        self._terms.append(GradientLawTerm(self, law, list(inputs), list(outputs), sign, gauss_inputs))
 
     def add_term(self, term):
 
@@ -538,14 +564,19 @@ class System:
                     dofs = layout.node_dofs(field, node.id)
                     if len(dofs) == 1:
                         self.set_dirichlet(dofs[0], bc['value'])
+                        fixed = [(dofs[0], bc['value'])]
                     else:
                         values = list(bc['value'])
                         if len(values) != len(dofs):
                             raise ValueError(f"El campo '{field}' tiene {len(dofs)} componentes y la condicion "
                                              f"del nodo {node.id} da {len(values)}.")
-                        for dof, value in zip(dofs, values):
-                            if value is not None:
-                                self.set_dirichlet(dof, value)
+                        fixed = [(dof, value) for dof, value in zip(dofs, values) if value is not None]
+                        for dof, value in fixed:
+                            self.set_dirichlet(dof, value)
+
+                    if bc.get('time') is not None:
+                        self._timed_dirichlet.append((np.array([d for d, _ in fixed], dtype=int),
+                                                      np.array([v for _, v in fixed], dtype=float), bc['time']))
 
                 elif disc.dim != 1:
                     raise ValueError("En 2D y 3D las BC Newton y Neumann se asignan a aristas o caras (addBC_*Edges).")
@@ -559,6 +590,7 @@ class System:
         for entry in entries:
 
             facets = disc.facets(entry['facets'])
+            before = self._b
 
             if entry['type'] == 'Newton':
                 self.add_robin(entry['field'], facets, entry['h'], entry['var_ext'])
@@ -570,6 +602,10 @@ class System:
                 self.add_normal_pressure(entry['field'], facets, entry['pressure'])
             else:
                 raise ValueError(f"Tipo de condicion de contorno desconocido: {entry['type']!r}.")
+
+            if entry.get('time') is not None:
+                self._timed_vectors.append((self._b - before, entry['time']))
+                self._timed_factors.append(1.0)
 
     # ----- what the solvers use -----
 

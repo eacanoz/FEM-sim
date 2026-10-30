@@ -88,6 +88,16 @@ class CoupledPhysics(physics):
 
         return merged
 
+    def setBCTime(self, field, edges, f):
+
+        """physics.setBCTime on the part that owns the field."""
+
+        for part in self.parts.values():
+            if field in part.var:
+                return part.setBCTime(field, edges, f)
+
+        raise KeyError(f"La variable '{field}' no existe en ninguna fisica del modelo.")
+
     def setVelocity(self, v):
 
         """One velocity for every transported part: they all convect with the same field. A flow physics (whose

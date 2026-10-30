@@ -134,6 +134,15 @@ es singular para un fluido que adelgaza.
 | Condiciones de contorno dependientes del tiempo | Arranques de bomba, pulsos de entrada |
 | Solvers iterativos con precondicionador de bloques (punto de silla) | Mallas de 10⁵–10⁶ incógnitas (hoy PARDISO directo) |
 
+**Estado: hecho** (`Test/test_time_and_scale.py`). Decisiones frente a lo previsto:
+
+- Distancia a la pared: la geométrica mínima en lugar de eikonal o p-Poisson. Es exacta en paredes rectas y más simple.
+- Términos de aro: no hicieron falta en `GradientLawTerm` para SA ni para los escalares, porque la medida ya lleva r. Solo SST
+  necesita la deformación de aro en S² (`gauss_inputs`).
+- Crank–Nicolson: el término O(dt) no era de la PSPG, sino del instante al que pertenece la presión implícita.
+- Paso adaptativo: añadido `adaptiveMaxStep`, porque el control se saltaba un pulso corto.
+- Corregido de paso: el criterio de parada de Newton en transitorio, que por redondeo acortaba el paso sin fin.
+
 ## Prioridad 6: deseable / nuevas capacidades
 
 - **Viscoelástico (Oldroyd-B, Giesekus)**: muy relevante para polímeros (pérdida de entrada de Bagley, hinchamiento

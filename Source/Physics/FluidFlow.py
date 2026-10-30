@@ -298,6 +298,26 @@ class ff(physics):
 
         system.add_term(FlowTerm(system, self, f, V, Q))
 
+    def schur_diagonal(self, system, x):
+
+        """Lumped pressure mass matrix over the viscosity at the state x, per node: integral phi_i / mu, with phi_i the
+        pressure basis. 1 at the non-vertex nodes of Taylor-Hood, whose rows are a relation with the vertices."""
+
+        disc, layout = system.disc, system.layout
+
+        term = next((t for t in system._terms if isinstance(t, FlowTerm)), None)
+        mu = ops.at_gauss(disc, self.mu) if term is None else term.viscosity(x, False)[0]
+
+        rows = layout.element_dofs(disc.conn, 'p')
+        dofs = layout.dofs('p')[:, 0]
+        mass = layout.scatter_vector(np.einsum('eg,gi,eg->ei', disc.detJw, disc.N, 1.0 / mu), rows)
+
+        if system._restriction is None:
+            return mass[dofs]
+
+        mass = system._restrict(mass)[dofs]
+        return np.where(mass > 0.0, mass, 1.0)
+
     def _pressure_level_set(self, model):
 
         """True if a traction, an outlet or a Dirichlet pressure fixes the level of the pressure."""
@@ -394,6 +414,8 @@ class ff(physics):
                 merged[c] = float(v)
 
         node.BC['u'] = self.setDirichletBC(merged)
+        if old and old.get('time') is not None:
+            node.BC['u']['time'] = old['time']                 # a time function (setBCTime) stays
 
     def _edge_nodes(self, edges):
         return sorted({int(n) for edge in edges for n in edge})

@@ -33,6 +33,7 @@ class IterativeSolvers(Enum):
     GMRES = 'Generalized Minimal Residual'
 
 class Preconditioners(Enum):
+    SaddlePoint = 'Block preconditioner of the velocity-pressure system'
     iLU = 'iLU Factorization'
     Jacobi = 'Jacobi (diagonal)'
     AMG = 'Algebraic multigrid (pyamg)'

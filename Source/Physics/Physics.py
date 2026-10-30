@@ -167,6 +167,30 @@ class physics:
 
     # Boundary conditions
 
+    def setBCTime(self, field, edges, f):
+
+        """Multiplies by f(t) the conditions of `field` already set on the edges, in transient studies: fixed values on
+        their nodes and tractions, pressures or fluxes given on those same edges (ramps, pulses, a pump starting up).
+        Steady studies ignore it (f = 1). A nonlinear flux (a function of the field) is not scaled."""
+
+        edges = list(edges)
+        found = False
+
+        for bc in self.facet_bcs:
+            if bc.get('field') == field and list(bc['facets']) == edges:
+                bc['time'] = f
+                found = True
+
+        nodes = self.modelRef._mesh.NL
+        for node_id in {int(n) for edge in edges for n in edge}:
+            bc = nodes[node_id].BC.get(field) if nodes[node_id].BC else None
+            if bc and bc.get('type') == 'Dirichlet':
+                bc['time'] = f
+                found = True
+
+        if not found:
+            raise ValueError(f"Las aristas no tienen ninguna condicion del campo '{field}': defina la condicion primero.")
+
     def setDirichletBC(self, val):
 
         """

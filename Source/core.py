@@ -157,7 +157,8 @@ class Model(object):
 
     def solverConfiguration(self, Study=StudyType.steady_state, Type=ProblemType.linear, Method=SolverType.direct, Solver = DirectSolvers.PARDISO, 
                             timeDisc = 1, timeStep=0.05, totalTime = 3, prec = Preconditioners.iLU, tol = 1e-10, maxiter = None,
-                            timeScheme='theta', globalization='newton', cfl0=10.0, relaxation=None, reuseTangent=True):
+                            timeScheme='theta', globalization='newton', cfl0=10.0, relaxation=None, reuseTangent=True, adaptiveTol=None,
+                            adaptiveMaxStep=None):
 
         """Configures the solver for the model based on the provided options.
 
@@ -165,6 +166,9 @@ class Model(object):
         (second order and L-stable: no oscillating algebraic variables such as the pressure; the first step is
         implicit Euler). Systems with nonlinear terms iterate Newton inside every step, with a modified Newton that keeps
         the tangent and its factorization while the residual falls fast (reuseTangent=False rebuilds it every iteration).
+        adaptiveTol (BDF2): adaptive time steps with that local error per step, relative to each field, for example 1e-3;
+        timeStep is then the first step, to be chosen small, and timeVector has variable spacing. adaptiveMaxStep limits dt:
+        the control only sees what has happened, so a long step can jump over a pulse of a time function that has not started.
 
         Steady nonlinear studies: globalization 'newton' (line search) or 'pseudo-transient' (local pseudo-time step with
         a CFL that starts at cfl0 and grows as the residual falls, for hard problems or poor initial guesses; it reaches
@@ -172,6 +176,9 @@ class Model(object):
 
         if timeScheme not in ('theta', 'BDF2'):
             raise ValueError(f"Esquema temporal desconocido: {timeScheme!r} (use 'theta' o 'BDF2').")
+
+        if adaptiveTol is not None and timeScheme != 'BDF2':
+            raise ValueError("El paso adaptativo necesita timeScheme='BDF2'.")
 
         if globalization not in ('newton', 'pseudo-transient'):
             raise ValueError(f"Globalizacion desconocida: {globalization!r} (use 'newton' o 'pseudo-transient').")
@@ -191,7 +198,9 @@ class Model(object):
             'Globalization': globalization,
             'CFL0': cfl0,
             'Relaxation': relaxation,
-            'Reuse Tangent': reuseTangent
+            'Reuse Tangent': reuseTangent,
+            'Adaptive Tolerance': adaptiveTol,
+            'Adaptive Max Step': adaptiveMaxStep
         }
 
 
@@ -238,6 +247,7 @@ class Model(object):
         self.nonlinear_converged = getattr(solver, 'nonlinear_converged', None)   # steady nonlinear solves
         self.step_iterations = getattr(solver, 'step_iterations', None)       # Newton iterations of each time step
         self.tangent_assemblies = getattr(solver, 'tangent_assemblies', None) # tangents built in a nonlinear transient
+        self.rejected_steps = getattr(solver, 'rejected_steps', None)         # steps repeated by the adaptive control
 
         if self.solverOptions['Study'] == StudyType.steady_state:
             self.sol.update(self.physics.derived_fields(self))

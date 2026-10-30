@@ -95,7 +95,7 @@
 | Ley de potencia en tubo (n = 0.5) | perfil analítico y caudal | `Test/test_axisymmetric.py` | orden 2.03 |
 | Jacobiano axisimétrico acoplado | Carreau + Arrhenius, inercia, PSPG con términos de aro, calentamiento, convección del calor | `Test/test_axisymmetric.py` | 1e-7 relativo |
 | Reómetro capilar (ejemplo) | viscosidad "medida" (Rabinowitsch) frente a la ley Cross del modelo | `Example_Capillary_Rheometer.py` | 0.3–1.1 % (2.2 % en el extremo, n' unilateral) |
-| Taylor–Green (Re = 10 en [0, π]², paredes deslizantes) | solución exacta; error temporal frente a una referencia de paso fino en la misma malla | `Test/test_transient_flow.py` | u 3e-4, p 1e-3 (24×24); Euler orden 1.0, BDF2 orden 2.0; Crank–Nicolson 3 a 12 veces más preciso que BDF2 pero de orden 1 asintótico |
+| Taylor–Green (Re = 10 en [0, π]², paredes deslizantes) | solución exacta; error temporal frente a una referencia de paso fino en la misma malla | `Test/test_transient_flow.py` | u 3e-4, p 1e-3 (24×24); Euler orden 1.0, BDF2 orden 2.0; Crank–Nicolson orden 2 en u y, referida a t_{n+1}, también en p (`Test/test_time_and_scale.py`) |
 | Arranque entre placas con inercia | serie de Fourier; presión monótona (sin oscilación), igual en CN y BDF2 | `Test/test_transient_flow.py` | u 1e-3 relativo |
 | Límite estacionario | cavidad Re = 10 con Carreau: final del transitorio BDF2 = solución estacionaria de Newton | `Test/test_transient_flow.py` | 1e-10 |
 | Tangente transitoria | flujo + calor con el contexto de paso frente a diferencias finitas | `Test/test_transient_flow.py` | 1e-7 relativo |
@@ -107,7 +107,7 @@
 | Especies en el flujo calculado | Le = 1: especie = temperatura; flotación solutal = térmica | `Test/test_buoyancy.py` | 1e-8 |
 | Tangente con flotación | térmica y solutal, Carreau, inercia, calor y especie con SUPG, estacionario y paso de Crank–Nicolson | `Test/test_buoyancy.py` | 1e-7 relativo |
 | Flujo de calor por reacciones | pared plana: k ΔT / L | `Test/test_buoyancy.py` | 1e-12 |
-| Distancia a la pared | placas paralelas; cilindro (convexo) | `Test/test_turbulence.py` | Q4 exacta (1e-12), T3 O(h) solo donde ∇φ = 0; cilindro: sobreestima ≈ d/(2R), independiente de la malla |
+| Distancia a la pared | placas paralelas; pared que termina; cilindro (convexo) | `Test/test_time_and_scale.py`, `Test/test_turbulence.py` | exacta en paredes rectas (1e-13); cilindro: error de las cuerdas, 9.6e-4 (T3) y 2.4e-4 (T6) con h = 0.04 |
 | Canal turbulento (Spalart–Allmaras) | Re_τ = 180, 395 (prueba) y 590 (ejemplo): u⁺ = y⁺, ley de pared de Reichardt, U_c⁺ de la DNS de Moser, Kim y Mansour (1999), C_f de Dean | `Test/test_turbulence.py`, `Example_Turbulent_Channel.py` | subcapa < 2 %; ley de pared < 7 %; U_c⁺ +1.0 %, −0.4 %, −2.3 %; C_f −4 a −6 %; independiente de la malla; Newton 12–17 |
 | Límite laminar | sin turbulencia de entrada SA no produce ν̃: Poiseuille | `Test/test_turbulence.py` | ν̃ = 0 (1e-12) |
 | Tangente con SA | u, p, ν̃ de ambos signos y la viscosidad turbulenta, frente a diferencias finitas | `Test/test_turbulence.py` | 1e-6 relativo |
@@ -130,6 +130,10 @@
 | Dados: contracción plana 4:1 | corrección de Couette y caída con Cross; igual orden frente a Taylor–Hood | `Test/test_taylor_hood.py` (newtoniano); Cross a mano | C ≈ 0.374: Q2 con 7 455 incógnitas, 0.3737; T3 con 397 545, 0.3754. Cross: Q2 con 26 649 (7.6 s), 11.738 bar; T3 con 397 545 (281 s), 11.739 bar (convergido 11.737) |
 | Dados: reómetro capilar (Cross, axisimétrico) | viscosidad recuperada y pérdida de entrada, 5 caudales | a mano | Q2 con 6 198 (4.7 s) iguala a T3 con 74 793 (88 s): caída 61.38 frente a 61.37 bar; pérdida de entrada 2.51 y 2.50 bar |
 | Dados: rendija (Cross–WLF, calentamiento) | gradiente desarrollado frente al exacto; temperatura; caída total | a mano | gradiente: Q2 con 15 939, 0.0001 %; Q4 con 62 595, 0.0044 %. T de mezcla igual (230.284 °C). **Caída total: Q4 mejor**: Q4 estable en 9.7426 bar; Q2 aún sube lentamente (9.7355 con 248 067), por la entrada |
+| Condiciones de contorno en el tiempo | pared oscilante (solución exacta), pulso de presión (Womersley), rampa de temperatura | `Test/test_time_and_scale.py` | orden 2 con BDF2 y Crank–Nicolson; rampa exacta (1e-11) |
+| Paso adaptativo (BDF2) | arranque de una pared frente a la serie de Fourier; pulso | `Test/test_time_and_scale.py` | pasos ∝ tol^(−1/3) (39, 67, 126, 251); con 67 pasos, el error en t = 0.05 de 400 pasos fijos |
+| Tubería turbulenta (axisimétrico) | factor de fricción frente a la ley de Prandtl, Re_τ = 360 y 1000 | `Test/test_time_and_scale.py` | SA +1.9 % y +2.1 %; SST +6.1 % y +3.3 %; tangente de SST 1e-6 |
+| Precondicionador de bloques (GMRES) | Stokes en cavidad, Q2/Q1 y P2/P1; Carreau con viscosidad que varía 100 veces | `Test/test_time_and_scale.py` | 68, 73, 83, 92, 100 iteraciones de 3 267 a 789 507 incógnitas; misma solución que PARDISO (u 2e-9, p 8e-6) |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -239,12 +243,16 @@ Lo que sigue pendiente:
   domina la elasticidad del fundido (viscoelástico, Etapa 17 opcional).
 
 ### Fluidos (Etapa 14, transitorio)
-- **Esquema recomendado para flujo: BDF2** (orden 2 limpio, L-estable). Crank–Nicolson es estable (presión implícita,
-  sin oscilaciones) y muy preciso a pasos prácticos, pero conserva un término de primer orden de coeficiente pequeño
-  cuyo origen no se ha aislado. Euler implícito: orden 1.
+- **Esquema recomendado para flujo: BDF2** (L-estable, y el único con paso adaptativo). Crank–Nicolson es de orden 2 y más
+  preciso a igual paso, pero no amortigua los modos rígidos. El término de orden 1 que quedaba en su presión no era de la
+  PSPG: la presión implícita del paso pertenece a t_n + θ dt. La historia ya la da en t_{n+1}; el primer paso no se corrige.
+  Euler implícito: orden 1.
 - La presión del arranque desde el reposo tiene un pequeño error espacial de la PSPG (curvatura grande cerca de las
   paredes) que decae con el tiempo.
-- Paso fijo (sin control adaptativo). Condiciones de contorno independientes del tiempo.
+- Paso adaptativo solo con BDF2 (`adaptiveTol`). No prevé lo que aún no ha ocurrido: **un paso largo puede saltarse un pulso
+  que no ha empezado**, así que con pulsos hay que fijar `adaptiveMaxStep`. El primer paso es `timeStep`: debe ser pequeño.
+- Condiciones en el tiempo (`setBCTime(campo, aristas, f)`): multiplican valores fijos, tracciones, presiones y flujos dados
+  por f(t). No alcanzan a los flujos no lineales, y los estudios estacionarios las ignoran (f = 1).
 - Coste: con Newton modificado la tangente se reconstruye pocas veces (×1.8 a ×3.5 en transitorio; cilindro con 2926 nodos
   y 800 pasos: 6.7 min). Cada paso hace más iteraciones (10 de media frente a 4), pero mucho más baratas. No acelera los
   estudios estacionarios.
@@ -260,8 +268,8 @@ Lo que sigue pendiente:
 
 ### Fluidos (Etapa 16a, turbulencia)
 - Spalart–Allmaras sin el término de transición `f_t2` y sin funciones de pared: el primer nodo debe quedar en y⁺ ≲ 1.
-- La distancia de Spalding sobreestima la distancia a paredes convexas en ≈ d/(2R) (eikonal o p-Poisson en la Etapa 17).
-- Solo 2D plano (`GradientLawTerm` no tiene los términos de aro del axisimétrico).
+- La distancia a la pared es la geométrica mínima a los segmentos, no una ecuación. Cuesta nodos × segmentos, y no tiene en
+  cuenta la visibilidad (atraviesa obstáculos, como en casi todos los códigos RANS).
 - Newton directo converge en el canal, incluso desde un estado uniforme (escalado por campo). Falta probar SA en flujos con
   separación; para ellos está `globalization='pseudo-transient'`.
 - k-ω SST (`sst`): incógnitas k y `ln_omega` (ω queda en `model.sol['omega']`). **Validado solo en el canal**, y solo con
@@ -274,7 +282,7 @@ Lo que sigue pendiente:
 - k-ω SST en transitorio desde un estado aproximado puede divergir (canal Re_τ = 395, BDF2, dt = 0.02, con Newton completo y
   modificado por igual): la simulación se detiene con aviso. Conviene partir de la solución estacionaria.
 - k-ω SST: arrancar con k muy pequeño puede tardar (canal desde estado uniforme: 126 iteraciones frente a 9) y el flujo
-  laminar es solución del modelo. Solo 2D plano. El escalón de Driver–Seegmiller no se ha probado.
+  laminar es solución del modelo. El escalón de Driver–Seegmiller no se ha probado.
 
 ### Física y numérica
 - **Convección:** diferencias centradas sin estabilización. Para Pe alto habrá oscilaciones. `Pe` se calcula pero no se
@@ -308,8 +316,10 @@ Lo que sigue pendiente:
   newtoniana con adelgazamiento) la presión en la propia entrada es singular y Q2 la converge más despacio que Q4: conviene
   medir la caída entre secciones alejadas de la entrada, o alargar el tramo. Newton para además en el piso de redondeo:
   en Taylor–Hood el residuo relativo se queda en ~1e-9 y antes giraba hasta 200 iteraciones.
-- **Taylor–Hood, sin validar:** solvers iterativos (filas de presión con diagonal nula; solo se ha probado PARDISO),
-  turbulencia (SA, SST) y especies en Q9/T6, y flujo con Re alto y capas sin resolver (sin SUPG). El SUPG del calor deja fuera
+- **Solver grande:** GMRES con `Preconditioners.SaddlePoint` resuelve 3.15 millones de incógnitas en 276 s (110 iteraciones),
+  donde PARDISO se queda sin memoria. Hasta unas 800 000, PARDISO es más rápido (28.6 s frente a 46.9 s). Solo flujo sin otros
+  campos y solo probado en Stokes y Carreau, sin inercia. Con igual orden no se ha probado.
+- **Taylor–Hood, sin validar:** turbulencia (SA, SST) y especies en Q9/T6, y flujo con Re alto y capas sin resolver (sin SUPG). El SUPG del calor deja fuera
   la difusión, que en elementos cuadráticos no se anula. Los ejemplos que dibujan con `mtri.Triangulation` esperan T3.
 - Mallas de gmsh: `Mesh.read_msh` / `Mesh.from_gmsh_model` admiten un solo tipo de elemento 2D (T3 o Q4); las mallas mixtas se rechazan.
   Los bordes son rectos (sin elementos curvos), de modo que los arcos se aproximan por polígonos (error geométrico O(h²)).
@@ -377,7 +387,7 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
    factorización reutilizada (transitorio lineal y `solve()` repetidos), exportación VTK/PVD. Pendiente: XDMF/HDF5, VTK binario,
    iterativo para sistemas con convección fuerte o varios campos acoplados (AMG por bloques).
 6. ~~**Estabilización de convección.**~~ Hecha (SUPG en 1D y 2D).
-7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 a 15 y 16a (Spalart–Allmaras) hechas; en curso, la Etapa 17 ([PLAN_ETAPA17.md](PLAN_ETAPA17.md)): Prioridades 1 a 4 hechas, salvo k-ω SST en placa plana.
+7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 a 15 y 16a (Spalart–Allmaras) hechas; en curso, la Etapa 17 ([PLAN_ETAPA17.md](PLAN_ETAPA17.md)): Prioridades 1 a 5 hechas, salvo k-ω SST en placa plana.
 
 ## 5. Criterio para cerrar una etapa
 
