@@ -277,7 +277,7 @@ class Model(object):
         triangles = []
         for element in self._mesh.EL:
             ids = element.getNodesId()
-            triangles += [ids] if len(ids) == 3 else [[ids[0], ids[1], ids[2]], [ids[0], ids[2], ids[3]]]
+            triangles += [ids[:3]] if len(ids) in (3, 6) else [[ids[0], ids[1], ids[2]], [ids[0], ids[2], ids[3]]]
 
         triang = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles)
 

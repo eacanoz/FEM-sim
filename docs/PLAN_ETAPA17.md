@@ -110,6 +110,15 @@ Requiere elementos `tri6` / `quad9` en `Source/Pre_processing/Elements.py`, mall
 orden 2) y un `DofLayout` con nodos distintos por campo (hoy todos los campos viven en los mismos nodos). Es la mejora
 de mayor calidad para el foco de polímeros (caída de presión en dados y reómetros), pero no ayuda a SST.
 
+**Estado: hecho** (`Test/test_taylor_hood.py`). Decisiones frente a lo previsto:
+
+- **Sin `DofLayout` por campo.** La presión sigue en todos los nodos, con los no vértices atados a los vértices y las filas
+  condensadas con `T^T`: es Taylor–Hood genuino sin tocar cada física y cada salida.
+- **Corrientes espurias: la expectativa estaba mal.** Una presión lineal no equilibra una flotación lineal. El reposo a
+  redondeo solo aparece en mallas uniformes, por cancelación entre elementos; en malla graduada quedan corrientes de orden 3.
+- LSIC se conserva por robustez a Re alto, aunque en P2/P1 empeora algo la presión en mallas gruesas.
+- La presión en dados y reómetros reales (contracción, Cross–WLF) no se ha comparado todavía.
+
 ## Prioridad 5: mejoras puntuales de impacto medio
 
 | Mejora | Por qué |

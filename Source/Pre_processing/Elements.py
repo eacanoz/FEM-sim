@@ -2,7 +2,7 @@
 
 Each ReferenceElement knows its nodes on the reference domain, how to evaluate N and dN/dxi at
 points, a Gauss rule and the local node indices of its facets (the boundary entities: points for
-lines, edges for triangles and quadrilaterals, faces for hexahedra). Adding an element (tet4, hex8, quad9,
+lines, edges for triangles and quadrilaterals, faces for hexahedra). Adding an element (tet4, hex8,
 ...) means adding one entry to ELEMENTS; the discretization and the operators are generic in the
 dimension.
 
@@ -52,6 +52,10 @@ class ReferenceElement:
     facet_element: str         # name of the reference element of the facets
     _shape: Callable
     _quadrature: Callable
+    default_order: int = 2     # Gauss points per direction of the volume integrals
+    # Quadratic elements: each non-vertex node as a combination of the vertices, (node, ((vertex, weight), ...)). A nodal
+    # field that satisfies these relations is linear (bilinear) in the element: the pressure of Taylor-Hood.
+    linear_subspace: tuple = ()
 
     @property
     def n_nodes(self):
@@ -109,6 +113,22 @@ def _quad_quadrature(order):
     return np.stack([xi.ravel(), eta.ravel()], axis=1), np.outer(w, w).ravel()
 
 
+# ----- biquadratic quadrilateral -----
+
+QUAD9_NODES = np.array([[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0],
+                        [0.0, -1.0], [1.0, 0.0], [0.0, 1.0], [-1.0, 0.0], [0.0, 0.0]])
+_QUAD9_I = np.array([0, 2, 2, 0, 1, 2, 1, 0, 1])     # position of each node on the 1D nodes -1, 0, 1
+_QUAD9_J = np.array([0, 0, 2, 2, 0, 1, 2, 1, 1])
+
+
+def _quad9_shape(points):
+    Nx, dNx = lagrange_1d([-1.0, 0.0, 1.0], points[:, 0])
+    Ny, dNy = lagrange_1d([-1.0, 0.0, 1.0], points[:, 1])
+    N = Nx[:, _QUAD9_I] * Ny[:, _QUAD9_J]
+    dN = np.stack([dNx[:, _QUAD9_I] * Ny[:, _QUAD9_J], Nx[:, _QUAD9_I] * dNy[:, _QUAD9_J]], axis=-1)
+    return N, dN
+
+
 # ----- linear triangle -----
 
 TRI3_NODES = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
@@ -123,12 +143,34 @@ def _tri3_shape(points):
 
 def _tri_quadrature(order):
 
-    """Interior Gauss rule on the reference triangle (area 1/2): 1 point for order 1, 3 points (degree 2) otherwise."""
+    """Interior Gauss rule on the reference triangle (area 1/2): 1 point for order 1, 3 points (degree 2) for order 2,
+    7 points (degree 5, Radon) for a higher order."""
 
     if order <= 1:
         return np.array([[1.0 / 3.0, 1.0 / 3.0]]), np.array([0.5])
 
+    if order >= 3:
+        s = np.sqrt(15.0)
+        a, b = (6.0 - s) / 21.0, (6.0 + s) / 21.0
+        wa, wb = (155.0 - s) / 2400.0, (155.0 + s) / 2400.0
+        points = [[1 / 3, 1 / 3], [a, a], [1 - 2 * a, a], [a, 1 - 2 * a], [b, b], [1 - 2 * b, b], [b, 1 - 2 * b]]
+        return np.array(points), np.array([9.0 / 80.0, wa, wa, wa, wb, wb, wb])
+
     return np.array([[1 / 6, 1 / 6], [2 / 3, 1 / 6], [1 / 6, 2 / 3]]), np.full(3, 1.0 / 6.0)
+
+
+# ----- quadratic triangle -----
+
+TRI6_NODES = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [0.5, 0.0], [0.5, 0.5], [0.0, 0.5]])
+
+
+def _tri6_shape(points):
+    xi, eta = points[:, 0], points[:, 1]
+    L = 1.0 - xi - eta
+    N = np.stack([L * (2 * L - 1), xi * (2 * xi - 1), eta * (2 * eta - 1), 4 * L * xi, 4 * xi * eta, 4 * eta * L], axis=1)
+    dxi = np.stack([1 - 4 * L, 4 * xi - 1, 0 * xi, 4 * (L - xi), 4 * eta, -4 * eta], axis=1)
+    deta = np.stack([1 - 4 * L, 0 * xi, 4 * eta - 1, -4 * xi, 4 * xi, 4 * (L - eta)], axis=1)
+    return N, np.stack([dxi, deta], axis=-1)
 
 
 ELEMENTS = {
@@ -141,6 +183,13 @@ ELEMENTS = {
                              _tri3_shape, _tri_quadrature),
     'quad4': ReferenceElement('quad4', 2, Q4_NODES.copy(), ((0, 1), (1, 2), (2, 3), (3, 0)), 'line2',
                               _quad4_shape, _quad_quadrature),
+    'tri6': ReferenceElement('tri6', 2, TRI6_NODES.copy(), ((0, 3, 1), (1, 4, 2), (2, 5, 0)), 'line3',
+                             _tri6_shape, _tri_quadrature, default_order=3,
+                             linear_subspace=((3, ((0, 0.5), (1, 0.5))), (4, ((1, 0.5), (2, 0.5))), (5, ((2, 0.5), (0, 0.5))))),
+    'quad9': ReferenceElement('quad9', 2, QUAD9_NODES.copy(), ((0, 4, 1), (1, 5, 2), (2, 6, 3), (3, 7, 0)), 'line3',
+                              _quad9_shape, _quad_quadrature, default_order=3,
+                              linear_subspace=((4, ((0, 0.5), (1, 0.5))), (5, ((1, 0.5), (2, 0.5))), (6, ((2, 0.5), (3, 0.5))),
+                                               (7, ((3, 0.5), (0, 0.5))), (8, ((0, 0.25), (1, 0.25), (2, 0.25), (3, 0.25))))),
 }
 
 

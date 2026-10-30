@@ -13,7 +13,7 @@ from io import StringIO
 import numpy as np
 
 # VTK cell types
-VTK_CELL = {'line2': 3, 'tri3': 5, 'quad4': 9}
+VTK_CELL = {'line2': 3, 'tri3': 5, 'quad4': 9, 'tri6': 22, 'quad9': 28}
 
 
 def _array_xml(name, values, dtype, components=1):

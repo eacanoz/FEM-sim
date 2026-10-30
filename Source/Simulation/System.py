@@ -308,6 +308,59 @@ class System:
         self.is_dirichlet = np.zeros(n, dtype=bool)
         self.dirichlet_value = np.zeros(n)
 
+        # Field restricted to the linear subspace of a quadratic mesh (restrict_to_linear_subspace)
+        self._restriction = None
+        self._subspace_rows = None
+
+    def restrict_to_linear_subspace(self, field):
+
+        """Makes a scalar field linear (bilinear) in every element of a quadratic mesh: the pressure of Taylor-Hood.
+
+        The field stays on all the nodes, and the non-vertex ones follow their vertices, x_m = sum w_v x_v. That is the
+        space x = T x_v, so the test functions are T^T N: the row of a vertex gathers w_v times the rows of its
+        dependent nodes (self._restriction = T^T), whose own rows become the relation (self._subspace_rows).
+        """
+
+        disc, layout = self.disc, self.layout
+        dofs = layout.dofs(field)[:, 0]
+        n = layout.ndof
+
+        relations = {}
+        for conn in disc.conn:
+            for node, combination in disc.element.linear_subspace:
+                relations[int(conn[node])] = [(int(conn[v]), w) for v, w in combination]
+
+        dependent = np.array(sorted(relations), dtype=int)
+        keep = np.ones(n)
+        keep[dofs[dependent]] = 0.0
+
+        rows, cols, vals = [], [], []
+        for m, combination in relations.items():
+            for v, w in combination:
+                rows.append(dofs[v]), cols.append(dofs[m]), vals.append(w)
+
+        T_t = sp.coo_matrix((vals, (rows, cols)), shape=(n, n)).tocsr()
+        self._restriction = (sp.diags(keep) + T_t).tocsr()
+        self._subspace_rows = (sp.diags(1.0 - keep) - T_t.T).tocsr()
+
+    def _restrict(self, R, x=None):
+
+        """Applies the rows of restrict_to_linear_subspace to a residual at x, or to a right-hand side (x = None)."""
+
+        if self._restriction is None:
+            return R
+
+        R = self._restriction @ R
+
+        return R if x is None else R + self._subspace_rows @ x
+
+    def _restrict_matrix(self, J):
+
+        if self._restriction is None:
+            return J
+
+        return self._restriction @ J + self._subspace_rows
+
     def require_positive(self, dofs):
 
         """Marks dofs whose values must stay positive: the Newton updates clip them (clip_positive)."""
@@ -548,12 +601,15 @@ class System:
         else:
             A, b = self._A, self._b
 
+        A, b = self._restrict_matrix(A), self._restrict(b)
+
         return self._apply_dirichlet_matrix(A), np.where(self.is_dirichlet, self.dirichlet_value, b)
 
     def residual_and_tangent(self, x):
 
         J, R = self._assemble(x)
 
+        J, R = self._restrict_matrix(J), self._restrict(R, x)
         R = np.where(self.is_dirichlet, x - self.dirichlet_value, R)
 
         return self._apply_dirichlet_matrix(J), R
@@ -566,6 +622,8 @@ class System:
 
         for term in self._terms:
             R = R + term.contribution(x, tangent=False)[0]
+
+        R = self._restrict(R, x)
 
         return np.where(self.is_dirichlet, x - self.dirichlet_value, R)
 

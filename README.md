@@ -29,6 +29,7 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Base de fluidos (Etapa 9): campos vectoriales, operadores viscoso y divergencia, leyes con gradientes `f(u, ∇u)`, Dirichlet por componente, tracciones, VTK vectorial | Operativo: MMS vectorial de orden 2, jacobiano frente a diferencias finitas, ley de potencia en canal |
 | Flujo de Darcy (`darcy`): permeabilidad escalar, función o tensor, gravedad, fuente, almacenamiento; velocidad hacia la convección de `ht`/`mt` | Operativo, exacto en 1D y 2D, hidrostática, inyección |
 | Flujo reptante (Stokes, `ff`): velocidad y presión de igual orden (Q4/T3) con PSPG y esfuerzo viscoso recuperado; no deslizamiento, entrada, salida, simetría, tracción; transitorio | Operativo: Poiseuille nodalmente exacto (Q4), solución exacta (u orden 2, p orden 1–1.5), cavidad frente a la referencia, arranque frente a la serie de Fourier |
+| Taylor–Hood (Q2/Q1, P2/P1) en mallas cuadráticas (`generate2DMesh(..., order=2)`, `gmsh.model.mesh.setOrder(2)`) con `ff` | Operativo: u orden 3, p orden 2; Poiseuille y Hagen–Poiseuille exactos, también en el eje; Schäfer–Turek 2D-1 dentro de los rangos publicados; solo con solver directo |
 | Navier–Stokes estacionario (`ff.setInertia(True)`): convección con Newton o Picard, SUPG/PSPG/LSIC sobre el residuo completo | Operativo: Kovasznay (orden 2 en u y p), cavidad Re = 100 frente a Ghia et al., Newton en 5–7 iteraciones |
 | Fluidos no newtonianos (`ff.setViscosityLaw`): ley de potencia, Carreau–Yasuda, Cross, Cross–WLF, Bingham y Herschel–Bulkley regularizados, desplazamiento de Arrhenius | Operativo: perfiles analíticos de ley de potencia (orden 2) y Bingham (tapón), jacobiano exacto con dμ/dγ̇ y dμ/dT |
 | Acoplamiento flujo–calor (`Model(psc=[ff, ht])`, `setVelocity('u')`, `setViscousHeating`): convección por la velocidad calculada con SUPG, disipación viscosa, μ(T) | Operativo: Brinkman exacto, μ(T) en Couette, equivalencia con velocidad prescrita, jacobiano acoplado completo |
@@ -240,6 +241,7 @@ python Test/test_triangles_gmsh.py        # triángulos T3 y gmsh: parche, manuf
 python Test/test_convection_supg.py       # velocidad compartida y SUPG: exactitud 1D, 2D = 1D, manufacturada, transitorio (9)
 python Test/test_fluids_foundation.py     # Etapa 9: operadores vectoriales, leyes con gradientes, ley de potencia, Darcy (11)
 python Test/test_stokes.py                # Etapa 10: Stokes con PSPG: parche, Poiseuille, solución exacta, cavidad, simetría, arranque (8)
+python Test/test_taylor_hood.py           # Etapa 17: Taylor-Hood: elementos, soluciones exactas, Kovasznay, Ghia, Schafer-Turek, tangente (14)
 python Test/test_navier_stokes.py         # Etapa 11: Navier–Stokes: tangente, Kovasznay, cavidad frente a Ghia, canal, límite de Stokes, Picard (8)
 python Test/test_non_newtonian.py         # Etapa 12: leyes de viscosidad, ley de potencia, Bingham, Brinkman, μ(T), convección acoplada, jacobiano (8)
 python Test/test_axisymmetric.py          # Etapa 13: medidas r-z, conducción radial, Hagen–Poiseuille, extensión uniaxial, tubo de ley de potencia, jacobiano (6)

@@ -50,18 +50,18 @@ class Discretization:
     `area` keeps the plane measure (element sizes, recovery patches) and `hoop` = N / r gives the hoop strain
     u_r / r of vector fields."""
 
-    def __init__(self, mesh, order=2, axisymmetric=False):
+    def __init__(self, mesh, order=None, axisymmetric=False):
 
         self.element = ELEMENTS[element_type_of(mesh)]
         self.dim = self.element.dim
-        self.order = order
+        self.order = self.element.default_order if order is None else order
         self.n_nodes = mesh.getNoN()
         self.axisymmetric = bool(axisymmetric)
 
         self.conn = np.array([e.getNodesId() for e in mesh.EL], dtype=int)
         self.node_xy = np.array([node.coor[:self.dim] for node in mesh.NL], dtype=float)
 
-        points, weights = self.element.quadrature(order)
+        points, weights = self.element.quadrature(self.order)
         N, dN = self.element.shape(points)  # (ngp, nne), (ngp, nne, dim)
 
         coords = self.node_xy[self.conn]    # (nel, nne, dim)
@@ -132,10 +132,17 @@ class Discretization:
 
         v_i = sum_e integral(N_i v) / sum_e integral(N_i). Exact for fields that are constant on the
         mesh; a gradient of a linear field (Darcy velocity of a linear pressure) is recovered exactly.
+        Quadratic elements use the consistent mass matrix: integral(N_i) vanishes at the vertices of a T6.
         """
 
         values = np.asarray(values, dtype=float)
         tail = values.shape[2:]
+
+        if self.element.linear_subspace:
+            contrib = np.einsum('eg,gi,eg...->ei...', self.detJw, self.N, values)
+            rhs = np.zeros((self.n_nodes,) + tail)
+            np.add.at(rhs, self.conn.ravel(), contrib.reshape((-1,) + tail))
+            return self._mass_factorization().solve(rhs.reshape(self.n_nodes, -1)).reshape(rhs.shape)
 
         weights = np.zeros(self.n_nodes)
         np.add.at(weights, self.conn.ravel(), np.einsum('eg,gi->ei', self.detJw, self.N).ravel())
@@ -145,6 +152,23 @@ class Discretization:
         np.add.at(nodal, self.conn.ravel(), contrib.reshape((-1,) + tail))
 
         return nodal / weights.reshape((-1,) + (1,) * len(tail))
+
+    def _mass_factorization(self):
+
+        """Factorization of the consistent mass matrix, built once."""
+
+        if getattr(self, '_mass_lu', None) is None:
+            import scipy.sparse as sp
+            import scipy.sparse.linalg as spla
+
+            nne = self.conn.shape[1]
+            Me = np.einsum('eg,gi,gj->eij', self.detJw, self.N, self.N)
+            rows = np.repeat(self.conn, nne, axis=1).ravel()
+            cols = np.tile(self.conn, (1, nne)).ravel()
+            M = sp.coo_matrix((Me.ravel(), (rows, cols)), shape=(self.n_nodes, self.n_nodes)).tocsc()
+            self._mass_lu = spla.splu(M)
+
+        return self._mass_lu
 
     def recovery(self):
 

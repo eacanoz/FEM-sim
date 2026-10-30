@@ -45,9 +45,11 @@ class Mesh:
             self.EL.append(Element(id=i, nodes=[self.NL[i], self.NL[i + 1]]))
 
 
-    def generate2DMesh(self, dim: tuple, div: tuple, element_type):
+    def generate2DMesh(self, dim: tuple, div: tuple, element_type, order=1):
 
         """Rectangular mesh of bilinear quadrilaterals (Q4), or of linear triangles (T3) with ElementType.triangle.
+        order=2 gives biquadratic quadrilaterals (Q9) or quadratic triangles (T6): vertices first, then the midside
+        nodes and, in Q9, the centre (the order of gmsh and VTK).
 
         dim = (Lx, Ly) size of the domain, div = (nx, ny) number of elements in each direction.
         Node numbering runs along x first (as in 2DFEM.py); each element lists its nodes
@@ -60,6 +62,14 @@ class Mesh:
 
         self.PD = 2
         self.meshType = element_type
+
+        if order == 2:
+            self._generate_quadratic(Lx, Ly, nx, ny, element_type)
+            return
+
+        if order != 1:
+            raise ValueError(f"Orden de malla no disponible: {order} (use 1 o 2).")
+
         self.element_type = 'tri3' if element_type == ElementType.triangle else 'quad4'
 
         self.NL = []
@@ -83,6 +93,32 @@ class Mesh:
         self.NoE = len(self.EL)
 
 
+    def _generate_quadratic(self, Lx, Ly, nx, ny, element_type):
+
+        self.element_type = 'tri6' if element_type == ElementType.triangle else 'quad9'
+
+        self.NL = []
+        for j in range(2 * ny + 1):
+            for i in range(2 * nx + 1):
+                self.NL.append(Node(id=len(self.NL), coor=(i * Lx / (2 * nx), j * Ly / (2 * ny))))
+
+        self.EL = []
+        for j in range(ny):
+            for i in range(nx):
+
+                def at(a, b):
+                    return self.NL[(2 * j + b) * (2 * nx + 1) + 2 * i + a]
+
+                if self.element_type == 'tri6':
+                    self.EL.append(Element(id=len(self.EL), nodes=[at(0, 0), at(2, 0), at(2, 2), at(1, 0), at(2, 1), at(1, 1)]))
+                    self.EL.append(Element(id=len(self.EL), nodes=[at(0, 0), at(2, 2), at(0, 2), at(1, 1), at(1, 2), at(0, 1)]))
+                else:
+                    self.EL.append(Element(id=len(self.EL), nodes=[at(0, 0), at(2, 0), at(2, 2), at(0, 2), at(1, 0), at(2, 1),
+                                                                   at(1, 2), at(0, 1), at(1, 1)]))
+
+        self.NoN = len(self.NL)
+        self.NoE = len(self.EL)
+
     def boundary_facets(self, selector=None):
 
         """Outer-boundary facets (points in 1D, edges in 2D) whose midpoint satisfies selector(*coords).
@@ -104,7 +140,7 @@ class Mesh:
     @classmethod
     def read_msh(cls, path):
 
-        """Reads a 2D gmsh mesh (.msh) made of triangles (T3) or quadrilaterals (Q4).
+        """Reads a 2D gmsh mesh (.msh) made of triangles (T3, T6) or quadrilaterals (Q4, Q9).
 
         The physical groups of dimension 1 become named boundary groups, available as
         `mesh.boundary_edges('name')` and in `mesh.groups`; the 2D ones are kept in `mesh.regions`
@@ -125,17 +161,20 @@ class Mesh:
     @classmethod
     def from_gmsh_model(cls):
 
-        """Mesh from the gmsh model that is currently open (mesh it first with gmsh.model.mesh.generate(2))."""
+        """Mesh from the gmsh model that is currently open (mesh it first with gmsh.model.mesh.generate(2); for quadratic
+        elements, also gmsh.model.mesh.setOrder(2))."""
 
         import gmsh
 
         types, _, node_lists = gmsh.model.mesh.getElements(2)
-        supported = {2: ('tri3', 3), 3: ('quad4', 4)}
+        # gmsh type -> (element, nodes, vertices, the node order after reversing the orientation)
+        supported = {2: ('tri3', 3, 3, [2, 1, 0]), 3: ('quad4', 4, 4, [3, 2, 1, 0]),
+                     9: ('tri6', 6, 3, [0, 2, 1, 5, 4, 3]), 10: ('quad9', 9, 4, [0, 3, 2, 1, 7, 6, 5, 4, 8])}
 
         if len(types) != 1 or types[0] not in supported:
             raise ValueError("La malla debe tener un solo tipo de elemento 2D (triangulos o cuadrilateros).")
 
-        element_type, nne = supported[types[0]]
+        element_type, nne, n_vertices, reversed_order = supported[types[0]]
 
         tags = np.array(node_lists[0], dtype=int).reshape(-1, nne)
         all_tags, all_xyz, _ = gmsh.model.mesh.getNodes()
@@ -147,16 +186,16 @@ class Mesh:
         mesh = cls()
         mesh.PD = 2
         mesh.element_type = element_type
-        mesh.meshType = ElementType.triangle if element_type == 'tri3' else ElementType.quadrilateral
+        mesh.meshType = ElementType.triangle if element_type.startswith('tri') else ElementType.quadrilateral
         mesh.NL = [Node(id=i, coor=tuple(float(c) for c in coords[tag])) for i, tag in enumerate(used)]
         mesh.EL = []
 
         for row in tags:
             nodes = [mesh.NL[index[int(t)]] for t in row]
-            xy = np.array([n.coor for n in nodes])
+            xy = np.array([n.coor for n in nodes[:n_vertices]])
             twice_area = np.sum(xy[:, 0] * np.roll(xy[:, 1], -1) - np.roll(xy[:, 0], -1) * xy[:, 1])
             if twice_area < 0:
-                nodes = nodes[::-1]                      # counter-clockwise
+                nodes = [nodes[k] for k in reversed_order]   # counter-clockwise
             mesh.EL.append(Element(id=len(mesh.EL), nodes=nodes))
 
         mesh.NoN, mesh.NoE = len(mesh.NL), len(mesh.EL)
@@ -171,6 +210,9 @@ class Mesh:
                     for et, nl in zip(etypes, enodes):
                         if et == 1:
                             edges += [tuple(index[int(t)] for t in pair) for pair in np.asarray(nl).reshape(-1, 2)]
+                        elif et == 8:                # 3-node line: gmsh lists the ends first, the facets the middle
+                            edges += [(index[int(a)], index[int(m)], index[int(b)])
+                                      for a, b, m in np.asarray(nl).reshape(-1, 3)]
                 mesh.groups[name] = edges
 
             elif dim == 2:

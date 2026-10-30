@@ -120,6 +120,13 @@
 | Residuo sin tangente | `System.residual` = R de `residual_and_tangent`: flujo con ley de viscosidad, calentamiento, flotación, axisimétrico, SA, SST y las leyes genéricas; estacionario, paso de tiempo y nivel antiguo | `Test/test_modified_newton.py` | 1e-12 relativo |
 | Newton modificado en transitorio | cavidad con BDF2, Crank–Nicolson y Euler implícito frente a Newton completo; arranque muy no lineal | `Test/test_modified_newton.py` | u, p < 1e-8; 123–141 tangentes pasan a 3–5 |
 | Parada ante un residuo no finito en transitorio | se detiene con aviso y conserva los pasos válidos | `Test/test_modified_newton.py` | pasa |
+| Taylor–Hood: elementos y mallas | T6 y Q9: funciones de forma, derivadas, regla de 7 puntos (grado 5), geometría, normales, proyección L2 consistente, VTK | `Test/test_taylor_hood.py` | pasa |
+| Taylor–Hood: soluciones exactas | Poiseuille y Hagen–Poiseuille, **también en el eje** | `Test/test_taylor_hood.py` | u, p a redondeo (1e-11), Q2/Q1 y P2/P1 |
+| Taylor–Hood: Kovasznay (Re = 40) | solución exacta, mallas 12 a 48 | `Test/test_taylor_hood.py` | u orden 2.7–3.1; p orden 2.0 (Q2/Q1) y 3.0 (P2/P1, pre-asintótico; 2.1 sin LSIC); restricción de la presión 1e-10 |
+| Taylor–Hood: cavidad frente a Ghia | desde el reposo: Re = 100 (16×16), Re = 1000 (32×32) | `Test/test_taylor_hood.py` | error < 0.01; a Re = 5000 (64×64, a mano) 0.023–0.027 |
+| Taylor–Hood: Schäfer–Turek 2D-1 (Re = 20, elementos curvos) | C_D 5.57–5.59; C_L 0.0104–0.0110; Δp 0.1172–0.1176 | `Test/test_taylor_hood.py` | P2/P1, 40 554 incógnitas: 5.5794, 0.0107, 0.1174 (dentro). T3, 40 236: 5.5804, 0.0109, 0.1180 (Δp fuera, y sigue en 0.1180 con 157 629) |
+| Taylor–Hood: tangente, ley de potencia, transitorio | inercia, Carreau, calentamiento, flotación y calor frente a diferencias finitas; canal n = 0.5; BDF2 hasta el estacionario | `Test/test_taylor_hood.py` | 1e-10; u 9e-6 y 2e-5 con 32 elementos (igual orden 1e-3); 1e-6 |
+| Taylor–Hood: corrientes espurias con flotación | estratificación en malla graduada | `Test/test_taylor_hood.py` | orden 3; **no llegan a redondeo** (5e-4 en P2/P1 frente a 1.4e-3 en T3; Q4 da 9e-5, mejor que Q2/Q1, 4e-4) |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -182,7 +189,7 @@ Lo que sigue pendiente:
 ### Fluidos (Etapa 10, Stokes)
 - **Presión de igual orden:** la teoría de P1/Q1 estabilizados da presión O(h) en norma máxima y O(h^1.5) en L2, y es
   lo que se mide. El esfuerzo recuperado vuelve exacta la caída de presión en canales (Q4) pero no mejora el orden
-  general. Para presión de orden 2 hacen falta Taylor–Hood (Etapa 17).
+  general. Para presión de orden 2 está Taylor–Hood: `generate2DMesh(..., order=2)` o `gmsh.model.mesh.setOrder(2)`.
 - **Contorno totalmente Dirichlet:** el caudal discreto de la velocidad interpolada `∮u_h·n` no es cero exactamente;
   la incompatibilidad cae en el nodo donde se fija la presión (pico local que no converge) y contamina la velocidad.
   Con al menos una salida o tracción no ocurre. Si todo el contorno tiene velocidad, use datos con caudal nulo exacto
@@ -222,7 +229,8 @@ Lo que sigue pendiente:
 
 ### Fluidos (Etapa 13, axisimétrico)
 - Coordenadas fijas: `x = r`, `y = z`, eje en `x = 0` (radios negativos se rechazan). Sin giro (`u_θ = 0`).
-- La presión de los nodos del eje converge con orden 1 (las funciones de prueba del eje llevan el peso `r → 0`).
+- Con igual orden, la presión de los nodos del eje converge con orden 1 (las funciones de prueba del eje llevan el peso
+  `r → 0`). Con Taylor–Hood, Hagen–Poiseuille es exacto también en el eje.
 - `GradientLawTerm` con campos vectoriales no incluye los términos de aro (los escalares sí son correctos).
 - Fluidos inelásticos: la pérdida de entrada de una contracción (corrección de Bagley) es pequeña; en polímeros reales
   domina la elasticidad del fundido (viscoelástico, Etapa 17 opcional).
@@ -243,7 +251,8 @@ Lo que sigue pendiente:
   hidrostática (`ρ₀ g` no se incluye).
 - Triángulos: una fuerza de cuerpo que es un gradiente (estratificación) se equilibra solo de forma aproximada y
   aparecen corrientes espurias pequeñas que convergen con orden 3; Q4 estructurado lo equilibra exactamente.
-  Una discretización robusta en presión (Taylor–Hood con proyección, H(div)) lo evitaría (Etapa 17).
+  Taylor–Hood no lo resuelve: las corrientes bajan de orden pero no desaparecen. Lo evitaría una discretización robusta en
+  presión (H(div), o Taylor–Hood con proyección).
 - A Ra alto conviene la continuación en Ra (como en los ejemplos).
 
 ### Fluidos (Etapa 16a, turbulencia)
@@ -285,7 +294,15 @@ Lo que sigue pendiente:
   pertenece a dos aristas con BC distintas, gana la última asignación de Dirichlet.
 
 ### 2D y mallas
-- Elementos: Q4 y T3 (lineales). T3 usa una regla de Gauss de 3 puntos (grado 2), suficiente para masa y términos lineales.
+- Elementos: Q4 y T3 (lineales), Q9 y T6 (cuadráticos). T3 usa una regla de Gauss de 3 puntos (grado 2), suficiente para masa
+  y términos lineales; T6, 7 puntos (grado 5); Q9, 3×3.
+- **Taylor–Hood (Q9, T6):** la malla lo decide. La presión conserva un valor en todos los nodos, ligado a los vértices
+  (`System.restrict_to_linear_subspace`), de modo que `DofLayout`, las salidas y `FlowTerm` no cambian; cuesta incógnitas
+  extra de presión, triviales para el solver directo. Galerkin con LSIC, sin PSPG, SUPG ni esfuerzo recuperado. LSIC se
+  queda: sin él, la cavidad a Re = 5000 no terminó en 200 s (con él, ~30 s).
+- **Taylor–Hood, sin validar:** solvers iterativos (filas de presión con diagonal nula; solo se ha probado PARDISO),
+  turbulencia (SA, SST) y especies en Q9/T6, y flujo con Re alto y capas sin resolver (sin SUPG). El SUPG del calor deja fuera
+  la difusión, que en elementos cuadráticos no se anula. Los ejemplos que dibujan con `mtri.Triangulation` esperan T3.
 - Mallas de gmsh: `Mesh.read_msh` / `Mesh.from_gmsh_model` admiten un solo tipo de elemento 2D (T3 o Q4); las mallas mixtas se rechazan.
   Los bordes son rectos (sin elementos curvos), de modo que los arcos se aproximan por polígonos (error geométrico O(h²)).
 - Sin elementos de orden superior (T6, Q8/Q9), sin tetraedros/hexaedros ni 3D. La región física 2D (`mesh.regions`) se guarda
@@ -352,7 +369,7 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
    factorización reutilizada (transitorio lineal y `solve()` repetidos), exportación VTK/PVD. Pendiente: XDMF/HDF5, VTK binario,
    iterativo para sistemas con convección fuerte o varios campos acoplados (AMG por bloques).
 6. ~~**Estabilización de convección.**~~ Hecha (SUPG en 1D y 2D).
-7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 a 15 y 16a (Spalart–Allmaras) hechas; en curso, la Etapa 17 ([PLAN_ETAPA17.md](PLAN_ETAPA17.md)): Prioridades 1 a 3 hechas, salvo k-ω SST en placa plana.
+7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 a 15 y 16a (Spalart–Allmaras) hechas; en curso, la Etapa 17 ([PLAN_ETAPA17.md](PLAN_ETAPA17.md)): Prioridades 1 a 4 hechas, salvo k-ω SST en placa plana.
 
 ## 5. Criterio para cerrar una etapa
 

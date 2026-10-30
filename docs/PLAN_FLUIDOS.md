@@ -60,4 +60,4 @@ Fuera de alcance: compresible, superficie libre, multifásico, LES.
 | 15 | hecha: `Test/test_buoyancy.py` (5 pruebas), `Example_Natural_Convection.py`. `setBoussinesq`, `boundaryFlux` |
 | 16a | hecha: Spalart–Allmaras (SA-neg), distancia a la pared. `Test/test_turbulence.py` (5 pruebas), `Example_Turbulent_Channel.py` |
 | 16b | k-ω SST (`sst`, con ln ω) validado en el canal dentro de la Etapa 17; la placa plana no converge y el escalón no se ha probado |
-| 17 | en curso: prioridades en [PLAN_ETAPA17.md](PLAN_ETAPA17.md) |
+| 17 | en curso: Prioridades 1 a 4 hechas (salvo k-ω SST en placa plana), en [PLAN_ETAPA17.md](PLAN_ETAPA17.md) |

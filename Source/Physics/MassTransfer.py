@@ -234,8 +234,8 @@ class mt(physics):
         self._check_species(chemSpec)
         nodes = self.modelRef._mesh.NL
 
-        for a, b in edges:
-            for node_id in (a, b):
+        for edge in edges:
+            for node_id in edge:
                 value = C0(*nodes[node_id].coor[:2]) if callable(C0) else C0
                 nodes[node_id].BC[chemSpec] = self.setDirichletBC(value)
 

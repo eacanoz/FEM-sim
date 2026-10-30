@@ -4,7 +4,8 @@
 # Blog: ---
 # +++++++++++++++++++++++++++++++++++++++++++++++
 
-# Incompressible viscous flow: velocity u (vector) and pressure p on the same nodes (Q1/P1 equal order).
+# Incompressible viscous flow: velocity u (vector) and pressure p on the same nodes (Q1/P1 equal order), or Taylor-Hood
+# on a quadratic mesh (Q9, T6): quadratic velocity and linear pressure, inf-sup stable (see below).
 #
 #     rho (du/dt + (u . grad) u) - div(2 mu eps(u)) + grad p = f,      div u = 0,      eps(u) = (grad u + grad u^T) / 2
 #
@@ -28,6 +29,9 @@
 # Phi = mu gamma_dot^2 is a source of the heat equation. Combined with the heat physics, Model(psc=[ff, ht]) and
 # heat.setVelocity('u'), velocity, pressure and temperature are solved together (monolithic coupling).
 #
+# Taylor-Hood (Q2/Q1, P2/P1), chosen by the mesh: Galerkin without PSPG, SUPG or a recovered stress, third order in u and
+# second in p. The pressure keeps a value at every node, tied to the vertices (System.restrict_to_linear_subspace).
+#
 # Boundary conditions: velocity (any component, None leaves it free), no slip, symmetry/slip on walls aligned
 # with the axes (normal component fixed), outlet (normal traction -p n, optionally fully developed: tangential
 # velocity zero) and general tractions. Walls without a condition are traction free. If no boundary sets the
@@ -38,6 +42,7 @@ import numpy as np
 import scipy.sparse as sp
 
 from Source.Physics.Physics import physics
+from Source.Pre_processing.Elements import ELEMENTS, element_type_of
 from Source.Simulation.PointwiseLaw import PointwiseLaw, cached_law
 from Source.Primals.Scalar import scalarField
 from Source.Primals.Vector import vectorField
@@ -75,6 +80,12 @@ class ff(physics):
         self.buoyancy = []                           # Boussinesq terms (field, beta, reference, g) (setBoussinesq)
 
         self.pressure_reference = None               # (node id, value)
+
+        # A quadratic mesh means Taylor-Hood: inf-sup stable, so without PSPG or the stress it needs
+        self.taylor_hood = bool(ELEMENTS[element_type_of(model.mesh)].linear_subspace)
+        if self.taylor_hood:
+            self.Stab = None
+            self.viscous_projection = False
 
     @property
     def physics_description(self):
@@ -164,6 +175,8 @@ class ff(physics):
 
         if method not in (None, 'PSPG'):
             raise ValueError(f"Estabilizacion desconocida: {method!r} (use 'PSPG' o None).")
+        if method is not None and self.taylor_hood:
+            raise ValueError("Taylor-Hood (malla cuadratica) es estable sin estabilizacion de la presion.")
 
         self.Stab = method
 
@@ -190,11 +203,26 @@ class ff(physics):
         """Fixes the pressure at a node (the one closest to `point`, or `node`). Needed only when every boundary
         has velocity conditions; without it the first node is used automatically in that case."""
 
+        candidates = self._pressure_nodes()
+
         if node is None:
-            xy = np.array([n.coor[:self.dim] for n in self.modelRef.mesh.NL], dtype=float)
-            node = int(np.argmin(np.linalg.norm(xy - np.asarray(point, dtype=float), axis=1)))
+            xy = np.array([self.modelRef.mesh.NL[k].coor[:self.dim] for k in candidates], dtype=float)
+            node = candidates[int(np.argmin(np.linalg.norm(xy - np.asarray(point, dtype=float), axis=1)))]
+        elif int(node) not in candidates:
+            raise ValueError(f"El nodo {node} no es un vertice: en Taylor-Hood la presion solo se fija en los vertices.")
 
         self.pressure_reference = (int(node), float(value))
+
+    def _pressure_nodes(self):
+
+        """Nodes where the pressure is an independent unknown: all of them, or the vertices with Taylor-Hood."""
+
+        mesh = self.modelRef.mesh
+        if not self.taylor_hood:
+            return list(range(mesh.getNoN()))
+
+        n_vertices = 3 if element_type_of(mesh).startswith('tri') else 4
+        return sorted({n for element in mesh.EL for n in element.getNodesId()[:n_vertices]})
 
     # ----- weak form -----
 
@@ -216,6 +244,8 @@ class ff(physics):
                                  "(combine con la fisica de calor: Model(psc=[ff, ht])).")
 
         system.require_constraint(layout.dofs('p')[:, 0])
+        if self.taylor_hood:
+            system.restrict_to_linear_subspace('p')
 
         D = ops.divergence(disc)
         A = layout.scatter_matrix(-np.swapaxes(D, 1, 2), ru, rp) + layout.scatter_matrix(D, rp, ru)
@@ -248,8 +278,8 @@ class ff(physics):
 
         reference = self.pressure_reference
         if reference is None and not self._pressure_level_set(model):
-            reference = (0, 0.0)
-            sim_logger.info("Ningun contorno fija la presion: p = 0 en el nodo 0 (use setPressureReference).")
+            reference = (self._pressure_nodes()[0], 0.0)
+            sim_logger.info(f"Ningun contorno fija la presion: p = 0 en el nodo {reference[0]} (use setPressureReference).")
         if reference is not None:
             system.set_dirichlet(layout.node_dofs('p', reference[0])[0], reference[1])
 
@@ -375,8 +405,8 @@ class ff(physics):
         xy = np.array([n.coor[:self.dim] for n in self.modelRef.mesh.NL], dtype=float)
         components = set()
 
-        for a, b in edges:
-            t = xy[b] - xy[a]
+        for edge in edges:
+            t = xy[edge[-1]] - xy[edge[0]]
             t = t / np.linalg.norm(t)
             if abs(t[1]) < 1e-9:
                 components.add(1)      # horizontal edge: normal along y
@@ -491,6 +521,7 @@ class FlowTerm:
         self.inertia = flow.inertia
         self.newton = flow.linearization == 'newton'
         self.pspg = flow.Stab == 'PSPG'
+        self.supg = flow.inertia and not flow.taylor_hood
         self.fields = list(flow.viscosity_fields)       # fields read by the viscosity law
         self.heating = flow.heating_field
         # Boussinesq body forces f_b = c (phi - reference), c = -rho0 beta g
@@ -715,19 +746,22 @@ class FlowTerm:
             tau_c = ops.lsic_tau(disc, mu_tau, self.rho, speed)
             divu = np.einsum('egaa->eg', G) + e_hh
 
-            Ru += (np.einsum('eg,gi,ega->eia', w, N, conv) + np.einsum('eg,egi,ega->eia', ws, uB, RM_s)
-                   + np.einsum('eg,egia->eia', w * tau_c * divu, divB))
+            Ru += np.einsum('eg,gi,ega->eia', w, N, conv) + np.einsum('eg,egia->eia', w * tau_c * divu, divB)
+            if self.supg:
+                Ru += np.einsum('eg,egi,ega->eia', ws, uB, RM_s)
 
             if tangent:
-                Juu = (np.einsum('eg,gi,egajc->eiajc', w, N, dconv) + np.einsum('eg,egi,egajc->eiajc', ws, uB, dRM_s)
+                Juu = (np.einsum('eg,gi,egajc->eiajc', w, N, dconv)
                        + np.einsum('eg,egia,egjc->eiajc', w * tau_c, divB, divB))
-                if self.newton:
-                    Juu = Juu + np.einsum('eg,gj,egic,ega->eiajc', ws, N, B, RM_s)  # derivative of the SUPG weight
+                if self.supg:
+                    Juu = Juu + np.einsum('eg,egi,egajc->eiajc', ws, uB, dRM_s)
+                    if self.newton:
+                        Juu = Juu + np.einsum('eg,gj,egic,ega->eiajc', ws, N, B, RM_s)   # derivative of the SUPG weight
+                    blocks.append((c_s[1] * np.einsum('eg,egi,egja->eiaj', ws, uB, B).reshape(nel, nne * dim, nne), ru, rp))
+                    for r_phi, c in buoyancy_rows:                                 # d(R_M)/dphi_j = -c N_j
+                        blocks.append((-c_s[2] * np.einsum('eg,egi,a,gj->eiaj', ws, uB, c, N).reshape(nel, nne * dim, nne),
+                                       ru, r_phi))
                 blocks.append((Juu.reshape(nel, nne * dim, nne * dim), ru, ru))
-                blocks.append((c_s[1] * np.einsum('eg,egi,egja->eiaj', ws, uB, B).reshape(nel, nne * dim, nne), ru, rp))
-                for r_phi, c in buoyancy_rows:                                     # d(R_M)/dphi_j = -c N_j
-                    blocks.append((-c_s[2] * np.einsum('eg,egi,a,gj->eiaj', ws, uB, c, N).reshape(nel, nne * dim, nne),
-                                   ru, r_phi))
 
         R += layout.scatter_vector(Ru.reshape(nel, -1), ru)
 
