@@ -48,8 +48,7 @@ Archivos: `Source/Simulation/Solvers.py` (estrategias), `Source/Simulation/Syste
 - El punto 4 (segregado) queda aplazado: solo se hará si la Prioridad 2 lo necesita.
 
 Resultado: SA desde un estado uniforme pasa de estancarse a 12 iteraciones (por el escalado) y la cavidad a Re = 5000 y
-10000 desde el reposo converge en 24 y 46 iteraciones. **SST sigue sin converger**: ya no diverge, pero a las 500
-iteraciones k y ω tocan el recorte, así que el escalado y la globalización no bastan y hace falta la Prioridad 2.
+10000 desde el reposo converge en 24 y 48 iteraciones. SST no convergía solo con esto: hizo falta la Prioridad 2.
 
 ## Prioridad 2: SST robusto sobre lo anterior
 
@@ -61,6 +60,16 @@ Impacto: **alto para turbulencia**. Cierra el reto encontrado.
 2. **k ≥ 0 con recorte** (`System.clip_positive`, ya implementado).
 3. **Validación**: canal Re_τ = 180, 395 y 590 frente a la DNS (Moser–Kim–Mansour) y a la ley de pared, con los
    mismos criterios que SA (`Test/test_turbulence.py`); después, una placa plana o un escalón (C_f, readherencia).
+
+**Estado: canal validado; placa plana pendiente** (`Test/test_sst.py`). Resultados y decisiones:
+
+- Con ln ω el canal converge en 9–10 iteraciones con pseudo-transitorio. Newton puro sigue divergiendo.
+- **El criterio U_c⁺ ≤ 3 % no se cumple**: −3.6 %, −2.5 % y −4.3 % a Re_τ = 180, 395 y 590. Un resolvedor 1D independiente,
+  con ω como incógnita, da lo mismo a < 1 %, así que es el modelo. La prueba exige < 1 % frente al 1D y < 5 % frente a la DNS.
+- k se recorta con piso 0, no 1e-10, y nunca en filas de Dirichlet: el piso anterior dejaba el canal en la rama laminar.
+- La placa plana obligó a cambiar el CFL: reducirlo con cada subida pequeña del residuo congelaba el avance mientras la
+  turbulencia se desarrolla. Aun así no cierra el residuo (ver `docs/ESTADO.md`). La causa probable es el recorte de k en
+  el borde de ataque, pero no está demostrada.
 
 ## Prioridad 3: rendimiento del ensamblado
 

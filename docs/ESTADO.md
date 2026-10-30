@@ -112,8 +112,11 @@
 | Límite laminar | sin turbulencia de entrada SA no produce ν̃: Poiseuille | `Test/test_turbulence.py` | ν̃ = 0 (1e-12) |
 | Tangente con SA | u, p, ν̃ de ambos signos y la viscosidad turbulenta, frente a diferencias finitas | `Test/test_turbulence.py` | 1e-6 relativo |
 | Solver no lineal: misma solución por cualquier camino | cavidad Re = 100: Newton, pseudo-transitorio y subrelajación por campo | `Test/test_nonlinear_globalization.py` | u 1e-7, p 1e-6; 5, 7 y 20 iteraciones |
-| Pseudo-transitorio en casos frágiles (sin continuación) | cavidad Re = 5000 desde el reposo (Ghia); Bingham `m` = 2000 sin arranque newtoniano; Cross–WLF desde la temperatura fría | `Test/test_nonlinear_globalization.py` | 24 iter., error 0.037; 88 iter. (Newton 172), error 2e-4; 8 iter., T 1e-6 |
+| Pseudo-transitorio en casos frágiles (sin continuación) | cavidad Re = 5000 desde el reposo (Ghia); Bingham `m` = 2000 sin arranque newtoniano; Cross–WLF desde la temperatura fría | `Test/test_nonlinear_globalization.py` | 24 iter., error 0.037; 128 iter. (Newton 172), error 2e-4; 8 iter., T 1e-6 |
 | Escalado por campo | SA en canal Re_τ = 395 desde un estado uniforme: antes Newton se estancaba (200 iter., U_c⁺ = 8) | `Test/test_nonlinear_globalization.py` | 12 iter., U_c⁺ = 20.05 (DNS 20.1) |
+| Canal k-ω SST frente a un resolvedor 1D independiente | Re_τ = 180 y 395 (prueba) y 590 (a mano): diferencias finitas con ω como incógnita, sin código del proyecto | `Test/test_sst.py` | U_c⁺, U_b⁺ y k máx. a < 1 %; 9–10 iteraciones |
+| Canal k-ω SST frente a la DNS | U_c⁺ de Moser, Kim y Mansour (1999), subcapa y ley de pared de Reichardt | `Test/test_sst.py` | U_c⁺ −3.6 %, −2.5 % y −4.3 % a Re_τ = 180, 395 y 590, igual en el resolvedor 1D (el déficit es del modelo); subcapa < 2 %; ley de pared < 7 % |
+| k-ω SST: independencia del arranque y la malla; tangente; transitorio | estado uniforme, malla doble, diferencias finitas en Q4 y T3, BDF2 desde el estacionario | `Test/test_sst.py` | u 1e-5 (126 iter.); U_c⁺ < 0.5 %; tangente 1e-6; u 1e-5 |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -194,7 +197,7 @@ Lo que sigue pendiente:
   y la velocidad del estado inicial del solve, y el θ-método linealiza una sola vez por paso: el transitorio de
   Navier–Stokes se completa en la Etapa 14 (Newton dentro del paso, BDF2).
 - A Re alto Newton con búsqueda de línea se estanca (cavidad Re = 5000 desde el reposo: más de 2 minutos sin converger).
-  Usar `globalization='pseudo-transient'` (24 iteraciones, sin continuación). Picard es más robusto lejos de la solución
+  Usar `globalization='pseudo-transient'` (24 iteraciones, sin continuación; a Re = 10000 converge en 48, sin validar). Picard es más robusto lejos de la solución
   pero converge linealmente.
 - El tangente omite `dτ/du`: la convergencia no es estrictamente cuadrática, pero 5–7 iteraciones bastan en los casos
   probados.
@@ -202,8 +205,9 @@ Lo que sigue pendiente:
 
 ### Fluidos (Etapa 12, no newtonianos y acoplamiento térmico)
 - Las leyes con fluencia (Bingham, Herschel–Bulkley) son regularizadas: el tapón es casi rígido, no rígido. Valores de
-  `m·τ_y/μ_p` muy altos endurecen Newton (cientos de iteraciones); `globalization='pseudo-transient'` tarda la mitad en
-  `m` = 2000, pero con `m` = 2e5 necesita 342 iteraciones y queda menos exacto que Newton (8.6e-5 frente a 2.1e-6).
+  `m·τ_y/μ_p` muy altos endurecen Newton (cientos de iteraciones). `globalization='pseudo-transient'` es unas 10 veces más
+  rápido en `m` = 2000 (128 iteraciones frente a 172, sin búsquedas de línea), pero con `m` = 2e5 necesita 396 iteraciones
+  frente a 176 y queda menos exacto (1.7e-5 frente a 2.1e-6).
 - Las leyes de adelgazamiento convergen mejor partiendo de una solución newtoniana (resolver con `setViscosity` y luego
   activar la ley); los ejemplos lo hacen así.
 - El residuo SUPG del calor incluye convección y la fuente constante, no la disipación viscosa ni reacciones: pequeña
@@ -244,10 +248,15 @@ Lo que sigue pendiente:
 - Solo 2D plano (`GradientLawTerm` no tiene los términos de aro del axisimétrico).
 - Newton directo converge en el canal, incluso desde un estado uniforme (escalado por campo). Falta probar SA en flujos con
   separación; para ellos está `globalization='pseudo-transient'`.
-- k-ω SST (`sst`): **experimental, sin validar**. Jacobiano exacto (4e-9 frente a diferencias finitas), pero no converge
-  en el canal con Newton ni con recorte de k y ω. Con el pseudo-transitorio ya no diverge, pero tampoco converge en 500
-  iteraciones (Re_τ = 180: U_c⁺ = 17.9 con u⁺ mal en la subcapa, y k y ω tocan el recorte de 1e-10). Siguiente paso: la
-  variable ln ω ([PLAN_ETAPA17.md](PLAN_ETAPA17.md), Prioridad 2).
+- k-ω SST (`sst`): incógnitas k y `ln_omega` (ω queda en `model.sol['omega']`). **Validado solo en el canal**, y solo con
+  `globalization='pseudo-transient'`: Newton puro diverge. U_c⁺ queda 2.5–4.3 % bajo la DNS en cualquier malla, también
+  en el resolvedor 1D independiente: es del modelo, no de la discretización.
+- **k-ω SST en placa plana: sin validar.** A Re_L = 1e6 el residuo se estanca en ~2e-4 (500 iteraciones en 40×48 y 400 en
+  80×64), con k recortado a 0 en decenas de nodos junto al borde de ataque. Sin recorte es peor (ln ω oscila entre −23 y
+  +24). El C_f ya es razonable y casi no cambia con la malla (−7 a −11 % frente a Schultz–Grunow; SA en 40×48: −6 a −15 %),
+  pero no hay convergencia. SA sí converge en la misma malla (38 iteraciones).
+- k-ω SST: arrancar con k muy pequeño puede tardar (canal desde estado uniforme: 126 iteraciones frente a 9) y el flujo
+  laminar es solución del modelo. Solo 2D plano. El escalón de Driver–Seegmiller no se ha probado.
 
 ### Física y numérica
 - **Convección:** diferencias centradas sin estabilización. Para Pe alto habrá oscilaciones. `Pe` se calcula pero no se
@@ -336,7 +345,7 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
    factorización reutilizada (transitorio lineal y `solve()` repetidos), exportación VTK/PVD. Pendiente: XDMF/HDF5, VTK binario,
    iterativo para sistemas con convección fuerte o varios campos acoplados (AMG por bloques).
 6. ~~**Estabilización de convección.**~~ Hecha (SUPG en 1D y 2D).
-7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 a 15 y 16a (Spalart–Allmaras) hechas; siguiente, la Etapa 17 ([PLAN_ETAPA17.md](PLAN_ETAPA17.md)), que incluye la convergencia de k-ω SST.
+7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 a 15 y 16a (Spalart–Allmaras) hechas; en curso, la Etapa 17 ([PLAN_ETAPA17.md](PLAN_ETAPA17.md)): Prioridades 1 y 2 hechas, salvo k-ω SST en placa plana.
 
 ## 5. Criterio para cerrar una etapa
 

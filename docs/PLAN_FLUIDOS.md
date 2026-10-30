@@ -59,5 +59,5 @@ Fuera de alcance: compresible, superficie libre, multifásico, LES.
 | 14 | hecha: `Test/test_transient_flow.py` (7 pruebas), `Example_Cylinder_Vortex_Shedding.py`. Newton por paso, BDF2, estabilización con el residuo discreto en el tiempo, `boundaryForce` |
 | 15 | hecha: `Test/test_buoyancy.py` (5 pruebas), `Example_Natural_Convection.py`. `setBoussinesq`, `boundaryFlux` |
 | 16a | hecha: Spalart–Allmaras (SA-neg), distancia a la pared. `Test/test_turbulence.py` (5 pruebas), `Example_Turbulent_Channel.py` |
-| 16b | experimental, sin validar: k-ω SST escrito (`sst`, jacobiano exacto) pero no converge en el canal; su convergencia pasa a la Etapa 17 |
+| 16b | k-ω SST (`sst`, con ln ω) validado en el canal dentro de la Etapa 17; la placa plana no converge y el escalón no se ha probado |
 | 17 | en curso: prioridades en [PLAN_ETAPA17.md](PLAN_ETAPA17.md) |

@@ -281,15 +281,18 @@ class System:
 
         self.positive[np.asarray(dofs, dtype=int)] = True
 
-    def clip_positive(self, x, floor=1e-10):
+    def clip_positive(self, x, floor=0.0):
 
-        """x with its positive dofs raised to at least `floor` (local clipping of a Newton update)."""
+        """x with its positive dofs raised to at least `floor` (local clipping of a Newton update). Dirichlet dofs keep
+        their values: k = 0 on a wall is exact, and raising it would leave a residual that never vanishes."""
 
-        if not np.any(self.positive):
+        clipped = self.positive & ~self.is_dirichlet
+
+        if not np.any(clipped):
             return x
 
         x = x.copy()
-        x[self.positive] = np.maximum(x[self.positive], floor)
+        x[clipped] = np.maximum(x[clipped], floor)
         return x
 
     def require_constraint(self, dofs):

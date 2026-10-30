@@ -476,10 +476,12 @@ class modelSolver():
         already measures convection, diffusion and reaction of each dof, D ~ m (|u| / h + nu / h^2) / CFL, which is the
         usual m / dt_local. Constraint rows (the pressure) and Dirichlet rows get no term.
 
-        The CFL follows the residual, CFL *= ||R_old|| / ||R_new||, limited to [1/2, cfl_growth] per iteration and growing
-        at least 10 % while the residual falls. When it is large the method is Newton, with quadratic convergence. A step
-        that makes the residual non-finite or more than `max_rise` times larger is discarded and retried with a quarter of
-        the CFL. Norms and stopping tests are those of newtonSolver.
+        The CFL follows the residual, CFL *= ||R_old|| / ||R_new||, up to cfl_growth per iteration. It keeps growing by at
+        least 5 % through rises below 10 %, which are part of the path: while turbulence develops the residual has to rise,
+        and lowering the CFL for it freezes the march (k-omega SST on a flat plate). Larger rises lower it, at most by half.
+        When it is large the method is Newton, with quadratic convergence. A step that makes the residual non-finite or more
+        than `max_rise` times larger is discarded and retried with a quarter of the CFL. Norms and stopping tests are those
+        of newtonSolver.
         """
 
         sim_logger.info("------- Starting pseudo-transient nonlinear solver -------")
@@ -524,8 +526,10 @@ class modelSolver():
                 continue
 
             ratio = norm_R / max(norm_try, 1e-300)
-            growth = np.clip(ratio, 0.5, cfl_growth)
-            cfl = min(cfl * (max(growth, 1.1) if ratio >= 1.0 else growth), cfl_max)
+            if ratio >= 0.9:                                                # small rises are part of the path: go on
+                cfl = min(cfl * np.clip(ratio, 1.05, cfl_growth), cfl_max)
+            else:
+                cfl = cfl * max(ratio, 0.5)
             x, J, R, norm_R = x_try, J_try, R_try, norm_try
 
             sim_logger.info(f"| {iteration:^6} | ||R|| {norm_R:.4e} | ||R||/||R0|| {norm_R / norm_R0:.4e} | CFL {cfl:.3e}")

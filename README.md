@@ -35,7 +35,8 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Axisimétrico r-z (`Model(axisymmetric=True)`): calor, especies, Darcy y flujo (términos de aro en deformación, divergencia y esfuerzo) | Operativo: conducción radial, Hagen–Poiseuille, extensión uniaxial exacta, ley de potencia en tubo, jacobiano acoplado |
 | Transitorio no lineal (`solverConfiguration(timeScheme='BDF2')` o θ): Newton en cada paso, estabilización con el residuo discreto en el tiempo, presión implícita; fuerzas por reacciones (`ff.boundaryForce`) | Operativo: Taylor–Green (BDF2 orden 2, Euler orden 1), arranque frente a la serie de Fourier, límite estacionario exacto, cilindro de Schäfer–Turek |
 | Convección natural (`ff.setBoussinesq`, térmica y solutal) y especies arrastradas por el flujo; flujos de contorno por reacciones (`boundaryFlux`, Nusselt) | Operativo: cavidad de de Vahl Davis Ra = 1e3–1e6 (Nusselt < 0.2 %), estratificación estable en reposo, especies = calor con Le = 1 |
-| Turbulencia RANS Spalart–Allmaras (`Model(psc=[ff, sa])`, SA-neg, distancia a la pared de Spalding, sin funciones de pared) | Operativo: canal Re_τ = 180–590 (U_c⁺ a 1–2 % de la DNS, ley de pared), límite laminar, jacobiano acoplado. k-ω SST pendiente |
+| Turbulencia RANS Spalart–Allmaras (`Model(psc=[ff, sa])`, SA-neg, distancia a la pared de Spalding, sin funciones de pared) | Operativo: canal Re_τ = 180–590 (U_c⁺ a 1–2 % de la DNS, ley de pared), límite laminar, jacobiano acoplado |
+| Turbulencia k-ω SST (`Model(psc=[ff, sst])`, variable ln ω, requiere `globalization='pseudo-transient'`) | Parcial: canal Re_τ = 180–590 (U_c⁺ a 2.5–4.3 % de la DNS, igual que un resolvedor 1D independiente, ley de pared). Placa plana sin converger |
 | `rho Cp(T)`, elementos de orden superior, 3D | No implementado |
 
 ## Requisitos
