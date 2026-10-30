@@ -111,6 +111,9 @@
 | Canal turbulento (Spalart–Allmaras) | Re_τ = 180, 395 (prueba) y 590 (ejemplo): u⁺ = y⁺, ley de pared de Reichardt, U_c⁺ de la DNS de Moser, Kim y Mansour (1999), C_f de Dean | `Test/test_turbulence.py`, `Example_Turbulent_Channel.py` | subcapa < 2 %; ley de pared < 7 %; U_c⁺ +1.0 %, −0.4 %, −2.3 %; C_f −4 a −6 %; independiente de la malla; Newton 12–17 |
 | Límite laminar | sin turbulencia de entrada SA no produce ν̃: Poiseuille | `Test/test_turbulence.py` | ν̃ = 0 (1e-12) |
 | Tangente con SA | u, p, ν̃ de ambos signos y la viscosidad turbulenta, frente a diferencias finitas | `Test/test_turbulence.py` | 1e-6 relativo |
+| Solver no lineal: misma solución por cualquier camino | cavidad Re = 100: Newton, pseudo-transitorio y subrelajación por campo | `Test/test_nonlinear_globalization.py` | u 1e-7, p 1e-6; 5, 7 y 20 iteraciones |
+| Pseudo-transitorio en casos frágiles (sin continuación) | cavidad Re = 5000 desde el reposo (Ghia); Bingham `m` = 2000 sin arranque newtoniano; Cross–WLF desde la temperatura fría | `Test/test_nonlinear_globalization.py` | 24 iter., error 0.037; 88 iter. (Newton 172), error 2e-4; 8 iter., T 1e-6 |
+| Escalado por campo | SA en canal Re_τ = 395 desde un estado uniforme: antes Newton se estancaba (200 iter., U_c⁺ = 8) | `Test/test_nonlinear_globalization.py` | 12 iter., U_c⁺ = 20.05 (DNS 20.1) |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -158,7 +161,8 @@ Lo que sigue pendiente:
   otra rama o tardar muchas iteraciones cerca de la ignición (con `Q = 300` y `k0 = 3e4` el caso de prueba necesita
   unas 160 iteraciones). Recomendación: marchar en el tiempo hasta el estacionario y usar ese estado como inicial.
 - **Escalado en Newton:** el residuo se escala fila a fila con la diagonal del jacobiano inicial (cada ecuación en las
-  unidades de su incógnita). La tolerancia relativa pasó de 1e-8 a 1e-10 para conservar la exactitud de los casos 1D.
+  unidades de su incógnita) y con el tamaño de su campo (`System.field_scales`, Etapa 17). La tolerancia relativa pasó de
+  1e-8 a 1e-10 para conservar la exactitud de los casos 1D.
 - `heat.Convection = True` etc. deben asignarse en la parte (`model.physics.heat`), no en la combinación.
 
 ### Fluidos (Etapa 9)
@@ -189,15 +193,17 @@ Lo que sigue pendiente:
 - Solo estacionario validado. En transitorio con inercia, las masas estabilizadas (SUPG y PSPG de `ρ u_t`) usan `τ`
   y la velocidad del estado inicial del solve, y el θ-método linealiza una sola vez por paso: el transitorio de
   Navier–Stokes se completa en la Etapa 14 (Newton dentro del paso, BDF2).
-- A Re alto Newton necesita continuación (resolver con velocidades o Re crecientes). Picard es más robusto lejos de
-  la solución pero converge linealmente.
+- A Re alto Newton con búsqueda de línea se estanca (cavidad Re = 5000 desde el reposo: más de 2 minutos sin converger).
+  Usar `globalization='pseudo-transient'` (24 iteraciones, sin continuación). Picard es más robusto lejos de la solución
+  pero converge linealmente.
 - El tangente omite `dτ/du`: la convergencia no es estrictamente cuadrática, pero 5–7 iteraciones bastan en los casos
   probados.
 - Sin estabilización de captura de discontinuidades (no hace falta en flujo incompresible laminar).
 
 ### Fluidos (Etapa 12, no newtonianos y acoplamiento térmico)
 - Las leyes con fluencia (Bingham, Herschel–Bulkley) son regularizadas: el tapón es casi rígido, no rígido. Valores de
-  `m·τ_y/μ_p` muy altos endurecen Newton; conviene subir `m` por continuación.
+  `m·τ_y/μ_p` muy altos endurecen Newton (cientos de iteraciones); `globalization='pseudo-transient'` tarda la mitad en
+  `m` = 2000, pero con `m` = 2e5 necesita 342 iteraciones y queda menos exacto que Newton (8.6e-5 frente a 2.1e-6).
 - Las leyes de adelgazamiento convergen mejor partiendo de una solución newtoniana (resolver con `setViscosity` y luego
   activar la ley); los ejemplos lo hacen así.
 - El residuo SUPG del calor incluye convección y la fuente constante, no la disipación viscosa ni reacciones: pequeña
@@ -236,11 +242,12 @@ Lo que sigue pendiente:
 - Spalart–Allmaras sin el término de transición `f_t2` y sin funciones de pared: el primer nodo debe quedar en y⁺ ≲ 1.
 - La distancia de Spalding sobreestima la distancia a paredes convexas en ≈ d/(2R) (eikonal o p-Poisson en la Etapa 17).
 - Solo 2D plano (`GradientLawTerm` no tiene los términos de aro del axisimétrico).
-- Newton directo converge en el canal desde un perfil aproximado; en flujos con separación puede hacer falta
-  avanzar en pseudo-tiempo (transitorio BDF2 con pasos grandes) hasta el estacionario.
+- Newton directo converge en el canal, incluso desde un estado uniforme (escalado por campo). Falta probar SA en flujos con
+  separación; para ellos está `globalization='pseudo-transient'`.
 - k-ω SST (`sst`): **experimental, sin validar**. Jacobiano exacto (4e-9 frente a diferencias finitas), pero no converge
-  en el canal con Newton, con recorte de k y ω ni en pseudo-tiempo de paso fijo (ω ~ 1e6 junto a la pared). Ver
-  [PLAN_ETAPA17.md](PLAN_ETAPA17.md).
+  en el canal con Newton ni con recorte de k y ω. Con el pseudo-transitorio ya no diverge, pero tampoco converge en 500
+  iteraciones (Re_τ = 180: U_c⁺ = 17.9 con u⁺ mal en la subcapa, y k y ω tocan el recorte de 1e-10). Siguiente paso: la
+  variable ln ω ([PLAN_ETAPA17.md](PLAN_ETAPA17.md), Prioridad 2).
 
 ### Física y numérica
 - **Convección:** diferencias centradas sin estabilización. Para Pe alto habrá oscilaciones. `Pe` se calcula pero no se

@@ -38,6 +38,19 @@ manual y de buenos puntos de partida.
 Archivos: `Source/Simulation/Solvers.py` (estrategias), `Source/Simulation/System.py` (escalas por campo),
 `Source/core.py` (`solverConfiguration`: opciones `globalization='newton'|'pseudo-transient'`, `cfl0`, `relaxation`).
 
+**Estado: puntos 1 a 3 hechos** (`Test/test_nonlinear_globalization.py`). Decisiones frente a lo previsto:
+
+- El paso local no usa `h_e`, `|u|` ni `System.time`: es `D = |diag J| / CFL`, que mide convección, difusión y reacción de
+  cada grado de libertad sin conocer la física, y solo entra en la matriz, de modo que el residuo sigue siendo el
+  estacionario. Las filas de restricción (`System.require_constraint`, la presión) y las de Dirichlet no lo llevan.
+- Los valores de Dirichlet se imponen antes del primer paso: si no, una pared caliente en un fundido frío hace rechazar
+  todos los pasos con cualquier CFL.
+- El punto 4 (segregado) queda aplazado: solo se hará si la Prioridad 2 lo necesita.
+
+Resultado: SA desde un estado uniforme pasa de estancarse a 12 iteraciones (por el escalado) y la cavidad a Re = 5000 y
+10000 desde el reposo converge en 24 y 46 iteraciones. **SST sigue sin converger**: ya no diverge, pero a las 500
+iteraciones k y ω tocan el recorte, así que el escalado y la globalización no bastan y hace falta la Prioridad 2.
+
 ## Prioridad 2: SST robusto sobre lo anterior
 
 Impacto: **alto para turbulencia**. Cierra el reto encontrado.

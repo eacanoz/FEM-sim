@@ -269,6 +269,9 @@ class System:
         # Dofs that must stay positive (turbulent k and omega, ...): the Newton solvers limit their steps accordingly
         self.positive = np.zeros(n, dtype=bool)
 
+        # Rows of a constraint (the pressure of an incompressible flow): they never get a pseudo-time term
+        self.constraint = np.zeros(n, dtype=bool)
+
         self.is_dirichlet = np.zeros(n, dtype=bool)
         self.dirichlet_value = np.zeros(n)
 
@@ -288,6 +291,42 @@ class System:
         x = x.copy()
         x[self.positive] = np.maximum(x[self.positive], floor)
         return x
+
+    def require_constraint(self, dofs):
+
+        """Marks dofs whose rows are a constraint rather than an evolution equation (no pseudo-time on them)."""
+
+        self.constraint[np.asarray(dofs, dtype=int)] = True
+
+    def field_scales(self, x):
+
+        """Per dof, the magnitude of its field (largest of the state and the Dirichlet values; 1 if all are zero).
+
+        It expresses the residual of every field relative to its own size, so that a field of order 1e6 (omega next to a
+        wall) does not hide the others in the norm that decides the Newton steps."""
+
+        scales = np.ones(self.layout.ndof)
+
+        for name in self.layout.names:
+            dofs = self.layout.dofs(name).ravel()
+            size = max(np.max(np.abs(x[dofs])), np.max(np.abs(self.dirichlet_value[dofs])))
+            if size > 0.0:
+                scales[dofs] = size
+
+        return scales
+
+    def relaxation_weights(self, relaxation):
+
+        """Per dof, the fraction of the Newton update it takes, from a {field: factor} dict (default 1)."""
+
+        weights = np.ones(self.layout.ndof)
+
+        for name, factor in (relaxation or {}).items():
+            if name not in self.layout.names:
+                raise ValueError(f"Subrelajacion de un campo desconocido: {name!r} (campos: {list(self.layout.names)}).")
+            weights[self.layout.dofs(name).ravel()] = factor
+
+        return weights
 
     @property
     def is_linear(self):

@@ -215,6 +215,8 @@ class ff(physics):
                 raise ValueError(f"La fisica de flujo usa el campo '{name}', que no existe en el modelo "
                                  "(combine con la fisica de calor: Model(psc=[ff, ht])).")
 
+        system.require_constraint(layout.dofs('p')[:, 0])
+
         D = ops.divergence(disc)
         A = layout.scatter_matrix(-np.swapaxes(D, 1, 2), ru, rp) + layout.scatter_matrix(D, rp, ru)
         if self.viscosity_law is None:

@@ -157,16 +157,23 @@ class Model(object):
 
     def solverConfiguration(self, Study=StudyType.steady_state, Type=ProblemType.linear, Method=SolverType.direct, Solver = DirectSolvers.PARDISO, 
                             timeDisc = 1, timeStep=0.05, totalTime = 3, prec = Preconditioners.iLU, tol = 1e-10, maxiter = None,
-                            timeScheme='theta'):
+                            timeScheme='theta', globalization='newton', cfl0=10.0, relaxation=None):
 
         """Configures the solver for the model based on the provided options.
 
         Transient studies: timeScheme 'theta' (timeDisc = theta: 1 implicit Euler, 0.5 Crank-Nicolson) or 'BDF2'
         (second order and L-stable: no oscillating algebraic variables such as the pressure; the first step is
-        implicit Euler). Systems with nonlinear terms iterate Newton inside every step."""
+        implicit Euler). Systems with nonlinear terms iterate Newton inside every step.
+
+        Steady nonlinear studies: globalization 'newton' (line search) or 'pseudo-transient' (local pseudo-time step with
+        a CFL that starts at cfl0 and grows as the residual falls, for hard problems or poor initial guesses; it reaches
+        the same steady solution). relaxation = {field: factor} takes only that fraction of the update of a field."""
 
         if timeScheme not in ('theta', 'BDF2'):
             raise ValueError(f"Esquema temporal desconocido: {timeScheme!r} (use 'theta' o 'BDF2').")
+
+        if globalization not in ('newton', 'pseudo-transient'):
+            raise ValueError(f"Globalizacion desconocida: {globalization!r} (use 'newton' o 'pseudo-transient').")
 
         self.solverOptions = {
             'Study': Study,
@@ -179,7 +186,10 @@ class Model(object):
             'Time Step': timeStep,
             'Time': totalTime,
             'Tolerance': tol,           # relative residual of the iterative solvers
-            'Max Iterations': maxiter   # iterative solvers (None: scipy default)
+            'Max Iterations': maxiter,  # iterative solvers (None: scipy default)
+            'Globalization': globalization,
+            'CFL0': cfl0,
+            'Relaxation': relaxation
         }
 
 
@@ -223,6 +233,7 @@ class Model(object):
         self.timeVector = solver.timeVector
         self.solver_iterations = solver.iterations   # Krylov iterations of every linear solve (empty with direct solvers)
         self.newton_iterations = getattr(solver, 'newton_iterations', None)   # steady nonlinear solves
+        self.nonlinear_converged = getattr(solver, 'nonlinear_converged', None)   # steady nonlinear solves
         self.step_iterations = getattr(solver, 'step_iterations', None)       # Newton iterations of each time step
 
         if self.solverOptions['Study'] == StudyType.steady_state:

@@ -260,6 +260,7 @@ class modelSolver():
         self.step_iterations = []
 
         rtol, atol, max_iterations = 1e-8, 1e-10, 30
+        weights = system.relaxation_weights(self.solverOptions.get('Relaxation'))
 
         clock = time.time()
         try:
@@ -297,7 +298,7 @@ class modelSolver():
                     return J.tocsr(), F
 
                 J, F = step_residual(x)
-                scale = np.maximum(np.abs(J.diagonal()), 1.0)
+                scale = np.maximum(np.abs(J.diagonal()), 1.0) * system.field_scales(x)
                 norm0 = norm = np.linalg.norm(F / scale)
                 iteration = 0
 
@@ -306,7 +307,7 @@ class modelSolver():
                     dx = self._solve_system(J, -F)
                     lam = 1.0
                     while True:
-                        x_try = system.clip_positive(x + lam * dx)          # positive fields stay positive
+                        x_try = system.clip_positive(x + lam * weights * dx)   # positive fields stay positive
                         J_try, F_try = step_residual(x_try)
                         norm_try = np.linalg.norm(F_try / scale)
                         if (np.isfinite(norm_try) and norm_try < (1.0 - 1e-4 * lam) * norm) or lam <= 1.0 / 64:
@@ -352,7 +353,10 @@ class modelSolver():
 
         self.getInitialField()
 
-        sol = self.newtonSolver()
+        if self.solverOptions.get('Globalization', 'newton') == 'pseudo-transient':
+            sol = self.pseudoTransientSolver()
+        else:
+            sol = self.newtonSolver()
 
         self.updateSolution(sol)
 
@@ -369,8 +373,9 @@ class modelSolver():
         """Newton-Raphson for the nonlinear problem, with a backtracking line search on the scaled residual.
 
         The residual is scaled row by row with the diagonal of the initial tangent (never below 1), which
-        expresses every equation in the units of its own unknown. Without it, a field with large
-        numbers (a temperature of 300) would dominate the norm over a field of order 1 (a concentration).
+        expresses every equation in the units of its own unknown, and then with the size of its field
+        (System.field_scales), which makes it relative. Without them, a field with large numbers (a
+        temperature of 300, omega ~ 1e6) would dominate the norm over a field of order 1 (a concentration).
         Only the norm is scaled: the Newton step is computed with the unscaled system.
 
         Stops when ||R|| <= rtol * ||R0|| or ||R|| <= atol (scaled norms). The residual and the tangent come
@@ -398,7 +403,9 @@ class modelSolver():
 
         J, R = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
 
-        scale = np.maximum(np.abs(J.diagonal()), 1.0)
+        system = self.model._system()
+        scale = np.maximum(np.abs(J.diagonal()), 1.0) * system.field_scales(x)
+        weights = system.relaxation_weights(self.solverOptions.get('Relaxation'))
 
         def scaled_norm(residual):
             return np.linalg.norm(residual / scale)
@@ -415,11 +422,10 @@ class modelSolver():
 
             dX = self._solve_newton_step(J, -R)
 
-            system = self.model._system()
             lam = 1.0
             while True:
 
-                x_try = system.clip_positive(x + lam * dX)                  # positive fields stay positive
+                x_try = system.clip_positive(x + lam * weights * dX)        # positive fields stay positive
                 self.updateSolution(x_try)
 
                 J_try, R_try = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
@@ -445,13 +451,92 @@ class modelSolver():
 
         sim_logger.info(separator)
 
-        if norm_R <= atol or norm_R <= rtol * norm_R0:
+        self.nonlinear_converged = bool(norm_R <= atol or norm_R <= rtol * norm_R0)
+
+        if self.nonlinear_converged:
             sim_logger.info(f"Succefully converged in {iteration} iterations.")
         elif diverged:
             sim_logger.warning("Newton stopped: the residual is not finite even with the smallest step. "
                                "The last finite state is kept.")
         else:
             sim_logger.warning("Solver did not converge at the specified tolerance and number of iterations.")
+
+        self.newton_iterations = iteration
+        self.x0 = x
+        self.updateSolution(x)
+
+        return x
+
+    def pseudoTransientSolver(self):
+
+        """Pseudo-transient continuation (Kelley & Keyes 1998) with switched evolution relaxation (Mulder & Van Leer 1985).
+
+        Each iteration solves (J + D) dx = -R with the steady residual R, so the converged solution is that of the steady
+        problem and the pseudo-time only changes the path. D = |diag J| / CFL is a local pseudo-time step: the diagonal
+        already measures convection, diffusion and reaction of each dof, D ~ m (|u| / h + nu / h^2) / CFL, which is the
+        usual m / dt_local. Constraint rows (the pressure) and Dirichlet rows get no term.
+
+        The CFL follows the residual, CFL *= ||R_old|| / ||R_new||, limited to [1/2, cfl_growth] per iteration and growing
+        at least 10 % while the residual falls. When it is large the method is Newton, with quadratic convergence. A step
+        that makes the residual non-finite or more than `max_rise` times larger is discarded and retried with a quarter of
+        the CFL. Norms and stopping tests are those of newtonSolver.
+        """
+
+        sim_logger.info("------- Starting pseudo-transient nonlinear solver -------")
+
+        rtol, atol, max_iterations = 1e-10, 1e-10, 500
+        cfl = float(self.solverOptions.get('CFL0', 10.0))
+        cfl_min, cfl_max, cfl_growth, max_rise = 1e-6, 1e14, 4.0, 4.0
+
+        system = self.model._system()
+        x = self.x0.copy()
+
+        # Boundary values enter at once: Dirichlet rows have no pseudo-time, so otherwise the first step imposes them
+        # whatever the CFL (a hot wall in a cold melt changes the viscosity by orders of magnitude and no CFL helps)
+        x[system.is_dirichlet] = system.dirichlet_value[system.is_dirichlet]
+        self.updateSolution(x)
+
+        J, R = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
+
+        scale = np.maximum(np.abs(J.diagonal()), 1.0) * system.field_scales(x)
+        weights = system.relaxation_weights(self.solverOptions.get('Relaxation'))
+        evolves = (~(system.is_dirichlet | system.constraint)).astype(float)
+
+        norm_R0 = norm_R = np.linalg.norm(R / scale)
+        iteration = 0
+
+        while norm_R > atol and norm_R > rtol * norm_R0 and iteration < max_iterations and cfl >= cfl_min:
+
+            iteration += 1
+
+            D = evolves * np.maximum(np.abs(J.diagonal()), 1e-12) / cfl
+            dX = self._solve_newton_step((J + sp.diags(D)).tocsr(), -R)
+
+            x_try = system.clip_positive(x + weights * dX)                  # positive fields stay positive
+            self.updateSolution(x_try)
+
+            J_try, R_try = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
+            norm_try = np.linalg.norm(R_try / scale)
+
+            if not np.isfinite(norm_try) or norm_try > max_rise * norm_R:
+                cfl *= 0.25
+                sim_logger.info(f"| {iteration:^6} | step rejected ({norm_try:.2e}), CFL -> {cfl:.3e}")
+                continue
+
+            ratio = norm_R / max(norm_try, 1e-300)
+            growth = np.clip(ratio, 0.5, cfl_growth)
+            cfl = min(cfl * (max(growth, 1.1) if ratio >= 1.0 else growth), cfl_max)
+            x, J, R, norm_R = x_try, J_try, R_try, norm_try
+
+            sim_logger.info(f"| {iteration:^6} | ||R|| {norm_R:.4e} | ||R||/||R0|| {norm_R / norm_R0:.4e} | CFL {cfl:.3e}")
+
+        self.nonlinear_converged = bool(norm_R <= atol or norm_R <= rtol * norm_R0)
+
+        if self.nonlinear_converged:
+            sim_logger.info(f"Pseudo-transient solver converged in {iteration} iterations.")
+        else:
+            sim_logger.warning(f"Pseudo-transient solver did not converge in {iteration} iterations "
+                               f"(relative residual {norm_R / max(norm_R0, 1e-300):.1e}, CFL {cfl:.1e}).")
 
         self.newton_iterations = iteration
         self.x0 = x
