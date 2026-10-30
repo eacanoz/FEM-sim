@@ -101,7 +101,7 @@
 | Tangente transitoria | flujo + calor con el contexto de paso frente a diferencias finitas | `Test/test_transient_flow.py` | 1e-7 relativo |
 | Calor transitorio convectado | flujo tapón de `ff` = velocidad prescrita en `ht`, con SUPG | `Test/test_transient_flow.py` | 1e-8 |
 | Fuerzas por reacciones | canal: paredes = Δp H; Couette: −μU L/H; tubo: Δp πR² | `Test/test_transient_flow.py` | 1e-10 |
-| Cilindro de Schäfer–Turek 2D-2 (Re = 100, ejemplo) | C_D,max 3.22–3.24; C_L,max 0.99–1.01; St 0.295–0.305 | `Example_Cylinder_Vortex_Shedding.py` | 2926 nodos, BDF2 dt = 0.01: C_D,max 3.231 (dentro); C_L,max 0.966 (−2.4 %); St 0.2905 (−1.5 %); 15 min |
+| Cilindro de Schäfer–Turek 2D-2 (Re = 100, ejemplo) | C_D,max 3.22–3.24; C_L,max 0.99–1.01; St 0.295–0.305 | `Example_Cylinder_Vortex_Shedding.py` | 2926 nodos, BDF2 dt = 0.01: C_D,max 3.231 (dentro); C_L,max 0.966 (−2.4 %); St 0.2905 (−1.5 %); 6.7 min (15 min con Newton completo) |
 | Convección natural (de Vahl Davis 1983) | Nusselt de la pared caliente por reacciones, u_max y v_max en los planos medios; Ra = 1e3–1e5 (32×32) y 1e3–1e6 (48×48, ejemplo) | `Test/test_buoyancy.py`, `Example_Natural_Convection.py` | 32×32: Nu < 0.4 %, velocidades < 1.7 %; 48×48: Nu < 0.2 %, u_max < 0.9 %, v_max < 1.9 %; calor entrante = saliente (1e-10) |
 | Estratificación estable | calentada por arriba: reposo y presión cuadrática | `Test/test_buoyancy.py` | Q4 exacto (1e-10); T3 corrientes espurias de orden 3 (no robusto en presión) |
 | Especies en el flujo calculado | Le = 1: especie = temperatura; flotación solutal = térmica | `Test/test_buoyancy.py` | 1e-8 |
@@ -117,6 +117,9 @@
 | Canal k-ω SST frente a un resolvedor 1D independiente | Re_τ = 180 y 395 (prueba) y 590 (a mano): diferencias finitas con ω como incógnita, sin código del proyecto | `Test/test_sst.py` | U_c⁺, U_b⁺ y k máx. a < 1 %; 9–10 iteraciones |
 | Canal k-ω SST frente a la DNS | U_c⁺ de Moser, Kim y Mansour (1999), subcapa y ley de pared de Reichardt | `Test/test_sst.py` | U_c⁺ −3.6 %, −2.5 % y −4.3 % a Re_τ = 180, 395 y 590, igual en el resolvedor 1D (el déficit es del modelo); subcapa < 2 %; ley de pared < 7 % |
 | k-ω SST: independencia del arranque y la malla; tangente; transitorio | estado uniforme, malla doble, diferencias finitas en Q4 y T3, BDF2 desde el estacionario | `Test/test_sst.py` | u 1e-5 (126 iter.); U_c⁺ < 0.5 %; tangente 1e-6; u 1e-5 |
+| Residuo sin tangente | `System.residual` = R de `residual_and_tangent`: flujo con ley de viscosidad, calentamiento, flotación, axisimétrico, SA, SST y las leyes genéricas; estacionario, paso de tiempo y nivel antiguo | `Test/test_modified_newton.py` | 1e-12 relativo |
+| Newton modificado en transitorio | cavidad con BDF2, Crank–Nicolson y Euler implícito frente a Newton completo; arranque muy no lineal | `Test/test_modified_newton.py` | u, p < 1e-8; 123–141 tangentes pasan a 3–5 |
+| Parada ante un residuo no finito en transitorio | se detiene con aviso y conserva los pasos válidos | `Test/test_modified_newton.py` | pasa |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -231,8 +234,9 @@ Lo que sigue pendiente:
 - La presión del arranque desde el reposo tiene un pequeño error espacial de la PSPG (curvatura grande cerca de las
   paredes) que decae con el tiempo.
 - Paso fijo (sin control adaptativo). Condiciones de contorno independientes del tiempo.
-- Coste: el término de flujo se reensambla en cada iteración de Newton (en Python vectorizado); el ejemplo del cilindro
-  con unos miles de nodos y 800 pasos tarda del orden de veinte minutos.
+- Coste: con Newton modificado la tangente se reconstruye pocas veces (×1.8 a ×3.5 en transitorio; cilindro con 2926 nodos
+  y 800 pasos: 6.7 min). Cada paso hace más iteraciones (10 de media frente a 4), pero mucho más baratas. No acelera los
+  estudios estacionarios.
 
 ### Fluidos (Etapa 15, convección natural y especies)
 - Boussinesq con β constante; sin dependencia de la densidad en la inercia. La presión es la desviación de la
@@ -255,6 +259,8 @@ Lo que sigue pendiente:
   80×64), con k recortado a 0 en decenas de nodos junto al borde de ataque. Sin recorte es peor (ln ω oscila entre −23 y
   +24). El C_f ya es razonable y casi no cambia con la malla (−7 a −11 % frente a Schultz–Grunow; SA en 40×48: −6 a −15 %),
   pero no hay convergencia. SA sí converge en la misma malla (38 iteraciones).
+- k-ω SST en transitorio desde un estado aproximado puede divergir (canal Re_τ = 395, BDF2, dt = 0.02, con Newton completo y
+  modificado por igual): la simulación se detiene con aviso. Conviene partir de la solución estacionaria.
 - k-ω SST: arrancar con k muy pequeño puede tardar (canal desde estado uniforme: 126 iteraciones frente a 9) y el flujo
   laminar es solución del modelo. Solo 2D plano. El escalón de Driver–Seegmiller no se ha probado.
 
@@ -292,7 +298,8 @@ Lo que sigue pendiente:
 - AMG (aglomeración suavizada) está pensado para difusión simétrica; con convección fuerte o varios campos acoplados puede
   necesitar más iteraciones o GMRES/BiCGSTAB. Sin precondicionador de bloques para sistemas acoplados.
 - La salida es VTK XML en ASCII (grande en mallas muy finas); no hay XDMF/HDF5 ni VTK binario ni datos por celda.
-- La factorización se reutiliza si la matriz es idéntica; en problemas no lineales cada iteración de Newton refactoriza.
+- La factorización se reutiliza si la matriz es idéntica. En transitorio no lineal se conserva entre iteraciones y pasos
+  (`reuseTangent=True`); en estacionario no lineal cada iteración de Newton refactoriza.
 
 ### Entorno y archivos
 - `Logs/`: cada importación de `Source` crea un archivo de log nuevo. Con muchas ejecuciones la carpeta crece.
@@ -345,7 +352,7 @@ Ordenados por el valor que aportan al siguiente paso. Cada uno debe llevar sus p
    factorización reutilizada (transitorio lineal y `solve()` repetidos), exportación VTK/PVD. Pendiente: XDMF/HDF5, VTK binario,
    iterativo para sistemas con convección fuerte o varios campos acoplados (AMG por bloques).
 6. ~~**Estabilización de convección.**~~ Hecha (SUPG en 1D y 2D).
-7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 a 15 y 16a (Spalart–Allmaras) hechas; en curso, la Etapa 17 ([PLAN_ETAPA17.md](PLAN_ETAPA17.md)): Prioridades 1 y 2 hechas, salvo k-ω SST en placa plana.
+7. **Fluidos.** Ver [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md): Etapas 9 a 15 y 16a (Spalart–Allmaras) hechas; en curso, la Etapa 17 ([PLAN_ETAPA17.md](PLAN_ETAPA17.md)): Prioridades 1 a 3 hechas, salvo k-ω SST en placa plana.
 
 ## 5. Criterio para cerrar una etapa
 

@@ -157,13 +157,14 @@ class Model(object):
 
     def solverConfiguration(self, Study=StudyType.steady_state, Type=ProblemType.linear, Method=SolverType.direct, Solver = DirectSolvers.PARDISO, 
                             timeDisc = 1, timeStep=0.05, totalTime = 3, prec = Preconditioners.iLU, tol = 1e-10, maxiter = None,
-                            timeScheme='theta', globalization='newton', cfl0=10.0, relaxation=None):
+                            timeScheme='theta', globalization='newton', cfl0=10.0, relaxation=None, reuseTangent=True):
 
         """Configures the solver for the model based on the provided options.
 
         Transient studies: timeScheme 'theta' (timeDisc = theta: 1 implicit Euler, 0.5 Crank-Nicolson) or 'BDF2'
         (second order and L-stable: no oscillating algebraic variables such as the pressure; the first step is
-        implicit Euler). Systems with nonlinear terms iterate Newton inside every step.
+        implicit Euler). Systems with nonlinear terms iterate Newton inside every step, with a modified Newton that keeps
+        the tangent and its factorization while the residual falls fast (reuseTangent=False rebuilds it every iteration).
 
         Steady nonlinear studies: globalization 'newton' (line search) or 'pseudo-transient' (local pseudo-time step with
         a CFL that starts at cfl0 and grows as the residual falls, for hard problems or poor initial guesses; it reaches
@@ -189,7 +190,8 @@ class Model(object):
             'Max Iterations': maxiter,  # iterative solvers (None: scipy default)
             'Globalization': globalization,
             'CFL0': cfl0,
-            'Relaxation': relaxation
+            'Relaxation': relaxation,
+            'Reuse Tangent': reuseTangent
         }
 
 
@@ -235,6 +237,7 @@ class Model(object):
         self.newton_iterations = getattr(solver, 'newton_iterations', None)   # steady nonlinear solves
         self.nonlinear_converged = getattr(solver, 'nonlinear_converged', None)   # steady nonlinear solves
         self.step_iterations = getattr(solver, 'step_iterations', None)       # Newton iterations of each time step
+        self.tangent_assemblies = getattr(solver, 'tangent_assemblies', None) # tangents built in a nonlinear transient
 
         if self.solverOptions['Study'] == StudyType.steady_state:
             self.sol.update(self.physics.derived_fields(self))

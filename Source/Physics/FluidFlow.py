@@ -522,32 +522,33 @@ class FlowTerm:
 
         return fields, u, G, F
 
-    def _strain(self, u, G):
+    def _strain(self, u, G, derivative=True):
 
-        """eps (in-plane), the hoop strain u_r / r (zero on a plane mesh), gamma2 = 2 eps:eps and d(gamma2)/dU_jc."""
+        """eps (in-plane), the hoop strain u_r / r (zero on a plane mesh), gamma2 = 2 eps:eps and d(gamma2)/dU_jc
+        (None without `derivative`)."""
 
         disc = self.system.disc
         eps = 0.5 * (G + np.swapaxes(G, -1, -2))
-        dg2 = 4.0 * np.einsum('egcb,egjb->egjc', eps, disc.B)
+        dg2 = 4.0 * np.einsum('egcb,egjb->egjc', eps, disc.B) if derivative else None
         e_hh = np.zeros(disc.detJw.shape)
 
         if disc.axisymmetric:
             e_hh = u[..., 0] / disc.radius
-            dg2 = dg2.copy()
-            dg2[..., 0] += 4.0 * e_hh[..., None] * disc.hoop
+            if derivative:
+                dg2[..., 0] += 4.0 * e_hh[..., None] * disc.hoop
 
         g2 = 2.0 * (np.einsum('egab,egab->eg', eps, eps) + e_hh ** 2)
 
         return eps, e_hh, g2, dg2
 
-    def viscosity(self, x):
+    def viscosity(self, x, derivatives=True):
 
         """mu, dmu/dgamma2 (nel, ngp) and dmu/df (nel, ngp, n_fields) at the Gauss points of the state x, for the fields
-        read by the viscosity law (the derivatives are zero for a constant mu)."""
+        read by the viscosity law (the derivatives are zero for a constant mu, and None without `derivatives`)."""
 
         disc = self.system.disc
         _, u, G, F = self._kinematics(x)
-        _, _, g2, _ = self._strain(u, G)
+        _, _, g2, _ = self._strain(u, G, derivative=False)
         shape = disc.detJw.shape
         nf = F.shape[-1]
 
@@ -555,13 +556,17 @@ class FlowTerm:
             return ops.at_gauss(disc, self.mu_const), np.zeros(shape), np.zeros(shape + (nf,))
 
         inputs = np.concatenate([g2[..., None], F if nf else np.zeros(shape + (1,))], axis=-1)
-        values, derivatives = self.law(inputs.reshape(-1, inputs.shape[-1]))
-        return (values.reshape(shape), derivatives[:, 0, 0].reshape(shape),
-                derivatives[:, 0, 1:1 + nf].reshape(shape + (nf,)))
+
+        if not derivatives:
+            return self.law.values(inputs.reshape(-1, inputs.shape[-1])).reshape(shape), None, None
+
+        values, jacobian = self.law(inputs.reshape(-1, inputs.shape[-1]))
+        return (values.reshape(shape), jacobian[:, 0, 0].reshape(shape),
+                jacobian[:, 0, 1:1 + nf].reshape(shape + (nf,)))
 
     # ----- residual and tangent -----
 
-    def contribution(self, x):
+    def contribution(self, x, tangent=True):
 
         disc, layout = self.system.disc, self.system.layout
         nel, ngp, nne, dim = disc.B.shape
@@ -572,15 +577,15 @@ class FlowTerm:
         P = np.asarray(fields['p'], dtype=float)[disc.conn]
         gp = np.einsum('egjb,ej->egb', B, P)
 
-        eps, e_hh, g2, dg2 = self._strain(u, G)                                   # dg2 = d(gamma2)/dU_jc
-        mu, mu_g2, mu_F = self.viscosity(x)
+        eps, e_hh, g2, dg2 = self._strain(u, G, tangent)                          # dg2 = d(gamma2)/dU_jc
+        mu, mu_g2, mu_F = self.viscosity(x, tangent)
         axi = disc.axisymmetric
         divB = B.copy()                                                           # div of the vector test function
         if axi:
             divB[..., 0] += disc.hoop
 
         state = x if self.tau_state is None else self.tau_state
-        mu_tau = mu if self.tau_state is None else self.viscosity(state)[0]
+        mu_tau = mu if self.tau_state is None else self.viscosity(state, False)[0]
         speed = np.linalg.norm(self._kinematics(state)[1], axis=-1) if self.inertia else np.zeros(w.shape)
         rho = ops.at_gauss(disc, self.rho)
         time = self.system.time
@@ -602,39 +607,46 @@ class FlowTerm:
 
         if self.law is not None:
             sigma = 2.0 * mu[..., None, None] * eps
-            dsig = (np.einsum('eg,egjb,ac->egabjc', mu, B, eye) + np.einsum('eg,egja,bc->egabjc', mu, B, eye)
-                    + 2.0 * np.einsum('egab,eg,egjc->egabjc', eps, mu_g2, dg2))
             Ru += np.einsum('eg,egib,egab->eia', w, B, sigma)
-            blocks.append((np.einsum('eg,egib,egabjc->eiajc', w, B, dsig).reshape(nel, nne * dim, nne * dim), ru, ru))
 
-            dsigF = []                                                            # d sigma / d f_j per field
-            for i, r_f in enumerate(rF):
-                dsigF.append(2.0 * np.einsum('egab,eg,gj->egabj', eps, mu_F[..., i], N))
-                blocks.append((np.einsum('eg,egib,egabj->eiaj', w, B, dsigF[-1]).reshape(nel, nne * dim, nne), ru, r_f))
+            if tangent:
+                dsig = (np.einsum('eg,egjb,ac->egabjc', mu, B, eye) + np.einsum('eg,egja,bc->egabjc', mu, B, eye)
+                        + 2.0 * np.einsum('egab,eg,egjc->egabjc', eps, mu_g2, dg2))
+                blocks.append((np.einsum('eg,egib,egabjc->eiajc', w, B, dsig).reshape(nel, nne * dim, nne * dim), ru, ru))
+
+                dsigF = []                                                        # d sigma / d f_j per field
+                for i, r_f in enumerate(rF):
+                    dsigF.append(2.0 * np.einsum('egab,eg,gj->egabj', eps, mu_F[..., i], N))
+                    blocks.append((np.einsum('eg,egib,egabj->eiaj', w, B, dsigF[-1]).reshape(nel, nne * dim, nne), ru, r_f))
 
             if axi:
                 # hoop stress sigma_tt = 2 mu u_r / r, tested by v_r / r
                 s_hh = 2.0 * mu * e_hh
-                ds_hh = 2.0 * e_hh[..., None, None] * mu_g2[..., None, None] * dg2               # (e, g, j, c)
-                ds_hh[..., 0] += 2.0 * mu[..., None] * disc.hoop
                 Ru[:, :, 0] += np.einsum('eg,egi,eg->ei', w, disc.hoop, s_hh)
-                Kh = np.zeros((nel, nne, dim, nne, dim))
-                Kh[:, :, 0] = np.einsum('eg,egi,egjc->eijc', w, disc.hoop, ds_hh)
-                blocks.append((Kh.reshape(nel, nne * dim, nne * dim), ru, ru))
-                ds_hhF = []
-                for i, r_f in enumerate(rF):
-                    ds_hhF.append(2.0 * np.einsum('eg,eg,gj->egj', e_hh, mu_F[..., i], N))
-                    KhF = np.zeros((nel, nne, dim, nne))
-                    KhF[:, :, 0] = np.einsum('eg,egi,egj->eij', w, disc.hoop, ds_hhF[-1])
-                    blocks.append((KhF.reshape(nel, nne * dim, nne), ru, r_f))
+                if tangent:
+                    ds_hh = 2.0 * e_hh[..., None, None] * mu_g2[..., None, None] * dg2           # (e, g, j, c)
+                    ds_hh[..., 0] += 2.0 * mu[..., None] * disc.hoop
+                    Kh = np.zeros((nel, nne, dim, nne, dim))
+                    Kh[:, :, 0] = np.einsum('eg,egi,egjc->eijc', w, disc.hoop, ds_hh)
+                    blocks.append((Kh.reshape(nel, nne * dim, nne * dim), ru, ru))
+                    ds_hhF = []
+                    for i, r_f in enumerate(rF):
+                        ds_hhF.append(2.0 * np.einsum('eg,eg,gj->egj', e_hh, mu_F[..., i], N))
+                        KhF = np.zeros((nel, nne, dim, nne))
+                        KhF[:, :, 0] = np.einsum('eg,egi,egj->eij', w, disc.hoop, ds_hhF[-1])
+                        blocks.append((KhF.reshape(nel, nne * dim, nne), ru, r_f))
 
             if self.Q is not None:
                 divs = (self.Q @ sigma.ravel()).reshape(nel, ngp, dim)
-                d_divs = self.Q @ self._stress_tangent(dsig, dsigF, ru, rF)
-                if axi:
+                if tangent:
+                    d_divs = self.Q @ self._stress_tangent(dsig, dsigF, ru, rF)
+                if axi and tangent:
                     extra, d_extra = self._hoop_divergence(sigma, s_hh, dsig, ds_hh, dsigF, ds_hhF, ru, rF)
                     divs = divs + extra
                     d_divs = d_divs + d_extra
+                elif axi:
+                    r = disc.radius
+                    divs = divs + np.stack([(sigma[..., 0, 0] - s_hh) / r, sigma[..., 1, 0] / r], axis=-1)
         elif self.V is not None:
             divs = (self.V @ x).reshape(nel, ngp, dim)
             d_divs = self.V
@@ -651,7 +663,8 @@ class FlowTerm:
             fb = (disc.interpolate(np.asarray(fields[name], dtype=float)) - ref)[..., None] * c
             RM_space = RM_space - fb
             Ru -= np.einsum('eg,gi,ega->eia', w, N, fb)
-            blocks.append((-np.einsum('eg,gi,a,gj->eiaj', w, N, c, N).reshape(nel, nne * dim, nne), ru, r_phi))
+            if tangent:
+                blocks.append((-np.einsum('eg,gi,a,gj->eiaj', w, N, c, N).reshape(nel, nne * dim, nne), ru, r_phi))
             buoyancy_rows.append((r_phi, c))
 
         dconv = None
@@ -659,9 +672,10 @@ class FlowTerm:
             conv = rho[..., None] * np.einsum('egb,egab->ega', u, G)
             RM_space = RM_space + conv
             uB = np.einsum('egb,egib->egi', u, B)                                 # u . grad N_i
-            dconv = np.einsum('eg,ac,egj->egajc', rho, eye, uB)                    # rho u . grad N_j (Picard part)
-            if self.newton:
-                dconv = dconv + np.einsum('eg,gj,egac->egajc', rho, N, G)          # rho N_j du_a/dx_c
+            if tangent:
+                dconv = np.einsum('eg,ac,egj->egajc', rho, eye, uB)                # rho u . grad N_j (Picard part)
+                if self.newton:
+                    dconv = dconv + np.einsum('eg,gj,egac->egajc', rho, N, G)      # rho N_j du_a/dx_c
 
         # The stabilization uses the time-discrete momentum residual of the step, evaluated once:
         #   R_M = rho (u - u_n)/dt-like x' + grad p + theta RM_space(x) + (1 - theta) RM_space(x_n)
@@ -693,7 +707,8 @@ class FlowTerm:
             return d
 
         RM_s, RM_p = residual(c_s), residual(c_p)
-        dRM_s, dRM_p = local_derivative(c_s), local_derivative(c_p)
+        if tangent:
+            dRM_s, dRM_p = local_derivative(c_s), local_derivative(c_p)
 
         if self.inertia:
             ws = w * tau * rho * (0.0 if old_level else 1.0)                      # SUPG weight factor
@@ -703,35 +718,41 @@ class FlowTerm:
             Ru += (np.einsum('eg,gi,ega->eia', w, N, conv) + np.einsum('eg,egi,ega->eia', ws, uB, RM_s)
                    + np.einsum('eg,egia->eia', w * tau_c * divu, divB))
 
-            Juu = (np.einsum('eg,gi,egajc->eiajc', w, N, dconv) + np.einsum('eg,egi,egajc->eiajc', ws, uB, dRM_s)
-                   + np.einsum('eg,egia,egjc->eiajc', w * tau_c, divB, divB))
-            if self.newton:
-                Juu = Juu + np.einsum('eg,gj,egic,ega->eiajc', ws, N, B, RM_s)      # derivative of the SUPG weight
-            blocks.append((Juu.reshape(nel, nne * dim, nne * dim), ru, ru))
-            blocks.append((c_s[1] * np.einsum('eg,egi,egja->eiaj', ws, uB, B).reshape(nel, nne * dim, nne), ru, rp))
-            for r_phi, c in buoyancy_rows:                                         # d(R_M)/dphi_j = -c N_j
-                blocks.append((-c_s[2] * np.einsum('eg,egi,a,gj->eiaj', ws, uB, c, N).reshape(nel, nne * dim, nne),
-                               ru, r_phi))
+            if tangent:
+                Juu = (np.einsum('eg,gi,egajc->eiajc', w, N, dconv) + np.einsum('eg,egi,egajc->eiajc', ws, uB, dRM_s)
+                       + np.einsum('eg,egia,egjc->eiajc', w * tau_c, divB, divB))
+                if self.newton:
+                    Juu = Juu + np.einsum('eg,gj,egic,ega->eiajc', ws, N, B, RM_s)  # derivative of the SUPG weight
+                blocks.append((Juu.reshape(nel, nne * dim, nne * dim), ru, ru))
+                blocks.append((c_s[1] * np.einsum('eg,egi,egja->eiaj', ws, uB, B).reshape(nel, nne * dim, nne), ru, rp))
+                for r_phi, c in buoyancy_rows:                                     # d(R_M)/dphi_j = -c N_j
+                    blocks.append((-c_s[2] * np.einsum('eg,egi,a,gj->eiaj', ws, uB, c, N).reshape(nel, nne * dim, nne),
+                                   ru, r_phi))
 
         R += layout.scatter_vector(Ru.reshape(nel, -1), ru)
 
         # ----- PSPG -----
         if self.pspg:
             R += layout.scatter_vector(np.einsum('eg,egia,ega->ei', w * tau, B, RM_p), rp)
-            blocks.append((c_p[1] * np.einsum('eg,egia,egja->eij', w * tau, B, B), rp, rp))
-            if dRM_p is not None:
-                blocks.append((np.einsum('eg,egia,egajc->eijc', w * tau, B, dRM_p).reshape(nel, nne, nne * dim), rp, ru))
-            for r_phi, c in buoyancy_rows:
-                blocks.append((-c_p[2] * np.einsum('eg,egia,a,gj->eij', w * tau, B, c, N), rp, r_phi))
+            if tangent:
+                blocks.append((c_p[1] * np.einsum('eg,egia,egja->eij', w * tau, B, B), rp, rp))
+                if dRM_p is not None:
+                    blocks.append((np.einsum('eg,egia,egajc->eijc', w * tau, B, dRM_p).reshape(nel, nne, nne * dim), rp, ru))
+                for r_phi, c in buoyancy_rows:
+                    blocks.append((-c_p[2] * np.einsum('eg,egia,a,gj->eij', w * tau, B, c, N), rp, r_phi))
 
         # ----- viscous heating -----
         if self.heating is not None:
             rH = layout.element_dofs(disc.conn, self.heating)
             R -= layout.scatter_vector(np.einsum('eg,gi,eg->ei', w, N, mu * g2), rH)
-            dphi = np.einsum('eg,egjc->egjc', mu + g2 * mu_g2, dg2)
-            blocks.append((-np.einsum('eg,gi,egjc->eijc', w, N, dphi).reshape(nel, nne, nne * dim), rH, ru))
-            for i, r_f in enumerate(rF):
-                blocks.append((-np.einsum('eg,gi,eg,gj->eij', w, N, g2 * mu_F[..., i], N), rH, r_f))
+            if tangent:
+                dphi = np.einsum('eg,egjc->egjc', mu + g2 * mu_g2, dg2)
+                blocks.append((-np.einsum('eg,gi,egjc->eijc', w, N, dphi).reshape(nel, nne, nne * dim), rH, ru))
+                for i, r_f in enumerate(rF):
+                    blocks.append((-np.einsum('eg,gi,eg,gj->eij', w, N, g2 * mu_F[..., i], N), rH, r_f))
+
+        if not tangent:
+            return R, None
 
         J = sp.csr_matrix((layout.ndof, layout.ndof))
         for Ke, rows, cols in blocks:
@@ -826,8 +847,8 @@ class FlowTerm:
         fields, u, G, _ = self._kinematics(x)
 
         if self.law is not None:
-            eps, e_hh, _, _ = self._strain(u, G)
-            mu = self.viscosity(x)[0]
+            eps, e_hh, _, _ = self._strain(u, G, derivative=False)
+            mu = self.viscosity(x, False)[0]
             sigma = 2.0 * mu[..., None, None] * eps
             divs = np.zeros((nel, ngp, dim)) if self.Q is None else (self.Q @ sigma.ravel()).reshape(nel, ngp, dim)
             if self.Q is not None and disc.axisymmetric:

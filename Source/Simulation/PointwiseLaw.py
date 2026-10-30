@@ -35,6 +35,14 @@ class PointwiseLaw:
 
         return values, derivatives
 
+    def values(self, U):
+
+        """U (npts, n_in) -> values (npts, n_out), without the derivatives."""
+
+        U = jnp.asarray(U, dtype=float)
+
+        return np.asarray(self._value(U)).reshape(U.shape[0], -1)
+
 
 _LAWS = {}
 

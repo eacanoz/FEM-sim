@@ -84,6 +84,19 @@ los experimentos de las Prioridades 1–2.
 3. **Operador de convección dedicado** en lugar de `GradientLawTerm` para escalares convectados con gradiente
    (su arreglo `W` es genérico y pesado).
 
+**Estado: hecho el punto 2, con otro enfoque; puntos 1 y 3 descartados por lo medido** (`Test/test_modified_newton.py`).
+
+- El perfil contradijo la estimación del punto 1. Convertir COO a CSR pesa ~4 % y todo el ensamblado disperso ~20 %, así que
+  el patrón precalculado daría a lo sumo ×1.25, no ×2–3. `einsum` pesa 50–60 %, repartido sin un punto dominante, y
+  `optimize=True` solo da 0–12 %.
+- Lo que rinde es evitar ensamblar y factorizar: `System.residual` cuesta unas 5 veces menos que residuo más tangente, y el
+  Newton modificado (`reuseTangent`, activo por defecto) conserva la factorización entre iteraciones y pasos mientras cada
+  iteración reduzca el residuo al menos a la mitad.
+- Resultado: ×1.8 a ×3.5 en cuatro casos transitorios, con soluciones iguales a 4e-8 o mejor; cilindro de 15 a 6.7 min con
+  los mismos C_D, C_L y St. **Los estudios estacionarios no ganan**: conservan el Newton completo por su convergencia
+  cuadrática. El criterio previsto de 1e-10 no aplica en transitorio, porque Newton para en 1e-8 relativo.
+- Corregido de paso: un residuo NaN pasaba el test de parada del transitorio y la simulación seguía en silencio.
+
 ## Prioridad 4: calidad numérica de fondo (Taylor–Hood)
 
 Impacto: **alto, esfuerzo alto**. Resuelve de raíz varias limitaciones de la presión:

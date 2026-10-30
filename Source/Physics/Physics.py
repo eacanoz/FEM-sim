@@ -223,7 +223,7 @@ class FieldConvectionTerm:
         self.supg = supg
         self.tau_state = None        # evaluate tau at this state instead of x (to test the tangent)
 
-    def contribution(self, x):
+    def contribution(self, x, tangent=True):
 
         disc, layout = self.system.disc, self.system.layout
         nel, ngp, nne, dim = disc.B.shape
@@ -242,8 +242,9 @@ class FieldConvectionTerm:
         cols_u = layout.element_dofs(disc.conn, self.velocity)
 
         Re = np.einsum('eg,gi,eg->ei', w, N, conv)
-        Kpp = np.einsum('eg,gi,egj->eij', w, N, aB)
-        Kpu = np.einsum('eg,gi,gj,egc->eijc', w * c, N, N, gphi)
+        if tangent:
+            Kpp = np.einsum('eg,gi,egj->eij', w, N, aB)
+            Kpu = np.einsum('eg,gi,gj,egc->eijc', w * c, N, N, gphi)
 
         time = self.system.time
         if self.supg and not (time is not None and time.get('old_level', False)):
@@ -262,14 +263,20 @@ class FieldConvectionTerm:
                                                         dtype=float))
                     mt = ops.at_gauss(disc, self.m) / th
                     res = res + mt * phi_t
-                    Kpp = Kpp + np.einsum('eg,egi,gj->eij', w * tau * mt * time['alpha'], aB, N)
+                    if tangent:
+                        Kpp = Kpp + np.einsum('eg,egi,gj->eij', w * tau * mt * time['alpha'], aB, N)
 
             Re = Re + np.einsum('eg,egi,eg->ei', w * tau, aB, res)
-            Kpp = Kpp + np.einsum('eg,egi,egj->eij', w * tau, aB, aB)
-            Kpu = Kpu + (np.einsum('eg,gj,egic,eg->eijc', w * tau * c, N, B, res)
-                         + np.einsum('eg,egi,gj,egc->eijc', w * tau * c, aB, N, gphi))
+            if tangent:
+                Kpp = Kpp + np.einsum('eg,egi,egj->eij', w * tau, aB, aB)
+                Kpu = Kpu + (np.einsum('eg,gj,egic,eg->eijc', w * tau * c, N, B, res)
+                             + np.einsum('eg,egi,gj,egc->eijc', w * tau * c, aB, N, gphi))
 
         R = layout.scatter_vector(Re, rows)
+
+        if not tangent:
+            return R, None
+
         J = (layout.scatter_matrix(Kpp, rows, rows)
              + layout.scatter_matrix(Kpu.reshape(nel, nne, nne * dim), rows, cols_u))
 

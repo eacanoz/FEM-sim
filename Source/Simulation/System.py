@@ -5,6 +5,7 @@ laws (reactions, nonlinear boundary coefficients) and boundary conditions. The s
 
     linear(x)                -> A, b      the system A x = b (Newton-linearized if there are nonlinear terms)
     residual_and_tangent(x)  -> J, R      Newton: dx = -J^-1 R
+    residual(x)              -> R         the same R, without the tangent
     mass()                   -> M         for transient studies
     is_dirichlet / dirichlet_value        constrained dofs
 
@@ -31,15 +32,23 @@ class VolumeLawTerm:
         self.outputs = outputs
         self.sign = sign
 
-    def contribution(self, x):
+    def contribution(self, x, tangent=True):
 
         system, disc, layout = self.system, self.system.disc, self.system.layout
 
         fields = layout.split(x)
         U = disc.interpolate(np.stack([fields[n] for n in self.inputs], axis=-1))  # (nel, ngp, nin)
+        shape = disc.detJw.shape
+
+        if not tangent:
+            values = self.law.values(U.reshape(-1, len(self.inputs))).reshape(shape + (len(self.outputs),))
+            R = np.zeros(layout.ndof)
+            for o, out in enumerate(self.outputs):
+                fe = self.sign * np.einsum('eg,gi,eg->ei', disc.detJw, disc.N, values[..., o])
+                R += layout.scatter_vector(fe, layout.element_dofs(disc.conn, out))
+            return R, None
 
         values, derivatives = self.law(U.reshape(-1, len(self.inputs)))
-        shape = disc.detJw.shape
         values = values.reshape(shape + (len(self.outputs),))
         derivatives = derivatives.reshape(shape + (len(self.outputs), len(self.inputs)))
 
@@ -75,18 +84,21 @@ class DiffusionLawTerm:
         self.field = field
         self.inputs = inputs
 
-    def contribution(self, x):
+    def contribution(self, x, tangent=True):
 
         system, disc, layout = self.system, self.system.disc, self.system.layout
         n_in = len(self.inputs)
 
         fields = layout.split(x)
         U = disc.interpolate(np.stack([fields[n] for n in self.inputs], axis=-1))   # (nel, ngp, nin)
-
-        k, dk = self.law(U.reshape(-1, n_in))
         shape = disc.detJw.shape
+
+        if tangent:
+            k, dk = self.law(U.reshape(-1, n_in))
+            dk = dk.reshape(shape + (n_in,))
+        else:
+            k = self.law.values(U.reshape(-1, n_in))
         k = k.reshape(shape)
-        dk = dk.reshape(shape + (n_in,))
 
         phi = fields[self.field][disc.conn]                       # (nel, nne)
         grad = np.einsum('egia,ei->ega', disc.B, phi)             # (nel, ngp, dim)
@@ -95,6 +107,9 @@ class DiffusionLawTerm:
 
         Re = np.einsum('eg,egia,ega,eg->ei', disc.detJw, disc.B, grad, k)
         R = layout.scatter_vector(Re, rows)
+
+        if not tangent:
+            return R, None
 
         Ke = np.einsum('eg,eg,egia,egja->eij', disc.detJw, k, disc.B, disc.B)
         J = layout.scatter_matrix(Ke, rows, rows)
@@ -168,7 +183,7 @@ class GradientLawTerm:
 
         return out, start
 
-    def contribution(self, x):
+    def contribution(self, x, tangent=True):
 
         disc, layout = self.system.disc, self.system.layout
         nel, ngp, nne, _ = disc.B.shape
@@ -180,16 +195,26 @@ class GradientLawTerm:
         U = np.concatenate([np.einsum('egjck,ejc->egk', self._W(nc), fields[name][disc.conn].reshape(nel, nne, nc))
                             for name, nc, _ in inputs], axis=-1)
 
-        values, derivatives = self.law(U.reshape(-1, n_in))
+        if tangent:
+            values, derivatives = self.law(U.reshape(-1, n_in))
+        else:
+            values = self.law.values(U.reshape(-1, n_in))
 
         if values.shape[1] != n_out:
             raise ValueError(f"La ley devuelve {values.shape[1]} valores por punto; se esperaban {n_out} "
                              f"(fuente y flujo de {self.outputs}).")
 
         values = values.reshape(nel, ngp, n_out)
-        derivatives = derivatives.reshape(nel, ngp, n_out, n_in)
 
         R = np.zeros(layout.ndof)
+
+        if not tangent:
+            for out, nc_o, so in outputs:
+                Re = self.sign * np.einsum('eg,egiak,egk->eia', disc.detJw, self._W(nc_o), values[..., so], optimize=True)
+                R += layout.scatter_vector(Re.reshape(nel, -1), layout.element_dofs(disc.conn, out))
+            return R, None
+
+        derivatives = derivatives.reshape(nel, ngp, n_out, n_in)
         J = sp.csr_matrix((layout.ndof, layout.ndof))
 
         for out, nc_o, so in outputs:
@@ -220,16 +245,24 @@ class FacetLawTerm:
         self.outputs = outputs
         self.sign = sign
 
-    def contribution(self, x):
+    def contribution(self, x, tangent=True):
 
         layout, fs = self.system.layout, self.facets
 
         fields = layout.split(x)
         U_nodes = np.stack([fields[n] for n in self.inputs], axis=-1)           # (n_nodes, nin)
         U = np.einsum('qk,fkn->fqn', fs.N, U_nodes[fs.nodes])                   # (nf, nq, nin)
+        shape = fs.detJw.shape
+
+        if not tangent:
+            values = self.law.values(U.reshape(-1, len(self.inputs))).reshape(shape + (len(self.outputs),))
+            R = np.zeros(layout.ndof)
+            for o, out in enumerate(self.outputs):
+                fe = self.sign * np.einsum('fq,qi,fq->fi', fs.detJw, fs.N, values[..., o])
+                R += layout.scatter_vector(fe, layout.element_dofs(fs.nodes, out))
+            return R, None
 
         values, derivatives = self.law(U.reshape(-1, len(self.inputs)))
-        shape = fs.detJw.shape
         values = values.reshape(shape + (len(self.outputs),))
         derivatives = derivatives.reshape(shape + (len(self.outputs), len(self.inputs)))
 
@@ -372,7 +405,8 @@ class System:
 
     def add_term(self, term):
 
-        """Any nonlinear term with contribution(x) -> (R, J), e.g. a physics-specific vectorized term."""
+        """Any nonlinear term with contribution(x, tangent=True) -> (R, J), J = None if tangent is False; e.g. a
+        physics-specific vectorized term."""
 
         self._terms.append(term)
 
@@ -523,6 +557,17 @@ class System:
         R = np.where(self.is_dirichlet, x - self.dirichlet_value, R)
 
         return self._apply_dirichlet_matrix(J), R
+
+    def residual(self, x):
+
+        """R of residual_and_tangent(x) without assembling the tangent: several times cheaper."""
+
+        R = self._A @ x - self._b
+
+        for term in self._terms:
+            R = R + term.contribution(x, tangent=False)[0]
+
+        return np.where(self.is_dirichlet, x - self.dirichlet_value, R)
 
     def mass(self):
         return self._M

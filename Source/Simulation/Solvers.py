@@ -241,6 +241,11 @@ class modelSolver():
         of the step, x' + theta R_space(x) + (1 - theta) R_space(x_n), once and at full weight; the old-level residual is
         evaluated with {'old_level': True} and leaves that stabilization out. Dirichlet dofs keep their values. Newton
         stops when the scaled residual drops by 1e-8 or below 1e-10.
+
+        Modified Newton (option 'Reuse Tangent'): the tangent and its factorization stay in use, also from one time step
+        to the next, while each iteration reduces the residual at least by half; otherwise the iteration is discarded
+        and the tangent rebuilt. An assembly with its factorization costs several residual evaluations, and the state
+        changes little between iterations of a step. A change of alpha or theta (first step of BDF2) also rebuilds it.
         """
 
         system = self.model._system()
@@ -261,6 +266,10 @@ class modelSolver():
 
         rtol, atol, max_iterations = 1e-8, 1e-10, 30
         weights = system.relaxation_weights(self.solverOptions.get('Relaxation'))
+        reuse = self.solverOptions.get('Reuse Tangent', True)
+
+        self.tangent_assemblies = 0
+        J, J_key = None, None
 
         clock = time.time()
         try:
@@ -282,22 +291,37 @@ class modelSolver():
 
                 def step_residual(state):
                     system.time = context
-                    J, R = system.residual_and_tangent(state)
-                    F = M @ (alpha * state + beta) + weight * R
-                    J = alpha * M + sp.diags(weight) @ J
+                    F = M @ (alpha * state + beta) + weight * system.residual(state)
                     if th < 1.0:
                         # (1 - theta) R at the old level, with the algebraic unknowns (pressure) of the new level:
                         # they act as Lagrange multipliers and stay fully implicit (no oscillating pressure)
                         old = x_n.copy()
                         old[algebraic] = state[algebraic]
                         system.time = {'old_level': True}
-                        J_old, R_old = system.residual_and_tangent(old)
+                        F = F + (1.0 - th) * (differential @ system.residual(old))
                         system.time = context
-                        F = F + (1.0 - th) * (differential @ R_old)
-                        J = J + (1.0 - th) * (differential @ J_old @ to_algebraic)
-                    return J.tocsr(), F
+                    return F
 
-                J, F = step_residual(x)
+                def step_tangent(state):
+                    self.tangent_assemblies += 1
+                    system.time = context
+                    J, _ = system.residual_and_tangent(state)
+                    J = alpha * M + sp.diags(weight) @ J
+                    if th < 1.0:
+                        old = x_n.copy()
+                        old[algebraic] = state[algebraic]
+                        system.time = {'old_level': True}
+                        J_old, _ = system.residual_and_tangent(old)
+                        system.time = context
+                        J = J + (1.0 - th) * (differential @ J_old @ to_algebraic)
+                    return J.tocsr()
+
+                key = (alpha, th)
+                fresh = J is None or J_key != key or not reuse                 # the tangent belongs to this state
+                if fresh:
+                    J, J_key = step_tangent(x), key
+
+                F = step_residual(x)
                 scale = np.maximum(np.abs(J.diagonal()), 1.0) * system.field_scales(x)
                 norm0 = norm = np.linalg.norm(F / scale)
                 iteration = 0
@@ -305,15 +329,39 @@ class modelSolver():
                 while norm > atol and norm > rtol * norm0 and iteration < max_iterations:
                     iteration += 1
                     dx = self._solve_system(J, -F)
+
+                    if not fresh:
+                        # Old tangent: keep the step only if it contracts well
+                        x_try = system.clip_positive(x + weights * dx)
+                        F_try = step_residual(x_try)
+                        norm_try = np.linalg.norm(F_try / scale)
+                        if np.isfinite(norm_try) and norm_try <= 0.5 * norm:
+                            x, F, norm = x_try, F_try, norm_try
+                            continue
+                        J, fresh = step_tangent(x), True
+                        dx = self._solve_system(J, -F)
+
                     lam = 1.0
                     while True:
                         x_try = system.clip_positive(x + lam * weights * dx)   # positive fields stay positive
-                        J_try, F_try = step_residual(x_try)
+                        F_try = step_residual(x_try)
                         norm_try = np.linalg.norm(F_try / scale)
                         if (np.isfinite(norm_try) and norm_try < (1.0 - 1e-4 * lam) * norm) or lam <= 1.0 / 64:
                             break
                         lam *= 0.5
-                    x, J, F, norm = x_try, J_try, F_try, norm_try
+                    x, F, norm = x_try, F_try, norm_try
+                    fresh = not reuse
+                    if fresh:
+                        J = step_tangent(x)
+
+                if not np.isfinite(norm):                                      # NaN passes the stopping test
+                    sim_logger.warning(f"Paso {step + 1}: el residuo no es finito. La simulacion se detiene en "
+                                       f"t = {step * dt:.6g}; se conservan los pasos anteriores.")
+                    x = x_n
+                    self.updateSolution(x)
+                    n_steps, total_time = step, step * dt
+                    Y = Y[:, :step + 1]
+                    break
 
                 if norm > atol and norm > rtol * norm0:
                     sim_logger.warning(f"Paso {step + 1}: Newton no convergio en {max_iterations} iteraciones "
@@ -327,8 +375,9 @@ class modelSolver():
         finally:
             system.time = None
 
-        sim_logger.info(f"Newton per step: mean {np.mean(self.step_iterations):.1f}, "
-                        f"max {np.max(self.step_iterations)} iterations")
+        if self.step_iterations:
+            sim_logger.info(f"Newton per step: mean {np.mean(self.step_iterations):.1f}, "
+                            f"max {np.max(self.step_iterations)} iterations, {self.tangent_assemblies} tangents")
 
         self._store_history(Y, total_time, n_steps)
 
