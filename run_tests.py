@@ -38,6 +38,7 @@ SUITES = [
     "Test/test_taylor_hood.py",
     "Test/test_time_and_scale.py",
     "Test/test_regions_pressure.py",
+    "Test/test_viscoelastic.py",
 ]
 
 

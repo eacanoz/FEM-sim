@@ -136,6 +136,12 @@
 | Precondicionador de bloques (GMRES) | Stokes en cavidad, Q2/Q1 y P2/P1; Carreau con viscosidad que varía 100 veces | `Test/test_time_and_scale.py` | 68, 73, 83, 92, 100 iteraciones de 3 267 a 789 507 incógnitas; misma solución que PARDISO (u 2e-9, p 8e-6) |
 | Cross–WLF con presión (`D3`) | valores de la ley; tangente en Q4, T3, Q9 y T6; rendija larga frente a la lubricación | `Test/test_regions_pressure.py` | tangente 1e-6; p a 1.6e-4 de la lubricación, con `b Δp` = 0.53 |
 | Materiales por región | índices de elemento; pared compuesta; Couette de dos capas | `Test/test_regions_pressure.py` | exactos (1e-11) |
+| Viscoelástico: ecuación y tangente | `b' b + b b'` = ecuación de `c` (1e-12); tangente con y sin DEVSS-G, en un paso de tiempo y axisimétrica | `Test/test_viscoelastic.py` | tangente 1e-10 |
+| Viscoelástico: flujos cortantes | Couette exacto; canal y tubería; Giesekus frente a su forma cerrada | `Test/test_viscoelastic.py` | Couette 1e-8; canal orden 2.0 en u y p, 1.7–1.9 en τ; viscometría 1e-6 |
+| Viscoelástico: transitorio | corte y extensión homogéneos frente a `solve_ivp`; arranque de Couette frente a un método de líneas independiente | `Test/test_viscoelastic.py` | orden 2; velocidad 3.4e-5 |
+| Viscoelástico: espectro | G′ y G″ de tres modos en oscilación pequeña; un modo partido en dos iguales | `Test/test_viscoelastic.py` | 0.8243/0.8242 y 2.1261/2.1270; 1e-8 |
+| Cilindro en canal (Oldroyd-B, β = 0.59) | arrastre frente a Hulsen et al., tabla de arXiv:2308.09394 | `Test/test_viscoelastic.py` (malla gruesa); fina a mano | 88 530 incógnitas: 0.000–0.05 % hasta Wi = 0.9; 24 140: 0.64 % a Wi = 1 |
+| Contracción plana 4:1 (Oldroyd-B, β = 1/9) | C y X_R frente a De, tendencia publicada; `Example_Viscoelastic_Contraction.py` | `Test/test_viscoelastic.py` (gruesa); ejemplo | llega a De = 3; De → 0: C ≈ 0.37 (newtoniano 0.374); X_R 0.363 → 0.267. **C sin converger a De alto** (De = 2.6: −1.84 con h/4, −2.02 con h/8). Sin tablas de Alves et al. 2003 a mano |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -280,6 +286,24 @@ Lo que sigue pendiente:
   modificado por igual): la simulación se detiene con aviso. Conviene partir de la solución estacionaria.
 - k-ω SST: arrancar con k muy pequeño puede tardar (canal desde estado uniforme: 126 iteraciones frente a 9) y el flujo
   laminar es solución del modelo. El escalón de Driver–Seegmiller no se ha probado.
+
+### Fluidos (Etapa 17, viscoelástico)
+- `Model(psc=[ff, ve])`, solo con Taylor–Hood, estudios estacionarios y BDF2 (Crank–Nicolson se rechaza). Isotermo, sin superficie
+  libre: el hinchamiento es una estimación de Tanner, no un cálculo.
+- **Límites medidos:** canal hasta Wi de pared 128 con 16 elementos (error comprobado, 1e-3); Couette correcto hasta Wi ≈ 32–95, según
+  el factor de continuación; cilindro hasta Wi = 1 validado, sin medir más allá; contracción hasta De = 3, sin converger en malla. **Reómetro con 4 modos Giesekus: solo hasta
+  γ̇ₐ ≈ 40 s⁻¹** con 47 518 incógnitas (pérdida de entrada ~2 % de la caída), lejos de las tasas de proceso. Sin refinar.
+- **`converged=True` no garantiza la solución a Wi alto:** Couette reporta convergencia con error en `τ_xx` de 19 % a Wi = 64 con factor 2,
+  y de 2.3 % a Wi = 123 con factor 1.3, aunque la solución exacta también satisface el sistema discreto. Es intermitente y depende del
+  camino: con factor 1.3 vuelve a la solución correcta en Wi mayores. Hay que vigilar la convergencia en malla y en la continuación.
+- Una `b` indefinida también da `b² = c` y es una solución espuria: las rechaza `System.require_admissible`, que antes daba
+  «convergido» con un flujo falso.
+- La continuación en Wi es necesaria (`setWeissenberg`): desde el reposo Couette falla a Wi = 10. Newton llega más lejos que el
+  pseudo-transitorio en estos casos.
+- Coste: ~10 incógnitas por nodo más 3–4 por modo. 88 530 incógnitas: 25 s por Wi; 341 600 no terminó un Wi en 5 minutos. El GMRES de
+  bloques no sirve aquí (solo `u` y `p`).
+- Sin verificación por solución manufacturada (prevista en el plan): el orden espacial se ha medido en canal y tubería, flujos paralelos,
+  y la convergencia en el cilindro.
 
 ### Física y numérica
 - **Transitorio lineal sin condiciones en el tiempo:** paso fijo y una factorización. El no lineal, BDF2 y el adaptativo van

@@ -145,8 +145,15 @@ es singular para un fluido que adelgaza.
 
 ## Prioridad 6: deseable / nuevas capacidades
 
-- **Viscoelástico (Oldroyd-B, Giesekus)**: muy relevante para polímeros (pérdida de entrada de Bagley, hinchamiento
-  del extrudado), pero es una física nueva y difícil (alto Weissenberg). Mejor después de Taylor–Hood.
+- **Viscoelástico multimodo (Oldroyd-B, Giesekus): hecho, salvo lo que sigue** (`Source/Physics/Viscoelastic.py`,
+  `Test/test_viscoelastic.py`, `Example_Viscoelastic_Contraction.py`). Raíz de la conformación, DEVSS-G y SUPG sobre Taylor–Hood.
+  - Cilindro en canal a 0.05 % o mejor de la literatura hasta Wi = 0.9: se supera el punto de parada de B3.
+  - Cambios frente al plan: Poiseuille no es exacto, solo Couette (`b = √c` no es polinómico), así que el criterio es el orden; una salida
+    con presión necesita descontar la tracción polimérica (`addBC_OutletEdges`).
+  - **No cumplido:** sin solución manufacturada; contracción sin tablas de Alves et al. 2003 y sin converger en malla a De alto;
+    reómetro multimodo solo hasta γ̇ₐ ≈ 40 s⁻¹, por lo que **la pérdida de Bagley a tasas de proceso sigue sin estudiarse**.
+  - Corregidos de paso: `System.field_scales` tomaba el ruido de una presión nula como su tamaño y Newton no paraba (viene de la
+    Prioridad 1); y el criterio de parada estacionario, ahora por actualización despreciable.
 - Hechos: materiales por región (`Model.region_field`) y Cross–WLF con presión (`D3`), en `Test/test_regions_pressure.py`.
 - VTK binario / XDMF: solo si el tamaño de los archivos lo exige.
 - Hecha: limpieza de `docs/ESTADO.md`.

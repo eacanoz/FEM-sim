@@ -306,6 +306,9 @@ class System:
         # Dofs that must stay positive (turbulent k and omega, ...): the Newton solvers limit their steps accordingly
         self.positive = np.zeros(n, dtype=bool)
 
+        # Functions of the state that say if it is acceptable: the nonlinear solvers treat any other state as a failed step
+        self._admissible = []
+
         # Rows of a constraint (the pressure of an incompressible flow): they never get a pseudo-time term
         self.constraint = np.zeros(n, dtype=bool)
 
@@ -315,6 +318,7 @@ class System:
         # Field restricted to the linear subspace of a quadratic mesh (restrict_to_linear_subspace)
         self._restriction = None
         self._subspace_rows = None
+        self._subspace_relations = None
 
         # Boundary conditions multiplied by f(t) in transient studies: (dofs, values at f = 1, f) and (vector at f = 1, f)
         self._timed_dirichlet = []
@@ -330,7 +334,7 @@ class System:
         """Evaluates the boundary conditions with a time function at t. Steady studies never call it: they see f = 1."""
 
         for dofs, values, f in self._timed_dirichlet:
-            self.dirichlet_value[dofs] = values * float(f(t))
+            self.dirichlet_value[dofs] = values * np.asarray(f(t), dtype=float)   # a number, or one value per component
 
         for k, (vector, f) in enumerate(self._timed_vectors):
             factor = float(f(t))
@@ -339,34 +343,41 @@ class System:
 
     def restrict_to_linear_subspace(self, field):
 
-        """Makes a scalar field linear (bilinear) in every element of a quadratic mesh: the pressure of Taylor-Hood.
+        """Makes a field linear (bilinear) in every element of a quadratic mesh: the pressure of Taylor-Hood, the
+        conformation of the viscoelastic modes. Each component is restricted; call once per field.
 
         The field stays on all the nodes, and the non-vertex ones follow their vertices, x_m = sum w_v x_v. That is the
         space x = T x_v, so the test functions are T^T N: the row of a vertex gathers w_v times the rows of its
-        dependent nodes (self._restriction = T^T), whose own rows become the relation (self._subspace_rows).
+        dependent nodes (self._restriction = T^T), whose own rows become the relation (self._subspace_rows). Those rows
+        are constraints, also in pseudo-time.
         """
 
         disc, layout = self.disc, self.layout
-        dofs = layout.dofs(field)[:, 0]
         n = layout.ndof
 
-        relations = {}
-        for conn in disc.conn:
-            for node, combination in disc.element.linear_subspace:
-                relations[int(conn[node])] = [(int(conn[v]), w) for v, w in combination]
+        if self._subspace_relations is None:
+            relations = {}
+            for conn in disc.conn:
+                for node, combination in disc.element.linear_subspace:
+                    relations[int(conn[node])] = [(int(conn[v]), w) for v, w in combination]
+            self._subspace_relations = relations
+            self._subspace_keep = np.ones(n)
+            self._subspace_entries = ([], [], [])
 
-        dependent = np.array(sorted(relations), dtype=int)
-        keep = np.ones(n)
-        keep[dofs[dependent]] = 0.0
+        rows, cols, vals = self._subspace_entries
+        dependent = np.array(sorted(self._subspace_relations), dtype=int)
 
-        rows, cols, vals = [], [], []
-        for m, combination in relations.items():
-            for v, w in combination:
-                rows.append(dofs[v]), cols.append(dofs[m]), vals.append(w)
+        for c in range(layout.spec(field).ncomp):
+            dofs = layout.dofs(field)[:, c]
+            self._subspace_keep[dofs[dependent]] = 0.0
+            self.constraint[dofs[dependent]] = True
+            for m, combination in self._subspace_relations.items():
+                for v, w in combination:
+                    rows.append(dofs[v]), cols.append(dofs[m]), vals.append(w)
 
         T_t = sp.coo_matrix((vals, (rows, cols)), shape=(n, n)).tocsr()
-        self._restriction = (sp.diags(keep) + T_t).tocsr()
-        self._subspace_rows = (sp.diags(1.0 - keep) - T_t.T).tocsr()
+        self._restriction = (sp.diags(self._subspace_keep) + T_t).tocsr()
+        self._subspace_rows = (sp.diags(1.0 - self._subspace_keep) - T_t.T).tocsr()
 
     def _restrict(self, R, x=None):
 
@@ -406,6 +417,29 @@ class System:
         x[clipped] = np.maximum(x[clipped], floor)
         return x
 
+    def require_admissible(self, check):
+
+        """Adds a condition on the state, check(x) -> bool: a trial state that fails it counts as a non-finite residual."""
+
+        self._admissible.append(check)
+
+    def is_admissible(self, x):
+        return all(check(x) for check in self._admissible)
+
+    def negligible_update(self, update, x, tol=1e-10):
+
+        """True if the update moves the dofs with an equation of their own by less than tol of the size of each field. Those of
+        constraints and Dirichlet conditions do not count: a pressure that is exactly zero has no size to compare with."""
+
+        moving = ~(self.is_dirichlet | self.constraint)
+
+        for name in self.layout.names:
+            dofs = self.layout.dofs(name).ravel()
+            if np.abs(update[dofs][moving[dofs]]).max(initial=0.0) > tol * max(np.abs(x[dofs]).max(), 1e-30):
+                return False
+
+        return True
+
     def require_constraint(self, dofs):
 
         """Marks dofs whose rows are a constraint rather than an evolution equation (no pseudo-time on them)."""
@@ -414,17 +448,19 @@ class System:
 
     def field_scales(self, x):
 
-        """Per dof, the magnitude of its field (largest of the state and the Dirichlet values; 1 if all are zero).
+        """Per dof, the magnitude of its field (largest of the state and the Dirichlet values; 1 if they are negligible).
 
         It expresses the residual of every field relative to its own size, so that a field of order 1e6 (omega next to a
-        wall) does not hide the others in the norm that decides the Newton steps."""
+        wall) does not hide the others in the norm that decides the Newton steps. Below 1e-10 a field counts as zero: the
+        round-off of a pressure that is exactly zero (1e-17) would otherwise turn the round-off of its rows into a large
+        residual, and Newton would never stop."""
 
         scales = np.ones(self.layout.ndof)
 
         for name in self.layout.names:
             dofs = self.layout.dofs(name).ravel()
             size = max(np.max(np.abs(x[dofs])), np.max(np.abs(self.dirichlet_value[dofs])))
-            if size > 0.0:
+            if size > 1e-10:
                 scales[dofs] = size
 
         return scales
@@ -664,4 +700,5 @@ class System:
         return np.where(self.is_dirichlet, x - self.dirichlet_value, R)
 
     def mass(self):
-        return self._M
+
+        return self._M if self._restriction is None else (self._restriction @ self._M).tocsr()

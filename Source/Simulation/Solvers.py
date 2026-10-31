@@ -416,7 +416,7 @@ class modelSolver():
                         # Old tangent: keep the step only if it contracts well
                         x_try = system.clip_positive(x + weights * dx)
                         F_try = step_residual(x_try)
-                        norm_try = np.linalg.norm(F_try / scale)
+                        norm_try = np.linalg.norm(F_try / scale) if system.is_admissible(x_try) else np.nan
                         settled = np.isfinite(norm_try) and negligible(dx, x)
                         if settled:
                             x, F, norm = x_try, F_try, norm_try
@@ -431,7 +431,7 @@ class modelSolver():
                     lam = 1.0
                     while True:
                         x_try = system.clip_positive(x + lam * weights * dx)   # positive fields stay positive
-                        F_try = step_residual(x_try)
+                        F_try = step_residual(x_try) if system.is_admissible(x_try) else np.full(len(x), np.nan)
                         norm_try = np.linalg.norm(F_try / scale)
                         if (np.isfinite(norm_try) and norm_try < (1.0 - 1e-4 * lam) * norm) or lam <= 1.0 / 64:
                             break
@@ -555,9 +555,10 @@ class modelSolver():
         temperature of 300, omega ~ 1e6) would dominate the norm over a field of order 1 (a concentration).
         Only the norm is scaled: the Newton step is computed with the unscaled system.
 
-        Stops when ||R|| <= rtol * ||R0|| or ||R|| <= atol (scaled norms), or at the round-off floor: ||R|| <= 1e-6 ||R0||
-        and three iterations in a row without progress. The residual and the tangent come from the model; trial states
-        are written to the field, and the last accepted state is kept.
+        Stops when ||R|| <= rtol * ||R0|| or ||R|| <= atol (scaled norms), or when a full Newton step moves the unknowns with
+        an equation of their own by less than 1e-10 of the size of their field (System.negligible_update): a state that
+        starts near the solution is at the round-off floor of the residual already. The residual and the tangent come from
+        the model; trial states are written to the field, and the last accepted state is kept.
         """
 
         sim_logger.info("------- Starting Newton-Raphson nonlinear solver -------")
@@ -593,10 +594,9 @@ class modelSolver():
 
         iteration = 0
         diverged = False
-        no_progress = 0
+        settled = False
 
-        while (norm_R > atol and norm_R > rtol * norm_R0 and iteration < max_iterations
-               and not (no_progress >= 3 and norm_R <= 1e-6 * norm_R0)):
+        while norm_R > atol and norm_R > rtol * norm_R0 and iteration < max_iterations and not settled:
 
             iteration += 1
 
@@ -609,7 +609,7 @@ class modelSolver():
                 self.updateSolution(x_try)
 
                 J_try, R_try = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
-                norm_try = scaled_norm(R_try)
+                norm_try = scaled_norm(R_try) if system.is_admissible(x_try) else np.nan
 
                 finite = np.isfinite(norm_try)
 
@@ -625,15 +625,14 @@ class modelSolver():
             if diverged:
                 break
 
-            no_progress = no_progress + 1 if norm_try > 0.99 * norm_R else 0
+            settled = lam == 1.0 and system.negligible_update(dX, x)
             x, J, R, norm_R = x_try, J_try, R_try, norm_try
 
             sim_logger.info(f"| {iteration:^6} | {norm_R:^15.4e} | {norm_R / norm_R0:^15.4e} | {lam:^12.4f}")
 
         sim_logger.info(separator)
 
-        self.nonlinear_converged = bool(norm_R <= atol or norm_R <= rtol * norm_R0
-                                        or (no_progress >= 3 and norm_R <= 1e-6 * norm_R0))
+        self.nonlinear_converged = bool(norm_R <= atol or norm_R <= rtol * norm_R0 or settled)
 
         if self.nonlinear_converged:
             sim_logger.info(f"Succefully converged in {iteration} iterations.")
@@ -688,10 +687,9 @@ class modelSolver():
 
         norm_R0 = norm_R = np.linalg.norm(R / scale)
         iteration = 0
-        no_progress = 0
+        settled = False
 
-        while (norm_R > atol and norm_R > rtol * norm_R0 and iteration < max_iterations and cfl >= cfl_min
-               and not (no_progress >= 3 and norm_R <= 1e-6 * norm_R0)):
+        while norm_R > atol and norm_R > rtol * norm_R0 and iteration < max_iterations and cfl >= cfl_min and not settled:
 
             iteration += 1
 
@@ -702,7 +700,7 @@ class modelSolver():
             self.updateSolution(x_try)
 
             J_try, R_try = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
-            norm_try = np.linalg.norm(R_try / scale)
+            norm_try = np.linalg.norm(R_try / scale) if system.is_admissible(x_try) else np.nan
 
             if not np.isfinite(norm_try) or norm_try > max_rise * norm_R:
                 cfl *= 0.25
@@ -714,13 +712,12 @@ class modelSolver():
                 cfl = min(cfl * np.clip(ratio, 1.05, cfl_growth), cfl_max)
             else:
                 cfl = cfl * max(ratio, 0.5)
-            no_progress = no_progress + 1 if norm_try > 0.99 * norm_R else 0
+            settled = system.negligible_update(dX, x)
             x, J, R, norm_R = x_try, J_try, R_try, norm_try
 
             sim_logger.info(f"| {iteration:^6} | ||R|| {norm_R:.4e} | ||R||/||R0|| {norm_R / norm_R0:.4e} | CFL {cfl:.3e}")
 
-        self.nonlinear_converged = bool(norm_R <= atol or norm_R <= rtol * norm_R0
-                                        or (no_progress >= 3 and norm_R <= 1e-6 * norm_R0))
+        self.nonlinear_converged = bool(norm_R <= atol or norm_R <= rtol * norm_R0 or settled)
 
         if self.nonlinear_converged:
             sim_logger.info(f"Pseudo-transient solver converged in {iteration} iterations.")

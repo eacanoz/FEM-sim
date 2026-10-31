@@ -63,6 +63,10 @@ def write_vtu(path, mesh, point_data=None):
                 vector[:, :values.shape[1]] = values
                 f.write(_array_xml(name, vector, np.float64, 3))
                 continue
+            if values.ndim == 2 and values.shape[0] == len(points):
+                for c in range(values.shape[1]):            # more components than a vector: one array each
+                    f.write(_array_xml(f'{name}_{c}', values[:, c], np.float64))
+                continue
             if values.shape != (len(points),):
                 raise ValueError(f"El campo '{name}' tiene forma {values.shape}; se esperaba ({len(points)},) "
                                  f"o ({len(points)}, k) con k <= 3.")
