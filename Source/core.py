@@ -115,6 +115,24 @@ class Model(object):
 
         return self._geometry
 
+    def region_field(self, values, default=None):
+
+        """A coefficient by region of an imported mesh, {'name': value}, for any property given at the Gauss points
+        (flow.setViscosity, heat.K_const, ...): (nel, 1), broadcast to the points of each element. A coefficient that jumps
+        between regions needs an interface along element edges. default: value of the elements outside the given regions."""
+
+        field = np.full((self._mesh.getNoE(), 1), np.nan if default is None else float(default))
+
+        for name, value in values.items():
+            if name not in self._mesh.regions:
+                raise KeyError(f"La region '{name}' no existe en la malla (regiones: {sorted(self._mesh.regions)}).")
+            field[np.asarray(self._mesh.regions[name], dtype=int)] = float(value)
+
+        if np.any(np.isnan(field)):
+            raise ValueError("Hay elementos fuera de las regiones dadas: indique default o el resto de regiones.")
+
+        return field
+
     def _system(self):
 
         """System of the model (built by the physics, once per solve)."""

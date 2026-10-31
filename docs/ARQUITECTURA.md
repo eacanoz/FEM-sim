@@ -35,7 +35,7 @@ Mesh ─► Elements ─► Discretization ─► Operators ─► System ─►
 
 1. **Malla.** `Mesh` contiene `NL` (`Node` con `id`, `coor`, `BC`) y `EL` (`Element`). Guarda `element_type` (`'line2'`, `'tri3'`, `'quad4'`). Se genera con `generate2DMesh` (Q4 o T3) o se importa de gmsh con
    `Mesh.read_msh(path)` / `Mesh.from_gmsh_model()`: los grupos físicos de dimensión 1 quedan en `mesh.groups` y se usan por
-   nombre en `boundary_edges('nombre')`; los de dimensión 2 en `mesh.regions`. Solo un tipo de elemento por malla.
+   nombre en `boundary_edges('nombre')`; los de dimensión 2 en `mesh.regions` (índices de elemento, para `Model.region_field`). Solo un tipo de elemento por malla.
    - 1D: `Generate_Mesh(PD, L, NoE, ElementType.line)`. 2D: `generate2DMesh((Lx, Ly), (nx, ny), ElementType.quadrilateral)`.
    - `boundary_facets(selector)` (alias `boundary_edges`) devuelve las facetas del contorno cuyo punto medio cumple el predicado.
 2. **Modelo.** `Model(name, dim, mesh, mat, psc)` crea la física, que crea los campos (`scalarField`).

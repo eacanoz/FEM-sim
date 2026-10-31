@@ -147,9 +147,9 @@ es singular para un fluido que adelgaza.
 
 - **Viscoelástico (Oldroyd-B, Giesekus)**: muy relevante para polímeros (pérdida de entrada de Bagley, hinchamiento
   del extrudado), pero es una física nueva y difícil (alto Weissenberg). Mejor después de Taylor–Hood.
-- VTK binario / XDMF, materiales por región, Cross–WLF con presión (`D3`).
-- Limpieza de `docs/ESTADO.md`: varias entradas de las Etapas 10–12 quedaron superadas por la 14 (Crank–Nicolson ya no
-  oscila, ya no hay masas estabilizadas congeladas).
+- Hechos: materiales por región (`Model.region_field`) y Cross–WLF con presión (`D3`), en `Test/test_regions_pressure.py`.
+- VTK binario / XDMF: solo si el tamaño de los archivos lo exige.
+- Hecha: limpieza de `docs/ESTADO.md`.
 
 ## Orden recomendado
 

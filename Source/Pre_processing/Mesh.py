@@ -16,7 +16,7 @@ class Mesh:
 
         self.boundaries = {}
         self.groups = {}     # name -> boundary facets (node tuples), from imported meshes
-        self.regions = {}    # name -> gmsh element tags, from imported meshes
+        self.regions = {}    # name -> element indices, from imported meshes
 
     def Generate_Mesh(self, PD, L, NoE, MeshType):
 
@@ -144,7 +144,7 @@ class Mesh:
 
         The physical groups of dimension 1 become named boundary groups, available as
         `mesh.boundary_edges('name')` and in `mesh.groups`; the 2D ones are kept in `mesh.regions`
-        (name -> gmsh element tags). Needs the gmsh package.
+        (name -> indices in mesh.EL, for Model.region_field). Needs the gmsh package.
         """
 
         import gmsh
@@ -166,7 +166,7 @@ class Mesh:
 
         import gmsh
 
-        types, _, node_lists = gmsh.model.mesh.getElements(2)
+        types, element_tags, node_lists = gmsh.model.mesh.getElements(2)
         # gmsh type -> (element, nodes, vertices, the node order after reversing the orientation)
         supported = {2: ('tri3', 3, 3, [2, 1, 0]), 3: ('quad4', 4, 4, [3, 2, 1, 0]),
                      9: ('tri6', 6, 3, [0, 2, 1, 5, 4, 3]), 10: ('quad9', 9, 4, [0, 3, 2, 1, 7, 6, 5, 4, 8])}
@@ -200,6 +200,8 @@ class Mesh:
 
         mesh.NoN, mesh.NoE = len(mesh.NL), len(mesh.EL)
 
+        position = {int(tag): e for e, tag in enumerate(element_tags[0])}       # gmsh tag -> index in mesh.EL
+
         for dim, tag in gmsh.model.getPhysicalGroups():
             name = gmsh.model.getPhysicalName(dim, tag) or f"group_{dim}_{tag}"
 
@@ -219,7 +221,7 @@ class Mesh:
                 ids = []
                 for entity in gmsh.model.getEntitiesForPhysicalGroup(dim, tag):
                     _, etags, _ = gmsh.model.mesh.getElements(2, entity)
-                    ids += [int(t) for chunk in etags for t in chunk]
+                    ids += [position[int(t)] for chunk in etags for t in chunk]
                 mesh.regions[name] = ids
 
         return mesh

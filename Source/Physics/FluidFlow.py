@@ -117,7 +117,8 @@ class ff(physics):
         Cross, Cross-WLF, Bingham, Herschel-Bulkley, Arrhenius shift, ...). The problem becomes nonlinear
         (ProblemType.nonlinear). A law that reads a field (uses_temperature) takes it from the scalar field named
         `temperature`: 'T' for the heat physics (Model(psc=[ff, ht])), or any other one, e.g. 'nut' for the eddy
-        viscosity of a turbulence model. A law of several fields, law(gamma2, f1, f2, ...), names them in `fields`
+        viscosity of a turbulence model. A law with uses_pressure (Cross-WLF with D3) also reads 'p'. A law of several
+        fields, law(gamma2, f1, f2, ...), names them in `fields`
         (e.g. ('k', 'omega', 'wall_distance') for k-omega SST). Shear-thinning laws converge best starting from a
         Newtonian solution (solve with setViscosity first, then switch the law on and solve again)."""
 
@@ -126,6 +127,8 @@ class ff(physics):
             self.viscosity_fields = list(fields)
         else:
             self.viscosity_fields = [temperature] if getattr(law, 'uses_temperature', False) else []
+            if getattr(law, 'uses_pressure', False):
+                self.viscosity_fields = self.viscosity_fields + ['p']
 
     @property
     def temperature_field(self):

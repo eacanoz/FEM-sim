@@ -134,6 +134,8 @@
 | Paso adaptativo (BDF2) | arranque de una pared frente a la serie de Fourier; pulso | `Test/test_time_and_scale.py` | pasos ∝ tol^(−1/3) (39, 67, 126, 251); con 67 pasos, el error en t = 0.05 de 400 pasos fijos |
 | Tubería turbulenta (axisimétrico) | factor de fricción frente a la ley de Prandtl, Re_τ = 360 y 1000 | `Test/test_time_and_scale.py` | SA +1.9 % y +2.1 %; SST +6.1 % y +3.3 %; tangente de SST 1e-6 |
 | Precondicionador de bloques (GMRES) | Stokes en cavidad, Q2/Q1 y P2/P1; Carreau con viscosidad que varía 100 veces | `Test/test_time_and_scale.py` | 68, 73, 83, 92, 100 iteraciones de 3 267 a 789 507 incógnitas; misma solución que PARDISO (u 2e-9, p 8e-6) |
+| Cross–WLF con presión (`D3`) | valores de la ley; tangente en Q4, T3, Q9 y T6; rendija larga frente a la lubricación | `Test/test_regions_pressure.py` | tangente 1e-6; p a 1.6e-4 de la lubricación, con `b Δp` = 0.53 |
+| Materiales por región | índices de elemento; pared compuesta; Couette de dos capas | `Test/test_regions_pressure.py` | exactos (1e-11) |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -204,15 +206,10 @@ Lo que sigue pendiente:
 - **Esfuerzo recuperado cerca de paredes:** con fuerzas viscosas normales grandes en la pared equilibradas por una
   fuerza de cuerpo (casos manufacturados artificiales) la presión en la pared empeora respecto a PSPG simple.
   Se puede desactivar con `physics.viscous_projection = False`.
-- **Transitorio:** la presión es algebraica; con Crank-Nicolson oscila de paso a paso (la velocidad sigue de orden 2).
-  Con Euler implícito se amortigua.
 - Simetría y deslizamiento solo en aristas alineadas con los ejes (se fija una componente).
-- `rho` debe ser un número (masa y `tau`); `mu` puede ser número o función de las coordenadas.
+- `rho` debe ser un número (masa y `tau`); `mu` puede ser número, función de las coordenadas o `Model.region_field`.
 
 ### Fluidos (Etapa 11, Navier–Stokes)
-- Solo estacionario validado. En transitorio con inercia, las masas estabilizadas (SUPG y PSPG de `ρ u_t`) usan `τ`
-  y la velocidad del estado inicial del solve, y el θ-método linealiza una sola vez por paso: el transitorio de
-  Navier–Stokes se completa en la Etapa 14 (Newton dentro del paso, BDF2).
 - A Re alto Newton con búsqueda de línea se estanca (cavidad Re = 5000 desde el reposo: más de 2 minutos sin converger).
   Usar `globalization='pseudo-transient'` (24 iteraciones, sin continuación; a Re = 10000 converge en 48, sin validar). Picard es más robusto lejos de la solución
   pero converge linealmente.
@@ -229,8 +226,7 @@ Lo que sigue pendiente:
   activar la ley); los ejemplos lo hacen así.
 - El residuo SUPG del calor incluye convección y la fuente constante, no la disipación viscosa ni reacciones: pequeña
   inconsistencia O(τ Φ).
-- Transitorio: las masas estabilizadas (PSPG, SUPG del flujo y del calor) se congelan con el estado inicial del solve.
-- Cross–WLF sin dependencia de la presión (`D3 = 0`).
+- Cross–WLF con presión (`D3`): lee `p` como campo, con su nivel absoluto, y es exigente para Newton si `D3 p` es grande.
 - Con una ley de viscosidad, cada iteración multiplica `Q @ dσ/dx` (dispersa); es más caro que el caso newtoniano.
   `viscous_projection = False` lo evita a costa de la consistencia de la PSPG.
 
@@ -238,9 +234,10 @@ Lo que sigue pendiente:
 - Coordenadas fijas: `x = r`, `y = z`, eje en `x = 0` (radios negativos se rechazan). Sin giro (`u_θ = 0`).
 - Con igual orden, la presión de los nodos del eje converge con orden 1 (las funciones de prueba del eje llevan el peso
   `r → 0`). Con Taylor–Hood, Hagen–Poiseuille es exacto también en el eje.
-- `GradientLawTerm` con campos vectoriales no incluye los términos de aro (los escalares sí son correctos).
+- `GradientLawTerm` no añade términos de aro a los campos vectoriales: los escalares son correctos, y una ley puede recibir r
+  con `gauss_inputs`.
 - Fluidos inelásticos: la pérdida de entrada de una contracción (corrección de Bagley) es pequeña; en polímeros reales
-  domina la elasticidad del fundido (viscoelástico, Etapa 17 opcional).
+  domina la elasticidad del fundido (viscoelástico, Prioridad 6 de la Etapa 17).
 
 ### Fluidos (Etapa 14, transitorio)
 - **Esquema recomendado para flujo: BDF2** (L-estable, y el único con paso adaptativo). Crank–Nicolson es de orden 2 y más
@@ -285,11 +282,8 @@ Lo que sigue pendiente:
   laminar es solución del modelo. El escalón de Driver–Seegmiller no se ha probado.
 
 ### Física y numérica
-- **Convección:** diferencias centradas sin estabilización. Para Pe alto habrá oscilaciones. `Pe` se calcula pero no se
-  usa. El código de estabilización que no estaba conectado se eliminó en la Etapa 5; habrá que implementarlo.
-- **Convección 2D:** no implementada.
-- **Transitorio:** paso fijo y solver directo (`splu`). Con términos no lineales cada paso se linealiza con Newton al
-  inicio del paso (esquema linealmente implícito), sin iterar dentro del paso.
+- **Transitorio lineal sin condiciones en el tiempo:** paso fijo y una factorización. El no lineal, BDF2 y el adaptativo van
+  por Newton dentro del paso (`_nonlinear_transient`).
 - **Crank-Nicolson:** no es L-estable. Con estados iniciales discontinuos o muy rígidos y pasos grandes los modos de
   alta frecuencia oscilan y decaen despacio (en `Example_2D_Transient.py` los errores con pasos grandes son irregulares
   hasta que el paso es pequeño). Use Euler implícito o un paso menor.
@@ -298,7 +292,7 @@ Lo que sigue pendiente:
   paso el error es 7.9e-3. Para el ejemplo conviene usar `timeDisc = 0.5` o un paso menor.
 - **Radiación:** las temperaturas de entrada son °C. La salida de `Simulation.py` cambió en la Etapa 1
   (extremo ~33 °C, antes ~59.6 °C) porque antes la radiación no usaba Kelvin.
-- **Solvers iterativos:** solo iLU como precondicionador. No hay AMG. CG solo es válido si la matriz es SPD.
+- **Solvers iterativos:** CG solo es válido si la matriz es SPD. Para el flujo, `Preconditioners.SaddlePoint`.
 - **No linealidad en el material:** `k(T)` está soportado (`setConductivityLaw`). `rho Cp(T)` no: la masa es constante
   en el θ-método. La ley de `k(T)` debe escribirse con `jax.numpy`.
 - **Aristas (2D):** `T_ext` debe ser un número (`h` puede ser un número o una función de la temperatura). Si una esquina
@@ -321,17 +315,18 @@ Lo que sigue pendiente:
   campos y solo probado en Stokes y Carreau, sin inercia. Con igual orden no se ha probado.
 - **Taylor–Hood, sin validar:** turbulencia (SA, SST) y especies en Q9/T6, y flujo con Re alto y capas sin resolver (sin SUPG). El SUPG del calor deja fuera
   la difusión, que en elementos cuadráticos no se anula. Los ejemplos que dibujan con `mtri.Triangulation` esperan T3.
-- Mallas de gmsh: `Mesh.read_msh` / `Mesh.from_gmsh_model` admiten un solo tipo de elemento 2D (T3 o Q4); las mallas mixtas se rechazan.
-  Los bordes son rectos (sin elementos curvos), de modo que los arcos se aproximan por polígonos (error geométrico O(h²)).
-- Sin elementos de orden superior (T6, Q8/Q9), sin tetraedros/hexaedros ni 3D. La región física 2D (`mesh.regions`) se guarda
-  pero aún no asigna materiales distintos por región.
+- Mallas de gmsh: `Mesh.read_msh` / `Mesh.from_gmsh_model` admiten un solo tipo de elemento 2D (T3, Q4, T6 o Q9); las mallas mixtas se rechazan.
+  En T3 y Q4 los arcos se aproximan por polígonos (error geométrico O(h²)); T6 y Q9 de gmsh son curvos.
+- Sin tetraedros/hexaedros ni 3D. `Model.region_field` asigna coeficientes por región física (`mesh.regions`, índices de
+  elemento); no leyes de viscosidad distintas por región. Con igual orden, un salto de viscosidad no se ha probado (el esfuerzo
+  recuperado de la PSPG lo promedia); con Taylor–Hood, Couette de dos capas es exacto.
 - SUPG sobre triángulos reduce mucho las oscilaciones pero no las elimina (no es monótono con flujo oblicuo a la malla).
 
 ### Solvers y salida
 - En mallas hasta 160 mil incógnitas PARDISO sigue siendo tan rápido como CG + AMG (el ensamblado domina): el beneficio de AMG
   son las iteraciones casi constantes y la memoria, que importan en mallas mayores.
 - AMG (aglomeración suavizada) está pensado para difusión simétrica; con convección fuerte o varios campos acoplados puede
-  necesitar más iteraciones o GMRES/BiCGSTAB. Sin precondicionador de bloques para sistemas acoplados.
+  necesitar más iteraciones o GMRES/BiCGSTAB. El precondicionador de bloques solo sirve para el flujo solo.
 - La salida es VTK XML en ASCII (grande en mallas muy finas); no hay XDMF/HDF5 ni VTK binario ni datos por celda.
 - La factorización se reutiliza si la matriz es idéntica. En transitorio no lineal se conserva entre iteraciones y pasos
   (`reuseTangent=True`); en estacionario no lineal cada iteración de Newton refactoriza.

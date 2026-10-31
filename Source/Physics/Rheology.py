@@ -38,6 +38,7 @@ class ViscosityLaw:
     """Base class: mu(gamma2, T) with jax.numpy. uses_temperature tells the flow physics to read a temperature field."""
 
     uses_temperature = False
+    uses_pressure = False      # the law reads the pressure too: mu(gamma2, T, p)
 
     def __call__(self, gamma2, T):
         raise NotImplementedError
@@ -101,20 +102,23 @@ class CrossWLF(ViscosityLaw):
 
         mu = mu0(T) / (1 + (mu0(T) gamma_dot / tau_star)^(1 - n)),   mu0(T) = D1 exp(-A1 (T - D2) / (A2 + T - D2))
 
-    with T and D2 in Kelvin (the law converts the model temperature from °C) and the pressure dependence left out
-    (D3 = 0, so T* = D2 and A2 is the constant A2~). Valid above D2 (roughly the glass transition)."""
+    with T and D2 in Kelvin (the law converts the model temperature from °C). The pressure enters through D3 [K/Pa]:
+    T* = D2 + D3 p and A2 = A2~ + D3 p, so that mu0 = D1 exp(-A1 (T - D2 - D3 p) / (A2~ + T - D2)). With D3 > 0 the
+    pressure is read as a field of the flow itself, with its absolute level: use the true pressure at the outlet.
+    Valid above T* (roughly the glass transition)."""
 
     uses_temperature = True
 
-    def __init__(self, n, tau_star, D1, D2, A1, A2):
-        self.n, self.tau_star, self.D1, self.D2, self.A1, self.A2 = map(float, (n, tau_star, D1, D2, A1, A2))
+    def __init__(self, n, tau_star, D1, D2, A1, A2, D3=0.0):
+        self.n, self.tau_star, self.D1, self.D2, self.A1, self.A2, self.D3 = map(float, (n, tau_star, D1, D2, A1, A2, D3))
+        self.uses_pressure = self.D3 != 0.0
 
-    def zero_shear(self, T):
+    def zero_shear(self, T, p=0.0):
         dT = T + KELVIN_OFFSET - self.D2
-        return self.D1 * jnp.exp(-self.A1 * dT / (self.A2 + dT))
+        return self.D1 * jnp.exp(-self.A1 * (dT - self.D3 * p) / (self.A2 + dT))
 
-    def __call__(self, gamma2, T):
-        mu0 = self.zero_shear(T)
+    def __call__(self, gamma2, T, p=0.0):
+        mu0 = self.zero_shear(T, p)
         x2 = (mu0 / self.tau_star) ** 2 * gamma2 + _TINY
         return mu0 / (1.0 + x2 ** ((1.0 - self.n) / 2.0))
 
