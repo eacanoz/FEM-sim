@@ -10,6 +10,7 @@ import matplotlib
 matplotlib.use("Agg")
 
 import gmsh
+import jax
 import jax.numpy as jnp
 import numpy as np
 from scipy.integrate import solve_ivp
@@ -638,6 +639,125 @@ def test_plane_contraction():
     assert 0.25 < corrections[0] < 0.37 and corrections[0] > corrections[1] > corrections[2]
 
 
+def test_inelastic_equivalent_has_the_same_flow_curve():
+
+    """The law against the steady shear stress of each mode, with Oldroyd-B and Giesekus together."""
+
+    modes = [(1.0, 0.1, 0.3), (0.5, 1.0, 0.0), (0.2, 10.0, 0.15)]
+    mesh = mesh2((1.0, 1.0), (1, 1))
+    model = Model(name='curve', dim=2, mesh=mesh, mat=material('X', miu=0.3), psc=[ff, ve])
+    polymer = model.physics.viscoelastic
+    polymer.setModes(modes)
+    law = polymer.inelasticEquivalent(0.3)
+    for rate in (0.01, 1.0, 30.0, 1000.0):
+        stress = sum(polymer.stress(m, polymer.developed([[0.0, rate], [0.0, 0.0]], mode=m)[None])[0, 1] for m in range(3))
+        assert np.isclose(float(law.viscosity(rate)), 0.3 + stress / rate, rtol=1e-6), rate
+
+    # At rest and at rates so low that 1 + s rounds to 1: the plateau, with a finite derivative for Newton
+    for gamma2 in (0.0, 1e-30, 1e-12):
+        assert np.isclose(float(law(gamma2, 0.0)), 0.3 + 1.7, rtol=1e-9), gamma2
+        assert np.isfinite(float(jax.grad(lambda g: law(g, 0.0))(gamma2))), gamma2
+
+
+def test_tangent_with_artificial_diffusion():
+
+    """kappa is frozen in each iteration, like tau_s; it depends on the velocity through tau_state in this test."""
+
+    mesh = mesh2((1.0, 1.0), (2, 2))
+    model = Model(name='tangent', dim=2, mesh=mesh, mat=material('X', miu=0.5, rho=1.0), psc=[ff, ve])
+    polymer = model.physics.viscoelastic
+    polymer.setModes([(1.0, 0.7, 0.2)])
+    polymer.setDiffusion(1.0, lambda x, y: np.exp(-x ** 2 - y ** 2))
+    model.solverConfiguration(Study=StudyType.steady_state, Type=ProblemType.nonlinear)
+    err = tangent_error(model)
+    assert err < 1e-7, err
+
+
+def test_diffusion_extends_the_reach_at_a_reentrant_corner():
+
+    """Capillary with a long mode: without help it fails with b nearly singular next to the corner. With a small diffusion around the
+    corner it goes further, and where both work it leaves the shear stress and the total pressure drop in place."""
+
+    RB, LB, RC, LC = 4.75e-3, 8.0e-3, 0.5e-3, 16.0e-3
+
+    def capillary(c, rates):
+        gmsh.initialize()
+        gmsh.option.setNumber("General.Terminal", 0)
+        try:
+            geo = gmsh.model.geo
+            points = [(0, 0, 1.4e-3), (RB, 0, 1.4e-3), (RB, LB, 1.4e-3), (RC, LB, 0.06e-3), (RC, LB + LC, 0.24e-3), (0, LB + LC, 0.24e-3), (0, LB, 0.24e-3)]
+            tags = [geo.addPoint(x, y, 0, s) for x, y, s in points]
+            lines = [geo.addLine(tags[i], tags[(i + 1) % 7]) for i in range(7)]
+            geo.addPlaneSurface([geo.addCurveLoop(lines)])
+            geo.synchronize()
+            for name, group in (('inlet', lines[:1]), ('wall', lines[1:4]), ('outlet', lines[4:5]), ('axis', lines[5:])):
+                gmsh.model.addPhysicalGroup(1, group, name=name)
+            gmsh.model.mesh.generate(2)
+            gmsh.model.mesh.setOrder(2)
+            mesh = Mesh.from_gmsh_model()
+        finally:
+            gmsh.finalize()
+
+        model = Model(name='capillary', dim=2, mesh=mesh, mat=material('X', miu=47.0), psc=[ff, ve], axisymmetric=True)
+        flow, polymer = model.physics.fluid, model.physics.viscoelastic
+        polymer.setModes([(945.0, 1.0, 0.3)])
+        polymer.setDEVSS(945.0)
+        if c:
+            polymer.setDiffusion(c, lambda x, y: np.exp(-((x - RC) ** 2 + (y - LB) ** 2) / (0.3 * RC) ** 2))
+        flow.addBC_SymmetryEdges(mesh.boundary_edges('axis'))
+        flow.addBC_NoSlipEdges(mesh.boundary_edges('wall'))
+        inlet, outlet = mesh.boundary_edges('inlet'), mesh.boundary_edges('outlet')
+        flow.addBC_OutletEdges(outlet, 0.0)
+        polymer.addBC_OutletEdges(outlet)
+        state = {}
+
+        def set_rate(rate):
+            state['u'] = rate * RC ** 3 / (4 * RB ** 2)
+            flow.addBC_VelocityEdges(inlet, lambda r, z: (0.0, 2 * state['u'] * (1 - (r / RB) ** 2)))
+
+        set_rate(rates[0])
+        polymer.addBC_InflowEdges(inlet, lambda r, z: [[0.0, 0.0], [-4 * state['u'] * r / RB ** 2, 0.0]])
+        drops = {}
+        nodes = np.unique(np.ravel(inlet))
+        for rate in rates:
+            set_rate(rate)
+            polymer.setWeissenberg(1.0)
+            steady(model)
+            assert model.nonlinear_converged, (c, rate)
+            drops[rate] = model.sol['p'][nodes].mean()
+        return drops
+
+    plain = capillary(0.0, (1.0, 9.0, 27.0))
+    helped = capillary(1.0, (1.0, 9.0, 27.0, 60.0, 90.0, 135.0, 200.0))
+    for rate in plain:
+        assert abs(helped[rate] / plain[rate] - 1) < 0.01, rate
+
+
+def test_energy_balance_falls_with_the_mesh_and_marks_a_wrong_solution():
+
+    """An indicator of error, not a guarantee: see ve.energy_balance."""
+
+    values = []
+    for ny in (8, 16):
+        model, _, _ = channel(ElementType.quadrilateral, ny, 0.5)
+        steady(model)
+        values.append(model.physics.viscoelastic.energy_balance())
+    assert values[1] < 0.2 * values[0], values
+
+    model, mesh = couette(ElementType.quadrilateral, 0.5)
+    polymer = model.physics.viscoelastic
+    steady(model)
+    assert polymer.energy_balance() < 1e-8
+    Wi = 0.5
+    for _ in range(7):
+        polymer.setWeissenberg(2.0)
+        Wi *= 2.0
+        steady(model)
+    assert Wi == 64.0
+    assert np.max(np.abs(model.sol['polymer_stress'][:, 0] / (2 * Wi * 0.5) - 1)) > 0.01     # the known wrong solution
+    assert polymer.energy_balance() > 1e-6
+
+
 def test_output_of_the_modes():
 
     """More than three components go to VTK one by one."""
@@ -659,7 +779,9 @@ if __name__ == "__main__":
              test_giesekus_viscometric_functions, test_homogeneous_flows_against_an_independent_integration,
              test_start_up_of_couette, test_axisymmetric_tangent, test_pipe, test_two_identical_modes_are_one,
              test_spectrum_in_oscillatory_shear, test_channel_without_solvent, test_cylinder_in_a_channel,
-             test_plane_contraction, test_output_of_the_modes]
+             test_plane_contraction, test_inelastic_equivalent_has_the_same_flow_curve, test_tangent_with_artificial_diffusion,
+             test_diffusion_extends_the_reach_at_a_reentrant_corner, test_energy_balance_falls_with_the_mesh_and_marks_a_wrong_solution,
+             test_output_of_the_modes]
     failed = 0
     for t in tests:
         try:

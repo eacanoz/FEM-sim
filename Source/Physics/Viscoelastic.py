@@ -25,6 +25,11 @@
 #
 # The added term vanishes as G -> grad u, so it does not change the solution in the limit of a fine mesh.
 #
+# At high Wi the equation of b has no diffusion and sharp layers form next to a reentrant corner. setDiffusion adds a small
+# artificial one (Sureshkumar & Beris 1995), R_b += integral kappa grad N . grad b, with kappa = c h^2 (1 / lam + gamma_dot) frozen in each
+# iteration: it scales with the mesh, so it vanishes at second order. It changes the solution, so it is better kept to where it is
+# needed (a function of the coordinates, 1 near the corner and 0 away from it): check it against c = 0 where possible.
+#
 # An indefinite b also squares to a conformation, and it is a spurious solution: the solvers reject any state whose b is not
 # positive definite (System.require_admissible). Checking the nodes is enough: the cone is convex and b is linear in an element.
 #
@@ -41,6 +46,7 @@ jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 
 from Source.Physics.Physics import physics
+from Source.Physics.Rheology import ViscosityLaw
 from Source.Primals.Vector import vectorField
 from Source.Simulation.PointwiseLaw import PointwiseLaw, cached_law
 from Source.Simulation.System import GradientLawTerm
@@ -78,7 +84,7 @@ def conformation_law(mu, lam, alpha, nc, devss=False):
     """Pointwise law of a mode for GradientLawTerm.
 
     Inputs: b (nc), grad b (nc x 2), u (2), grad u (4), with DEVSS-G also G (4) and grad G (8), then the data at the Gauss
-    points: tau_s, db/dt (nc), r. Outputs: for b a source (nc) and a flux (nc x 2), for u a source (2) and a flux (4).
+    points: tau_s, db/dt (nc), r, kappa. Outputs: for b a source (nc) and a flux (nc x 2), for u a source (2) and a flux (4).
     """
 
     data = 3 * nc + 6 + (12 if devss else 0)
@@ -88,10 +94,10 @@ def conformation_law(mu, lam, alpha, nc, devss=False):
         u, L = w[3 * nc:3 * nc + 2], w[3 * nc + 2:3 * nc + 6].reshape(2, 2)
         if devss:
             L = w[3 * nc + 6:3 * nc + 10].reshape(2, 2)
-        tau_s, b_t, r = w[data], w[data + 1:data + 1 + nc], w[data + 1 + nc]
+        tau_s, b_t, r, kappa = w[data], w[data + 1:data + 1 + nc], w[data + 1 + nc], w[data + 2 + nc]
 
         residual = grad_b @ u - conformation_rate(b, L, u[0] / r, lam, alpha)
-        supg = tau_s * jnp.outer(residual + b_t, u)
+        supg = tau_s * jnp.outer(residual + b_t, u) + kappa * grad_b
 
         B = _plane(b)
         stress = mu / lam * (B @ B - jnp.eye(2))
@@ -102,13 +108,37 @@ def conformation_law(mu, lam, alpha, nc, devss=False):
     return law
 
 
+class SpectrumViscosity(ViscosityLaw):
+
+    """The steady shear viscosity of a spectrum of modes plus a solvent, as an inelastic law: the same flow curve without elasticity.
+    Closed form of Giesekus (Bird, Armstrong & Hassager), with its limit eta = mu for Oldroyd-B, written without the differences
+    sqrt(1 + 2 s) - 1 and 1 - chi: at low rates they vanish by round-off, and the derivative of the law would be infinite."""
+
+    def __init__(self, modes, solvent=0.0):
+        self.modes, self.solvent = list(modes), float(solvent)
+
+    def __call__(self, gamma2, T):
+        eta = self.solvent
+        for mu, lam, alpha in self.modes:
+            if alpha == 0.0:
+                eta = eta + mu
+                continue
+            s = 8.0 * alpha * (1.0 - alpha) * lam * lam * gamma2
+            root = jnp.sqrt(1.0 + 2.0 * s)
+            chi = jnp.sqrt(2.0 / (1.0 + root))
+            f = 2.0 * s / (1.0 + root) ** 2 / (1.0 + chi) / (1.0 + (1.0 - 2.0 * alpha) * chi)
+            eta = eta + mu * (1.0 - f) ** 2 / (1.0 + (1.0 - 2.0 * alpha) * f)
+        return eta
+
+
 class ConformationTerm(GradientLawTerm):
 
     """The equation of b of one mode and its stress in the momentum equation, all through its pointwise law."""
 
-    def __init__(self, system, law, field, nc, lam, devss=False):
+    def __init__(self, system, law, field, nc, lam, devss=False, diffusion=0.0, where=None):
         super().__init__(system, law, [field, 'u', 'G'] if devss else [field, 'u'], [field, 'u'])
-        self.field, self.nc, self.lam = field, nc, lam
+        self.field, self.nc, self.lam, self.diffusion = field, nc, lam, diffusion
+        self._where = 1.0 if where is None else ops.at_gauss(system.disc, where)
         self.tau_state = None        # evaluate tau_s at this state instead of x (to test the tangent)
         self._h = 0.5 * ops.element_size(system.disc)[:, None]               # the spacing of the nodes of the element
 
@@ -124,7 +154,8 @@ class ConformationTerm(GradientLawTerm):
 
         fields = layout.split(x)
         u = disc.interpolate(np.asarray(fields['u'], dtype=float))
-        speed_u = u if self.tau_state is None else disc.interpolate(np.asarray(layout.split(self.tau_state)['u'], dtype=float))
+        speed_field = fields['u'] if self.tau_state is None else layout.split(self.tau_state)['u']
+        speed_u = disc.interpolate(np.asarray(speed_field, dtype=float))
         tau_s = 1.0 / np.sqrt((2.0 * np.linalg.norm(speed_u, axis=-1) / self._h) ** 2 + (2.0 / self.lam) ** 2)
 
         b_t = np.zeros((nel, ngp, nc))
@@ -132,7 +163,14 @@ class ConformationTerm(GradientLawTerm):
             b_t = disc.interpolate(np.asarray(layout.split(time['alpha'] * x + time['beta'])[self.field], dtype=float))
 
         r = disc.radius if disc.axisymmetric else np.ones(disc.detJw.shape)
-        self.gauss_inputs = np.concatenate([tau_s[..., None], b_t, r[..., None]], axis=-1)
+
+        kappa = np.zeros(disc.detJw.shape)
+        if self.diffusion:
+            G = disc.gradient(np.asarray(speed_field, dtype=float))
+            E = 0.5 * (G + np.swapaxes(G, -1, -2))
+            kappa = self.diffusion * self._where * self._h ** 2 * (1.0 / self.lam + np.sqrt(2.0 * np.einsum('egab,egab->eg', E, E)))
+
+        self.gauss_inputs = np.concatenate([tau_s[..., None], b_t, r[..., None], kappa[..., None]], axis=-1)
 
         R, J = super().contribution(x, tangent)
 
@@ -198,6 +236,8 @@ class ve(physics):
         self.outlets = []
         self.inflows = []
         self.devss = 0.0
+        self.diffusion = 0.0
+        self.diffusion_where = None
         self._rest = np.array([1.0, 0.0, 1.0, 1.0])[:self.nc]
 
     def setModes(self, modes):
@@ -215,6 +255,14 @@ class ve(physics):
 
         self.devss = float(mu_a)
         self._set_fields()
+
+    def setDiffusion(self, c, where=None):
+
+        """Artificial diffusion in the equation of b, kappa = c h^2 (1 / lam + gamma_dot), of order c ~ 0.01 to 1. See the header.
+        where: optional function of the coordinates that multiplies it, to keep it next to a corner."""
+
+        self.diffusion = float(c)
+        self.diffusion_where = where
 
     def _set_fields(self):
 
@@ -292,6 +340,65 @@ class ve(physics):
 
         return mu / lam * (c - rest)
 
+    def inelasticEquivalent(self, solvent=0.0):
+
+        """An inelastic law with the steady shear viscosity of these modes: flow.setViscosityLaw(polymer.inelasticEquivalent(mu_s)),
+        in a flow without this physics. What differs from the viscoelastic solution is due to elasticity."""
+
+        return SpectrumViscosity(self.modes, solvent)
+
+    def energy_balance(self, mode=0):
+
+        """Balance of the free energy of a mode in a steady state: power of the stress = dissipation + what convection carries out.
+
+        With psi = (mu / (2 lam)) (tr c - ln det c - n), Dpsi/Dt = tau : grad u - D, D = -(mu / (2 lam)) tr((I - c^-1) f(c)). Returns
+        |power - D - flux| / |power|. An indicator of error, not a proof: it falls with the mesh and jumps at a wrong solution of a high
+        Wi (Couette: from 1e-13 to 5e-5), but a good solution with 1 % of error on a coarse mesh gives the same value, so no threshold
+        tells them apart. Watch it along the continuation and the refinement of the mesh."""
+
+        mu, lam, alpha = self.modes[mode]
+        disc = self.modelRef.geometry
+        fields = self.modelRef.physics.var
+        U = np.asarray(fields['u'].values, dtype=float)
+        b = disc.interpolate(np.asarray(self.var[f'b{mode}'].values, dtype=float))
+        L = disc.gradient(U)
+        u = disc.interpolate(U)
+
+        def psi_of(xx, xy, yy, tt=None):
+            det = xx * yy - xy * xy
+            c_xx, c_xy, c_yy = xx * xx + xy * xy, xy * (xx + yy), xy * xy + yy * yy
+            psi = c_xx + c_yy - 2.0 * np.log(det) - 2.0
+            if tt is not None:
+                psi = psi + tt * tt - 2.0 * np.log(tt) - 1.0
+            return mu / (2.0 * lam) * psi
+
+        B = np.stack([np.stack([b[..., 0], b[..., 1]], axis=-1), np.stack([b[..., 1], b[..., 2]], axis=-1)], axis=-2)
+        C = B @ B
+        I = np.eye(2)
+        E = C - I
+        stress = mu / lam * E
+        inverse = np.linalg.inv(C)
+        f = -(E + alpha * E @ E) / lam
+        power = np.einsum('egab,egab->eg', stress, L)
+        dissipation = -mu / (2.0 * lam) * np.einsum('egab,egba->eg', I - inverse, f)
+
+        nodal = np.asarray(self.var[f'b{mode}'].values, dtype=float)
+        if self.nc == 4:
+            hoop = u[..., 0] / disc.radius
+            ct = b[..., 3] ** 2
+            et = ct - 1.0
+            power = power + mu / lam * et * hoop
+            dissipation = dissipation + mu / (2.0 * lam) * (1.0 - 1.0 / ct) * (et + alpha * et * et) / lam
+            psi = psi_of(nodal[:, 0], nodal[:, 1], nodal[:, 2], nodal[:, 3])
+        else:
+            psi = psi_of(nodal[:, 0], nodal[:, 1], nodal[:, 2])
+
+        flux = np.einsum('ega,ega->eg', u, disc.gradient(psi))
+        w = disc.detJw
+        total = np.sum(w * power)
+
+        return abs(total - np.sum(w * dissipation) - np.sum(w * flux)) / max(abs(total), 1e-30)
+
     def derived_fields(self, model):
 
         return {'polymer_stress': sum(self.stress(m) for m in range(len(self.modes)))} if self.modes else {}
@@ -361,7 +468,7 @@ class ve(physics):
             devss = bool(self.devss)
             law = cached_law(('conformation', mu, lam, alpha, self.nc, devss),
                              lambda: PointwiseLaw(conformation_law(mu, lam, alpha, self.nc, devss)))
-            system.add_term(ConformationTerm(system, law, field, self.nc, lam, devss))
+            system.add_term(ConformationTerm(system, law, field, self.nc, lam, devss, self.diffusion, self.diffusion_where))
 
             for edges in self.outlets:
                 system.add_term(PolymerTractionTerm(system, disc.facets(edges), field, mu, lam))

@@ -142,6 +142,7 @@
 | Viscoelástico: espectro | G′ y G″ de tres modos en oscilación pequeña; un modo partido en dos iguales | `Test/test_viscoelastic.py` | 0.8243/0.8242 y 2.1261/2.1270; 1e-8 |
 | Cilindro en canal (Oldroyd-B, β = 0.59) | arrastre frente a Hulsen et al., tabla de arXiv:2308.09394 | `Test/test_viscoelastic.py` (malla gruesa); fina a mano | 88 530 incógnitas: 0.000–0.05 % hasta Wi = 0.9; 24 140: 0.64 % a Wi = 1 |
 | Contracción plana 4:1 (Oldroyd-B, β = 1/9) | C y X_R frente a De, tendencia publicada; `Example_Viscoelastic_Contraction.py` | `Test/test_viscoelastic.py` (gruesa); ejemplo | llega a De = 3; De → 0: C ≈ 0.37 (newtoniano 0.374); X_R 0.363 → 0.267. **C sin converger a De alto** (De = 2.6: −1.84 con h/4, −2.02 con h/8). Sin tablas de Alves et al. 2003 a mano |
+| Reómetro multimodo | fluido inelástico de igual viscosidad; difusión localizada frente a sin ella | `Test/test_viscoelastic.py` (modo largo, malla gruesa); `Example_Viscoelastic_Rheometer.py` | τ_w igual a 4 cifras; caída a ≤ 1 % donde ambos convergen |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -291,11 +292,20 @@ Lo que sigue pendiente:
 - `Model(psc=[ff, ve])`, solo con Taylor–Hood, estudios estacionarios y BDF2 (Crank–Nicolson se rechaza). Isotermo, sin superficie
   libre: el hinchamiento es una estimación de Tanner, no un cálculo.
 - **Límites medidos:** canal hasta Wi de pared 128 con 16 elementos (error comprobado, 1e-3); Couette correcto hasta Wi ≈ 32–95, según
-  el factor de continuación; cilindro hasta Wi = 1 validado, sin medir más allá; contracción hasta De = 3, sin converger en malla. **Reómetro con 4 modos Giesekus: solo hasta
-  γ̇ₐ ≈ 40 s⁻¹** con 47 518 incógnitas (pérdida de entrada ~2 % de la caída), lejos de las tasas de proceso. Sin refinar.
+  el factor de continuación; cilindro hasta Wi = 1 validado, sin medir más allá; contracción hasta De = 3, sin converger en malla. **Reómetro con 4 modos Giesekus:** sin ayuda, hasta
+  γ̇ₐ ≈ 40 s⁻¹, limitado por el modo largo (λ = 1 s) con `det b → 0` en la pared junto a la esquina; con difusión artificial localizada,
+  hasta **618 s⁻¹** con 159 413 incógnitas (falla a 990) y 260 s⁻¹ con 47 518: refinar llega más lejos.
+- **Difusión artificial (`setDiffusion`):** cambia la solución, y justo la pérdida de entrada. A 9 s⁻¹, frente a 0.075 bar sin ella: global
+  c = 1, +16 % (y −5 % en τ_w: no usarla así); radio 0.3 R_c, c = 1, −7 % con s = 4 y −4 % con s = 2; radio mayor o c mayor, peor (−20 a −35 %).
+  τ_w y la caída total apenas cambian (≤ 0.1 %) si es local. En el cilindro global con c = 0.1 da −3.3 % a Wi = 1 en malla gruesa.
+- **Resultado de Bagley, espectro ilustrativo:** frente al fluido inelástico de igual viscosidad (`inelasticEquivalent`, τ_w coincide a 4 cifras), la
+  razón de pérdidas de entrada es 0.84, 0.96, 1.11, 1.33 y 1.48 a 9, 59, 151, 386 y 618 s⁻¹. Incertidumbre del orden del 4 %, y sesgada a la baja por
+  la difusión. **Sin validar frente a experimentos**, ni con un espectro medido. El cruce depende del espectro.
 - **`converged=True` no garantiza la solución a Wi alto:** Couette reporta convergencia con error en `τ_xx` de 19 % a Wi = 64 con factor 2,
   y de 2.3 % a Wi = 123 con factor 1.3, aunque la solución exacta también satisface el sistema discreto. Es intermitente y depende del
   camino: con factor 1.3 vuelve a la solución correcta en Wi mayores. Hay que vigilar la convergencia en malla y en la continuación.
+  `energy_balance` es un indicador de error, no un detector: salta de 1e-13 a 5e-5 en ese Couette, pero una solución buena con 1 % de error
+  en malla gruesa da lo mismo, así que ningún umbral los separa.
 - Una `b` indefinida también da `b² = c` y es una solución espuria: las rechaza `System.require_admissible`, que antes daba
   «convergido» con un flujo falso.
 - La continuación en Wi es necesaria (`setWeissenberg`): desde el reposo Couette falla a Wi = 10. Newton llega más lejos que el

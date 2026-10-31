@@ -150,8 +150,11 @@ es singular para un fluido que adelgaza.
   - Cilindro en canal a 0.05 % o mejor de la literatura hasta Wi = 0.9: se supera el punto de parada de B3.
   - Cambios frente al plan: Poiseuille no es exacto, solo Couette (`b = √c` no es polinómico), así que el criterio es el orden; una salida
     con presión necesita descontar la tracción polimérica (`addBC_OutletEdges`).
-  - **No cumplido:** sin solución manufacturada; contracción sin tablas de Alves et al. 2003 y sin converger en malla a De alto;
-    reómetro multimodo solo hasta γ̇ₐ ≈ 40 s⁻¹, por lo que **la pérdida de Bagley a tasas de proceso sigue sin estudiarse**.
+  - **Bagley a tasas de proceso:** con difusión artificial alrededor de la esquina el reómetro multimodo llega a 618 s⁻¹. Frente al fluido inelástico
+    de igual viscosidad, la elasticidad multiplica la pérdida de entrada por 1.48 a esa tasa, y la reduce por debajo de ~100 s⁻¹. `Example_Viscoelastic_Rheometer.py`.
+    Espectro ilustrativo: sin comparar con experimentos.
+  - **No cumplido:** sin solución manufacturada; contracción sin tablas de Alves et al. 2003 y sin converger en malla a De alto; la detección de soluciones
+    falsas a Wi alto no quedó resuelta: `energy_balance` indica error, pero no las separa de una solución buena en malla gruesa.
   - Corregidos de paso: `System.field_scales` tomaba el ruido de una presión nula como su tamaño y Newton no paraba (viene de la
     Prioridad 1); y el criterio de parada estacionario, ahora por actualización despreciable.
 - Hechos: materiales por región (`Model.region_field`) y Cross–WLF con presión (`D3`), en `Test/test_regions_pressure.py`.
