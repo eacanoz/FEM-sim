@@ -1,14 +1,20 @@
-# Viscoelastic flow: polymer modes on top of the flow physics (Oldroyd-B, Giesekus), on Taylor-Hood elements.
+# Viscoelastic flow: polymer modes on top of the flow physics (Oldroyd-B, Giesekus, Phan-Thien-Tanner), on Taylor-Hood elements.
 #
 #     sigma = -p I + 2 mu_s eps(u) + sum_m tau_m,     tau_m = (mu_m / lam_m) (c_m - I)
-#     dc/dt + u . grad c = L c + c L^T - (c - I) / lam - (alpha / lam) (c - I)^2,     L_ab = du_a / dx_b
+#     dc/dt + u . grad c = L c + c L^T + f(c),     L_ab = du_a / dx_b
 #
-# with mu_s the viscosity of the flow physics (the solvent). alpha = 0 is Oldroyd-B; 0 < alpha <= 1/2 is Giesekus.
+# with mu_s the viscosity of the flow physics (the solvent) and, with E = c - I and alpha the parameter of the mode:
+#
+#     'giesekus'     f = -(E + alpha E^2) / lam                      alpha = 0 is Oldroyd-B; 0 < alpha <= 1/2
+#     'ptt-linear'   f = -(1 + alpha tr E) E / lam                   alpha (epsilon) of order 0.01 to 0.5
+#     'ptt-exp'      f = -exp(alpha tr E) E / lam
+#
+# tr E is that of the 3D tensor: the out-of-plane component is 1 in plane flow and c_t in axisymmetric flow.
 #
 # The unknown of each mode is the symmetric square root of the conformation, c = b b (Balci, Thomases, Renardy & Doering
 # 2011), which keeps c positive definite without eigenvalues, so it stays differentiable at rest (c = I):
 #
-#     db/dt + u . grad b = L b + b a + (1/2) f(c) b^-1,   a = (b L^T - L b) / tr(b),   f(c) = -(c - I)/lam - (alpha/lam) (c - I)^2
+#     db/dt + u . grad b = L b + b a + (1/2) f(c) b^-1,   a = (b L^T - L b) / tr(b)
 #
 # a is the antisymmetric matrix that keeps b symmetric (a closed form in the plane). Axisymmetric: the (r, z) block is the
 # same, and the hoop component is db_t/dt + u . grad b_t = (u_r / r) b_t + (1/2) f(c_t) / b_t.
@@ -58,7 +64,14 @@ def _plane(b):
     return jnp.array([[b[0], b[1]], [b[1], b[2]]])
 
 
-def conformation_rate(b, L, hoop, lam, alpha):
+CONSTITUTIVE = ('giesekus', 'ptt-linear', 'ptt-exp')
+
+
+def _ptt_factor(trace, alpha, constitutive):
+    return 1.0 + alpha * trace if constitutive == 'ptt-linear' else jnp.exp(alpha * trace)
+
+
+def conformation_rate(b, L, hoop, lam, alpha, constitutive='giesekus'):
 
     """The right-hand side of the equation of b: (xx, xy, yy) plus (tt) if b has four components. L is 2 x 2 and hoop = u_r / r."""
 
@@ -69,17 +82,24 @@ def conformation_rate(b, L, hoop, lam, alpha):
 
     a = (B @ L.T - L @ B) / (b[0] + b[2])
     E = B @ B - I
-    rate = L @ B + B @ a - 0.5 / lam * (E + alpha * E @ E) @ inverse
+    e = b[3] * b[3] - 1.0 if b.shape[0] == 4 else 0.0
+
+    if constitutive == 'giesekus':
+        relaxation, relaxation_t = E + alpha * E @ E, e + alpha * e * e
+    else:
+        factor = _ptt_factor(E[0, 0] + E[1, 1] + e, alpha, constitutive)
+        relaxation, relaxation_t = factor * E, factor * e
+
+    rate = L @ B + B @ a - 0.5 / lam * relaxation @ inverse
     plane = jnp.array([rate[0, 0], 0.5 * (rate[0, 1] + rate[1, 0]), rate[1, 1]])
 
     if b.shape[0] == 3:
         return plane
 
-    e = b[3] * b[3] - 1.0
-    return jnp.concatenate([plane, jnp.array([hoop * b[3] - 0.5 / lam * (e + alpha * e * e) / b[3]])])
+    return jnp.concatenate([plane, jnp.array([hoop * b[3] - 0.5 / lam * relaxation_t / b[3]])])
 
 
-def conformation_law(mu, lam, alpha, nc, devss=False):
+def conformation_law(mu, lam, alpha, nc, devss=False, constitutive='giesekus'):
 
     """Pointwise law of a mode for GradientLawTerm.
 
@@ -96,7 +116,7 @@ def conformation_law(mu, lam, alpha, nc, devss=False):
             L = w[3 * nc + 6:3 * nc + 10].reshape(2, 2)
         tau_s, b_t, r, kappa = w[data], w[data + 1:data + 1 + nc], w[data + 1 + nc], w[data + 2 + nc]
 
-        residual = grad_b @ u - conformation_rate(b, L, u[0] / r, lam, alpha)
+        residual = grad_b @ u - conformation_rate(b, L, u[0] / r, lam, alpha, constitutive)
         supg = tau_s * jnp.outer(residual + b_t, u) + kappa * grad_b
 
         B = _plane(b)
@@ -112,16 +132,28 @@ class SpectrumViscosity(ViscosityLaw):
 
     """The steady shear viscosity of a spectrum of modes plus a solvent, as an inelastic law: the same flow curve without elasticity.
     Closed form of Giesekus (Bird, Armstrong & Hassager), with its limit eta = mu for Oldroyd-B, written without the differences
-    sqrt(1 + 2 s) - 1 and 1 - chi: at low rates they vanish by round-off, and the derivative of the law would be infinite."""
+    sqrt(1 + 2 s) - 1 and 1 - chi: at low rates they vanish by round-off, and the derivative of the law would be infinite.
+    PTT: eta = mu / Y, with the factor Y of simple shear from Newton (Y^3 - Y^2 = 2 alpha Wi^2, linear; Y^2 ln Y = 2 alpha Wi^2, exponential)."""
 
-    def __init__(self, modes, solvent=0.0):
-        self.modes, self.solvent = list(modes), float(solvent)
+    def __init__(self, modes, solvent=0.0, constitutive='giesekus'):
+        self.modes, self.solvent, self.constitutive = list(modes), float(solvent), constitutive
 
     def __call__(self, gamma2, T):
         eta = self.solvent
         for mu, lam, alpha in self.modes:
             if alpha == 0.0:
                 eta = eta + mu
+                continue
+            if self.constitutive != 'giesekus':
+                wi2 = lam * lam * gamma2
+                y = jnp.cbrt(1.0 + 2.0 * alpha * wi2) + 0.5 * (self.constitutive == 'ptt-linear')
+                for _ in range(30):
+                    if self.constitutive == 'ptt-linear':
+                        g, dg = y ** 3 - y ** 2 - 2.0 * alpha * wi2, 3.0 * y ** 2 - 2.0 * y
+                    else:
+                        g, dg = y ** 2 * jnp.log(y) - 2.0 * alpha * wi2, y * (2.0 * jnp.log(y) + 1.0)
+                    y = y - g / dg
+                eta = eta + mu / y
                 continue
             s = 8.0 * alpha * (1.0 - alpha) * lam * lam * gamma2
             root = jnp.sqrt(1.0 + 2.0 * s)
@@ -238,13 +270,19 @@ class ve(physics):
         self.devss = 0.0
         self.diffusion = 0.0
         self.diffusion_where = None
+        self.constitutive = 'giesekus'
         self._rest = np.array([1.0, 0.0, 1.0, 1.0])[:self.nc]
 
-    def setModes(self, modes):
+    def setModes(self, modes, constitutive='giesekus'):
 
-        """Polymer modes [(mu, lam, alpha), ...]: viscosity, relaxation time and Giesekus parameter (0: Oldroyd-B). Their
-        unknowns, 'b0', 'b1', ..., start at rest. The solvent is the viscosity of the flow physics, which may be zero."""
+        """Polymer modes [(mu, lam, alpha), ...]: viscosity, relaxation time and the parameter of the model: 'giesekus' (0: Oldroyd-B),
+        'ptt-linear' or 'ptt-exp' (epsilon). Their unknowns, 'b0', 'b1', ..., start at rest. The solvent is the viscosity of the flow
+        physics, which may be zero."""
 
+        if constitutive not in CONSTITUTIVE:
+            raise ValueError(f"Modelo desconocido: {constitutive!r} (use uno de {CONSTITUTIVE}).")
+
+        self.constitutive = constitutive
         self.modes = [(float(mu), float(lam), float(alpha)) for mu, lam, alpha in modes]
         self._set_fields()
 
@@ -295,7 +333,7 @@ class ve(physics):
 
         mu, lam, alpha = self.modes[mode]
         L = jnp.asarray(L, dtype=float)
-        rate = jax.jit(lambda b: conformation_rate(b, L, hoop, lam, alpha))
+        rate = jax.jit(lambda b: conformation_rate(b, L, hoop, lam, alpha, self.constitutive))
         solution = solve_ivp(lambda t, b: np.asarray(rate(jnp.asarray(b))), (0.0, 100.0 * lam), self._rest, method='LSODA',
                              rtol=1e-10, atol=1e-12)
 
@@ -345,7 +383,7 @@ class ve(physics):
         """An inelastic law with the steady shear viscosity of these modes: flow.setViscosityLaw(polymer.inelasticEquivalent(mu_s)),
         in a flow without this physics. What differs from the viscoelastic solution is due to elasticity."""
 
-        return SpectrumViscosity(self.modes, solvent)
+        return SpectrumViscosity(self.modes, solvent, self.constitutive)
 
     def energy_balance(self, mode=0):
 
@@ -378,7 +416,11 @@ class ve(physics):
         E = C - I
         stress = mu / lam * E
         inverse = np.linalg.inv(C)
-        f = -(E + alpha * E @ E) / lam
+        trace = E[..., 0, 0] + E[..., 1, 1] + (b[..., 3] ** 2 - 1.0 if self.nc == 4 else 0.0)
+        if self.constitutive == 'giesekus':
+            f = -(E + alpha * E @ E) / lam
+        else:
+            f = -np.asarray(_ptt_factor(trace, alpha, self.constitutive))[..., None, None] * E / lam
         power = np.einsum('egab,egab->eg', stress, L)
         dissipation = -mu / (2.0 * lam) * np.einsum('egab,egba->eg', I - inverse, f)
 
@@ -388,7 +430,8 @@ class ve(physics):
             ct = b[..., 3] ** 2
             et = ct - 1.0
             power = power + mu / lam * et * hoop
-            dissipation = dissipation + mu / (2.0 * lam) * (1.0 - 1.0 / ct) * (et + alpha * et * et) / lam
+            relaxation = et + alpha * et * et if self.constitutive == 'giesekus' else np.asarray(_ptt_factor(trace, alpha, self.constitutive)) * et
+            dissipation = dissipation + mu / (2.0 * lam) * (1.0 - 1.0 / ct) * relaxation / lam
             psi = psi_of(nodal[:, 0], nodal[:, 1], nodal[:, 2], nodal[:, 3])
         else:
             psi = psi_of(nodal[:, 0], nodal[:, 1], nodal[:, 2])
@@ -466,8 +509,8 @@ class ve(physics):
             system.add_mass(layout.scatter_matrix(ops.vector_mass(disc, 1.0, self.nc), rows, rows))
 
             devss = bool(self.devss)
-            law = cached_law(('conformation', mu, lam, alpha, self.nc, devss),
-                             lambda: PointwiseLaw(conformation_law(mu, lam, alpha, self.nc, devss)))
+            law = cached_law(('conformation', mu, lam, alpha, self.nc, devss, self.constitutive),
+                             lambda: PointwiseLaw(conformation_law(mu, lam, alpha, self.nc, devss, self.constitutive)))
             system.add_term(ConformationTerm(system, law, field, self.nc, lam, devss, self.diffusion, self.diffusion_where))
 
             for edges in self.outlets:

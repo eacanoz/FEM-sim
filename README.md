@@ -33,6 +33,7 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Tiempo y escala: condiciones con f(t) (`setBCTime`), BDF2 adaptativo (`adaptiveTol`, `adaptiveMaxStep`), GMRES con bloques (`Preconditioners.SaddlePoint`) | Operativo: pared oscilante y Womersley de orden 2; pasos ∝ tol^(−1/3); 3.15 millones de incógnitas en Stokes |
 | Cross–WLF con presión (`D3`) y materiales por región (`Model.region_field`) | Operativo: rendija larga a 1.6e-4 de la lubricación; pared compuesta y Couette de dos capas exactos |
 | Viscoelástico multimodo (`Model(psc=[ff, ve])`, Oldroyd-B y Giesekus, raíz de la conformación, DEVSS-G, plano y axisimétrico, malla cuadrática) | Operativo con límites: cilindro en canal a 0.05 % de la literatura hasta Wi = 0.9; contracción hasta De = 3, sin converger en malla; reómetro multimodo hasta 618 s⁻¹ con difusión local, con la elasticidad multiplicando la pérdida de entrada por 1.48 (espectro ilustrativo, sin validar con experimentos). Sin superficie libre |
+| Deslizamiento en pared (`ff.addBC_SlipLawEdges`: Navier, potencia, umbral) y PTT (`ve.setModes(..., 'ptt-linear')`) | Operativo: Poiseuille exacto, Mooney recupera la velocidad dada; PTT frente a `solve_ivp`; reómetro hasta 1583 s⁻¹ con PTT en malla gruesa |
 | Navier–Stokes estacionario (`ff.setInertia(True)`): convección con Newton o Picard, SUPG/PSPG/LSIC sobre el residuo completo | Operativo: Kovasznay (orden 2 en u y p), cavidad Re = 100 frente a Ghia et al., Newton en 5–7 iteraciones |
 | Fluidos no newtonianos (`ff.setViscosityLaw`): ley de potencia, Carreau–Yasuda, Cross, Cross–WLF, Bingham y Herschel–Bulkley regularizados, desplazamiento de Arrhenius | Operativo: perfiles analíticos de ley de potencia (orden 2) y Bingham (tapón), jacobiano exacto con dμ/dγ̇ y dμ/dT |
 | Acoplamiento flujo–calor (`Model(psc=[ff, ht])`, `setVelocity('u')`, `setViscousHeating`): convección por la velocidad calculada con SUPG, disipación viscosa, μ(T) | Operativo: Brinkman exacto, μ(T) en Couette, equivalencia con velocidad prescrita, jacobiano acoplado completo |
@@ -250,6 +251,7 @@ python Test/test_taylor_hood.py           # Etapa 17: Taylor-Hood: elementos, so
 python Test/test_time_and_scale.py        # Etapa 17: condiciones en el tiempo, paso adaptativo, Crank-Nicolson, distancia, tuberia, bloques (14)
 python Test/test_regions_pressure.py      # Etapa 17: Cross-WLF con presion, materiales por region (7)
 python Test/test_viscoelastic.py          # Etapa 17: raiz de la conformacion, cortes, transitorio, espectro, cilindro, contraccion, reometro (22)
+python Test/test_slip_ptt.py              # Etapa 17: deslizamiento en pared, Mooney, PTT (11)
 python Test/test_navier_stokes.py         # Etapa 11: Navier–Stokes: tangente, Kovasznay, cavidad frente a Ghia, canal, límite de Stokes, Picard (8)
 python Test/test_non_newtonian.py         # Etapa 12: leyes de viscosidad, ley de potencia, Bingham, Brinkman, μ(T), convección acoplada, jacobiano (8)
 python Test/test_axisymmetric.py          # Etapa 13: medidas r-z, conducción radial, Hagen–Poiseuille, extensión uniaxial, tubo de ley de potencia, jacobiano (6)

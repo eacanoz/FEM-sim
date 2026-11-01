@@ -153,6 +153,8 @@ es singular para un fluido que adelgaza.
   - **Bagley a tasas de proceso:** con difusión artificial alrededor de la esquina el reómetro multimodo llega a 618 s⁻¹. Frente al fluido inelástico
     de igual viscosidad, la elasticidad multiplica la pérdida de entrada por 1.48 a esa tasa, y la reduce por debajo de ~100 s⁻¹. `Example_Viscoelastic_Rheometer.py`.
     Espectro ilustrativo: sin comparar con experimentos.
+  - **PTT y deslizamiento (añadidos):** `setModes(..., 'ptt-linear' | 'ptt-exp')`, `addBC_SlipLawEdges`. PTT llega a 1583 s⁻¹ en el reómetro, y da otra razón de Bagley: 0.96 a 618 s⁻¹,
+    frente a 1.48 con Giesekus. El resultado de Bagley depende del modelo, así que hace falta ajustar datos extensionales.
   - **No cumplido:** sin solución manufacturada; contracción sin tablas de Alves et al. 2003 y sin converger en malla a De alto; la detección de soluciones
     falsas a Wi alto no quedó resuelta: `energy_balance` indica error, pero no las separa de una solución buena en malla gruesa.
   - Corregidos de paso: `System.field_scales` tomaba el ruido de una presión nula como su tamaño y Newton no paraba (viene de la

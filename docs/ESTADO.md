@@ -143,6 +143,9 @@
 | Cilindro en canal (Oldroyd-B, β = 0.59) | arrastre frente a Hulsen et al., tabla de arXiv:2308.09394 | `Test/test_viscoelastic.py` (malla gruesa); fina a mano | 88 530 incógnitas: 0.000–0.05 % hasta Wi = 0.9; 24 140: 0.64 % a Wi = 1 |
 | Contracción plana 4:1 (Oldroyd-B, β = 1/9) | C y X_R frente a De, tendencia publicada; `Example_Viscoelastic_Contraction.py` | `Test/test_viscoelastic.py` (gruesa); ejemplo | llega a De = 3; De → 0: C ≈ 0.37 (newtoniano 0.374); X_R 0.363 → 0.267. **C sin converger a De alto** (De = 2.6: −1.84 con h/4, −2.02 con h/8). Sin tablas de Alves et al. 2003 a mano |
 | Reómetro multimodo | fluido inelástico de igual viscosidad; difusión localizada frente a sin ella | `Test/test_viscoelastic.py` (modo largo, malla gruesa); `Example_Viscoelastic_Rheometer.py` | τ_w igual a 4 cifras; caída a ≤ 1 % donde ambos convergen |
+| Deslizamiento en pared | Poiseuille con Navier (exacto en Taylor–Hood); límites adherido y libre; ley de potencia; umbral; tangente; canal Oldroyd-B | `Test/test_slip_ptt.py` | 1e-10; 1e-7; umbral a 0.1 %; tangente 1e-7 |
+| Análisis de Mooney | capilares de dos radios, ley de potencia con Navier, axisimétrico | `Test/test_slip_ptt.py` | recupera u_s = 0.07500 dado, a < 0.2 %, y la tasa verdadera a < 0.5 % |
+| PTT (lineal y exponencial) | ecuación de `b`; viscometría (N₁ = 2λτ²/μ); extensión frente a `solve_ivp`; corte y extensión transitorios; tangente plana y axisimétrica | `Test/test_slip_ptt.py` | 1e-11; 1e-6; orden 2 en el tiempo; 1e-7 |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
 Para reproducir todo: ver la sección «Pruebas» del [README](../README.md).
@@ -299,8 +302,13 @@ Lo que sigue pendiente:
   c = 1, +16 % (y −5 % en τ_w: no usarla así); radio 0.3 R_c, c = 1, −7 % con s = 4 y −4 % con s = 2; radio mayor o c mayor, peor (−20 a −35 %).
   τ_w y la caída total apenas cambian (≤ 0.1 %) si es local. En el cilindro global con c = 0.1 da −3.3 % a Wi = 1 en malla gruesa.
 - **Resultado de Bagley, espectro ilustrativo:** frente al fluido inelástico de igual viscosidad (`inelasticEquivalent`, τ_w coincide a 4 cifras), la
-  razón de pérdidas de entrada es 0.84, 0.96, 1.11, 1.33 y 1.48 a 9, 59, 151, 386 y 618 s⁻¹. Incertidumbre del orden del 4 %, y sesgada a la baja por
-  la difusión. **Sin validar frente a experimentos**, ni con un espectro medido. El cruce depende del espectro.
+  razón de pérdidas de entrada con Giesekus (α = 0.3) es 0.84, 0.96, 1.11, 1.33 y 1.48 a 9, 59, 151, 386 y 618 s⁻¹. Incertidumbre del orden del 4 %, y
+  sesgada a la baja por la difusión. **Con PTT lineal (ε = 0.25) e iguales μ y λ es muy distinta:** 0.70, 0.73, 0.78, 0.89, 0.96, 1.06 y 1.18 a 9, 59, 151, 386,
+  618, 990 y 1583 s⁻¹ (malla gruesa, s = 4). El aumento de Bagley depende del modelo, no solo de la curva de viscosidad: hace falta ajustar datos
+  extensionales. **Sin validar frente a experimentos**, ni con un espectro medido.
+- **PTT llega más lejos que Giesekus:** en el reómetro con s = 4, 94 s⁻¹ sin difusión (Giesekus ~40) y al menos 1583 s⁻¹ con difusión local (Giesekus 241).
+- **Deslizamiento en pared (`addBC_SlipLawEdges`, `NavierSlip`, `PowerSlip`):** solo paredes alineadas con los ejes. En el reómetro Giesekus con β = 5×10⁶ Pa·s/m, la caída baja a la
+  mitad a 9 s⁻¹ (2.12 frente a 4.24 bar), pero el alcance se queda en 151 s⁻¹ (241 sin deslizamiento): la transición en la esquina es más dura. Parámetros ilustrativos.
 - **`converged=True` no garantiza la solución a Wi alto:** Couette reporta convergencia con error en `τ_xx` de 19 % a Wi = 64 con factor 2,
   y de 2.3 % a Wi = 123 con factor 1.3, aunque la solución exacta también satisface el sistema discreto. Es intermitente y depende del
   camino: con factor 1.3 vuelve a la solución correcta en Wi mayores. Hay que vigilar la convergencia en malla y en la continuación.

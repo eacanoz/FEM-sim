@@ -51,6 +51,42 @@ class ViscosityLaw:
         return np.asarray(jax.vmap(self.__call__)(jnp.asarray(g.ravel() ** 2), jnp.asarray(t.ravel()))).reshape(g.shape)
 
 
+class SlipLaw:
+
+    """Wall shear stress as a function of the slip velocity, tau(u_s), with jax.numpy; odd in u_s, so that it opposes the slip."""
+
+    def __call__(self, slip):
+        raise NotImplementedError
+
+
+class NavierSlip(SlipLaw):
+
+    """tau = beta u_s: beta [Pa s/m] is the friction coefficient, mu / beta the extrapolation length. Linear."""
+
+    def __init__(self, beta):
+        self.beta = float(beta)
+
+    def __call__(self, slip):
+        return self.beta * slip
+
+
+class PowerSlip(SlipLaw):
+
+    """Power law of polymer melts (Hatzikiriakos), tau = k |u_s|^m sign(u_s), with an optional stress tau_c below which the wall
+    sticks (tau_c (1 - exp(-|u_s| / u_c)) sign(u_s) is added, smooth for Newton: smaller u_c, sharper threshold). u_min regularizes the
+    power at zero slip, singular for m < 1: below u_min the law is linear in u_s."""
+
+    def __init__(self, k, m, tau_c=0.0, u_c=1e-6, u_min=1e-9):
+        self.k, self.m, self.tau_c, self.u_c, self.u_min = map(float, (k, m, tau_c, u_c, u_min))
+
+    def __call__(self, slip):
+        magnitude = jnp.sqrt(slip * slip + self.u_min ** 2)
+        tau = self.k * magnitude ** (self.m - 1.0) * slip
+        if self.tau_c:
+            tau = tau + self.tau_c * (-jnp.expm1(-magnitude / self.u_c)) * slip / magnitude
+        return tau
+
+
 class Newtonian(ViscosityLaw):
 
     def __init__(self, mu):

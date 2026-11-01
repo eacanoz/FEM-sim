@@ -80,6 +80,7 @@ class ff(physics):
         self.buoyancy = []                           # Boussinesq terms (field, beta, reference, g) (setBoussinesq)
 
         self.pressure_reference = None               # (node id, value)
+        self.slip_walls = []                         # (edges, tangential component, law) (addBC_SlipLawEdges)
 
         # A quadratic mesh means Taylor-Hood: inf-sup stable, so without PSPG or the stress it needs
         self.taylor_hood = bool(ELEMENTS[element_type_of(model.mesh)].linear_subspace)
@@ -247,6 +248,8 @@ class ff(physics):
                                  "(combine con la fisica de calor: Model(psc=[ff, ht])).")
 
         system.require_constraint(layout.dofs('p')[:, 0])
+        for edges, tangential, law in self.slip_walls:
+            system.add_term(WallSlipTerm(system, disc.facets(edges), tangential, law))
         if self.taylor_hood:
             system.restrict_to_linear_subspace('p')
 
@@ -481,6 +484,17 @@ class ff(physics):
 
     addBC_SlipEdges = addBC_SymmetryEdges
 
+    def addBC_SlipLawEdges(self, edges, law):
+
+        """Wall that slips, aligned with the axes: no flow through it, and a shear stress given by the slip velocity (NavierSlip, PowerSlip of
+        Source.Physics.Rheology). The problem becomes nonlinear if the law is: use ProblemType.nonlinear always."""
+
+        normal = self._normal_component(edges)
+        values = [None] * self.dim
+        values[normal] = 0.0
+        self.addBC_VelocityEdges(edges, values)
+        self.slip_walls.append((list(edges), 1 - normal, law))
+
     def addBC_OutletEdges(self, edges, p=0.0, fully_developed=True):
 
         """Outlet with the pressure p (normal traction -p n); p is a number or a function of the coordinates.
@@ -505,6 +519,33 @@ class ff(physics):
         self.facet_bcs.append({'type': 'Traction', 'field': 'u', 'facets': list(edges), 'traction': t})
 
 
+
+
+class WallSlipTerm:
+
+    """Wall that slips: R_u += boundary integral of tau(u_s) v_s, with u_s the tangential velocity, tau from a slip law (Source.Physics.Rheology)."""
+
+    def __init__(self, system, facets, tangential, law):
+        self.system, self.facets, self.tangential = system, facets, tangential
+        self.law = cached_law(('slip', law), lambda: PointwiseLaw(lambda w: law(w[0])))
+
+    def contribution(self, x, tangent=True):
+
+        layout, fs = self.system.layout, self.facets
+        nf, nnf = fs.nodes.shape
+        rows = layout.node_dofs('u', fs.nodes)[..., self.tangential]                 # (nf, nnf)
+        slip = np.einsum('qk,fk->fq', fs.N, x[rows])
+
+        if not tangent:
+            tau = self.law.values(slip.reshape(-1, 1)).reshape(slip.shape)
+            return layout.scatter_vector(np.einsum('fq,qi,fq->fi', fs.detJw, fs.N, tau), rows), None
+
+        tau, dtau = self.law(slip.reshape(-1, 1))
+        tau, dtau = tau.reshape(slip.shape), dtau.reshape(slip.shape)
+        R = layout.scatter_vector(np.einsum('fq,qi,fq->fi', fs.detJw, fs.N, tau), rows)
+        K = np.einsum('fq,qi,fq,qj->fij', fs.detJw, fs.N, dtau, fs.N)
+
+        return R, layout.scatter_matrix(K, rows, rows)
 
 
 def _pointwise_viscosity(law, n_fields):
