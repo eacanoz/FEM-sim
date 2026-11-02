@@ -1,6 +1,7 @@
 """Mixing elbow of example_mixing_elbow.ipynb, water, SA and heat on curved T6 with a boundary-layer mesh. No wall functions: y+ must be about 1.
 Exact checks: mass balance, and the mean outlet temperature from the energy balance, (U1 D1 T1 + U2 D2 T2) / (U1 D1 + U2 D2) = 28.57 C.
-Args: tag lc_mm y1_mm layers [supg]"""
+Args: tag lc_mm y1_mm layers [supg]. Environment: ELBOW_JUNCTION=h_mm refines the union of the side inlet (box x 310-360, y 35-90 mm),
+ELBOW_HEAT_GALERKIN=1 leaves the heat without SUPG, ELBOW_SAVE=path keeps the fields, ELBOW_MESH_ONLY=1 stops after the mesh."""
 import sys, os, time, logging
 sys.path.insert(0, os.getcwd())
 import numpy as np
@@ -78,6 +79,14 @@ def elbow_mesh():
             gm.mesh.field.setNumber(field, 'Ratio', ratio)
             gm.mesh.field.setNumber(field, 'Thickness', y1 * mm * (ratio ** layers - 1.0) / (ratio - 1.0))
             gm.mesh.field.setAsBoundaryLayer(field)
+        if os.environ.get('ELBOW_JUNCTION'):
+            box = gm.mesh.field.add('Box')
+            gm.mesh.field.setNumber(box, 'VIn', float(os.environ['ELBOW_JUNCTION']) * mm)
+            gm.mesh.field.setNumber(box, 'VOut', lc * mm)
+            for name, value in (('XMin', 310), ('XMax', 360), ('YMin', 35), ('YMax', 90)):
+                gm.mesh.field.setNumber(box, name, value * mm)
+            gm.mesh.field.setNumber(box, 'Thickness', 15 * mm)
+            gm.mesh.field.setAsBackgroundMesh(box)
         gmsh.option.setNumber("Mesh.Algorithm", 6)
         gm.mesh.generate(2)
         gm.mesh.setOrder(2)
@@ -98,7 +107,8 @@ fl.setInertia(True)
 if supg:
     fl.setStabilization('SUPG')
 heat.setVelocity('u')
-heat.setStabilization('SUPG')
+if not os.environ.get('ELBOW_HEAT_GALERKIN'):
+    heat.setStabilization('SUPG')
 inlet_main, inlet_side = mesh.boundary_edges('inlet_main'), mesh.boundary_edges('inlet_side')
 outlet, walls = mesh.boundary_edges('outlet'), mesh.boundary_edges('walls')
 fl.addBC_VelocityEdges(inlet_main, (U1, 0.0))
@@ -146,7 +156,9 @@ T_MIX = (q_main * T1 + q_side * T2) / (q_main + q_side)            # the no-slip
 print(f"[{tag}] flow rates {q_main:.5f} {q_side:.5f} {q_out:.5f} (exact {U1 * D1}, {U2 * D2}), imbalance {abs(q_main + q_side + q_out):.1e}", flush=True)
 row = np.unique(np.ravel(outlet))
 o = row[np.argsort(xy[row, 0])]
-flux = np.trapezoid(u[o, 1] * T[o], xy[o, 0]) / np.trapezoid(u[o, 1], xy[o, 0])
+h = xy[o[2::2], 0] - xy[o[:-2:2], 0]                               # the outlet row alternates vertex and midside: 3-point rule of each quadratic edge
+simpson = lambda f: np.sum(h / 6.0 * (f[:-2:2] + 4.0 * f[1::2] + f[2::2]))
+flux = simpson(u[o, 1] * T[o]) / simpson(u[o, 1])
 print(f"[{tag}] mean outlet T {flux:.3f} (energy balance {T_MIX:.3f}); T in [{T.min():.2f}, {T.max():.2f}], bounds [{T1}, {T2}]; outlet T in [{T[o].min():.2f}, {T[o].max():.2f}]", flush=True)
 nearest = np.unique(mesh.plot_triangles()[np.any(np.isin(mesh.plot_triangles(), np.unique(np.ravel(walls))), axis=1)])
 d = np.asarray(tu.var['wall_distance'].values, float)
@@ -154,3 +166,8 @@ speed = np.linalg.norm(u, axis=1)
 off = nearest[(d[nearest] > 1e-12)]
 print(f"[{tag}] first node off the wall: d {d[off].min():.2e} to {d[off].max():.2e} m; nodal y+ estimate {np.median(np.sqrt(nu * speed[off] / d[off]) * d[off] / nu):.2f}", flush=True)
 print(f"[{tag}] nut/nu max {np.asarray(model.sol['nut']).max() / nu:.0f}", flush=True)
+if os.environ.get('ELBOW_SAVE'):                                  # the fields, to study them without solving again
+    disc = model.geometry
+    np.savez(os.environ['ELBOW_SAVE'], xy=xy, conn=disc.conn, u=u, p=np.asarray(model.sol['p']), T=T, nut=np.asarray(model.sol['nut']), d=d,
+             gradient=disc.gradient(np.asarray(u, dtype=float)), x_gp=disc.x_gp, detJw=disc.detJw,
+             wall_edges=np.array(walls), wall_tags=np.array([list(e) for e in walls]), outlet=row)

@@ -299,8 +299,20 @@ Lo que sigue pendiente:
 
 ### Codo mezclador (`Test/manual/mixing_elbow.py`: T6 curvos con capa límite, SA y calor, agua)
 
-- En 28 963 nodos converge en 194 iteraciones (30 min). Masa exacta (6e-16); T media de salida 28.44 °C frente a 28.53 °C del balance. **La temperatura local no es fiable:** va de 13.8 a
-  44.1 °C con entradas a 20 y 40 °C. No se ha investigado dónde ocurre; sospecha: el SUPG con k de una ley entra sin difusión en τ ni en el residuo.
+- En 28 963 nodos converge en 194 iteraciones (30 min). Masa exacta (6e-16); T media de salida 28.48 °C frente a 28.53 °C del balance (la cifra anterior, 28.44, venía de integrar con trapecios un perfil cuadrático). **En esa malla la temperatura local no es fiable:** va de 13.8 a
+  44.1 °C con entradas a 20 y 40 °C. **No se debe a y⁺:** con el esfuerzo real en la pared, y⁺ del primer nodo tiene mediana 1.16 y máximo 4.8 (primer vértice: 3.05 y 9.6), y solo 0.9 % de los nodos se pasa
+  más de 0.5 °C, más a menudo lejos de la pared (1.8 % a d > 20 mm, 0.4–0.6 % a d < 2 mm). Se concentra en la unión de la entrada lateral: 13.8 °C en la esquina (324, 43) mm y hasta 44.1 °C dentro del chorro caliente, a 7–17 mm de la pared.
+  **La causa es la resolución del frente de T**, medido con `Test/manual/elbow_heat_only.py`: con propiedades constantes T no realimenta al flujo, así que se resuelve solo el calor sobre el flujo guardado, en segundos (reproduce la T acoplada a 2.4e-8 °C). Cada T6 se parte en 4 conservando u y ν_t:
+
+  | Nodos | T (°C) | Área con exceso > 0.5 °C | Exceso a más de 5 mm de las esquinas | T media de salida |
+  |---|---|---|---|---|
+  | 28 887 | 13.75 a 44.10 | 481.7 mm² (0.73 %) | 4.10 °C | 28.481 |
+  | 114 717 | 16.38 a 43.43 | 121.4 mm² (0.19 %) | 1.80 °C | 28.428 |
+  | 457 209 | 17.03 a 44.47 | 4.8 mm² (0.01 %) | 0.72 °C | 28.424 |
+
+  Queda un pico que no baja en la esquina (325, 44) mm, donde se encuentran las corrientes de 20 y 40 °C: un salto de T en un punto, con área cada vez menor. **No es el SUPG con k de una ley:** en la malla base, k en τ da 12.96 a 44.13 °C, y k también en el residuo, 13.08 a 44.17 °C, con la misma área (0.73–0.74 %). Sin SUPG empeora: −1.89 a 47.15 °C y 2.04 %.
+  Salvedades: solo se refina T, no el flujo. El refinamiento acoplado no dio respuesta: la caja a 2 mm (31 051 nodos) deja igual el núcleo del chorro, que ya tenía h ≈ 1.9 mm, y da 13.82 a 44.10 °C; las de 1 y 0.5 mm (37 453 y 55 402 nodos), y el calor sin SUPG en acoplado, no convergieron en 90 min corriendo a la vez (residuo relativo 4–5 % las dos primeras, 7e-3 y CFL bajo el último).
+- **El balance de energía no cierra por la divergencia discreta del flujo:** la diferencia con 28.527 °C es ∫T div(u) / Q (−0.046, −0.097 y −0.101 °C en los tres niveles, hasta 0.002 °C de lo medido). El término convectivo no es conservativo y Taylor–Hood no da div(u) = 0 punto a punto (norma L1 de div(u) / Q ≈ 0.46). Por eso, al refinar T, la diferencia crece a 0.10 °C y no se cierra; refinar solo T no la corrige.
 - En 14 450 nodos no cierra: sin SUPG en el flujo se estanca en 2e-3 relativo (agotó los 57 min), y con SUPG se detiene a las 33 iteraciones (T de 18.1 a 48.8 °C). Sin referencia de campos: solo los balances.
 - La física de calor no tiene difusividad turbulenta propia. El caso la añade con `setConductivityLaw(k + ρ Cp ν_t / Pr_t, depends_on=('nut',))`, y no se ha validado por separado.
 - **El pseudo-transitorio no arranca desde u = 0 con una entrada impuesta:** se viola la continuidad, la presión del paso crece como 1/CFL y bajar el CFL agranda el residuo, hasta detenerse tras 10 pasos rechazados. Hay que partir de un
