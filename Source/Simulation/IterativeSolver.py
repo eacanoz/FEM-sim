@@ -37,7 +37,7 @@ def build_preconditioner(A, kind):
     raise ValueError(f"Precondicionador no implementado: {kind}")
 
 
-def saddle_point_preconditioner(A, velocity, pressure, schur, modes=None):
+def saddle_point_preconditioner(A, velocity, pressure, schur, modes=None, others=None):
 
     """Upper triangular block preconditioner of a velocity-pressure system with GMRES.
 
@@ -46,6 +46,9 @@ def saddle_point_preconditioner(A, velocity, pressure, schur, modes=None):
     approximation is spectrally equivalent to the exact one, so the iterations do not grow with the mesh (Silvester &
     Wathen 1994). The diagonal of the pressure-pressure block is not used: only the rows it couples go through `coupling`
     (the non-vertex pressures of Taylor-Hood, tied to the vertices).
+
+    others: indices of the remaining fields (temperature, species, turbulence). They go first, with an incomplete LU of their
+    own block, and what they do to the flow enters the velocity through A_uo; what the flow does to them is left out.
     """
 
     import pyamg
@@ -61,11 +64,19 @@ def saddle_point_preconditioner(A, velocity, pressure, schur, modes=None):
     amg = pyamg.smoothed_aggregation_solver(A_uu, B=modes, smooth='energy',
                                             max_coarse=500).aspreconditioner(cycle='V')
 
+    if others is not None and len(others):
+        A_uo = A[velocity][:, others]
+        ilu = spla.spilu(A[others][:, others].tocsc())
+
     def apply(r):
         p = r[pressure] / schur
         p = p - coupling @ (np.where(has_row, 0.0, p)) / schur
         z = np.zeros_like(r)
-        z[velocity] = amg @ (r[velocity] - A_up @ p)
+        rhs = r[velocity] - A_up @ p
+        if others is not None and len(others):
+            z[others] = ilu.solve(r[others])
+            rhs = rhs - A_uo @ z[others]
+        z[velocity] = amg @ rhs
         z[pressure] = p
         return z
 

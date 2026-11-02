@@ -282,14 +282,30 @@ Lo que sigue pendiente:
 - k-ω SST (`sst`): incógnitas k y `ln_omega` (ω queda en `model.sol['omega']`). **Validado solo en el canal**, y solo con
   `globalization='pseudo-transient'`: Newton puro diverge. U_c⁺ queda 2.5–4.3 % bajo la DNS en cualquier malla, también
   en el resolvedor 1D independiente: es del modelo, no de la discretización.
-- **k-ω SST en placa plana: sin validar.** A Re_L = 1e6 el residuo se estanca en ~2e-4 (500 iteraciones en 40×48 y 400 en
-  80×64), con k recortado a 0 en decenas de nodos junto al borde de ataque. Sin recorte es peor (ln ω oscila entre −23 y
-  +24). El C_f ya es razonable y casi no cambia con la malla (−7 a −11 % frente a Schultz–Grunow; SA en 40×48: −6 a −15 %),
-  pero no hay convergencia. SA sí converge en la misma malla (38 iteraciones).
+- **k-ω SST en placa plana:** en Q4 40×48 a Re_L = 1e6 **el residuo ya cierra** (291 iteraciones, 277 s), con C_f de −11.3 a
+  −6.0 % frente a Schultz–Grunow. Lo cerró un suelo de k de 1e-3 del valor de entrada (`addBC_TurbulenceEdges`), más retener los
+  nodos en el suelo (`System.hold_clipped`) y refrescar la escala del residuo en cada iteración. **En Q9 no cierra:** 20×24 acaba
+  con C_f de −10 a +22 % sin converger, y 40×32 sigue en 500 iteraciones lejos de la solución (C_f uniforme, sin sentido físico).
+  Con k y ln ω lineales en Q9 (probado y descartado) tampoco cierra, y el C_f empeora al refinar (de −12/+2 % a −5/+20 %). Prueba: `Test/test_quadratic_gaps.py`, en Q4;
+  `Test/manual/sst_flat_plate.py` para repetir el caso en Q9.
 - k-ω SST en transitorio desde un estado aproximado puede divergir (canal Re_τ = 395, BDF2, dt = 0.02, con Newton completo y
   modificado por igual): la simulación se detiene con aviso. Conviene partir de la solución estacionaria.
 - k-ω SST: arrancar con k muy pequeño puede tardar (canal desde estado uniforme: 126 iteraciones frente a 9) y el flujo
-  laminar es solución del modelo. El escalón de Driver–Seegmiller no se ha probado.
+  laminar es solución del modelo.
+- **Escalón de Driver–Seegmiller (`Test/manual/backward_step.py`, Q4, 12 150 elementos, y⁺ ≈ 1, Re_H = 36 426, Re_θ = 5139, techo viscoso):** SST converge en
+  530 iteraciones con x_r/H = 6.40, frente a 6.26 ± 0.10 del experimento y cerca de 6.50 de SST en NASA TMR (`tmbwg.github.io/turbmodels/backstep_val_sst.html`). SA
+  converge en 234 con 5.95. δ99 = 1.34 H (1.5 en el experimento). No se compararon C_f, C_p ni perfiles. **En Q9 SST no cierra** (500 iteraciones, 3020 elementos, a Re_θ = 3019). Sin prueba automática: 33 min.
+- **En mallas cuadráticas, SST solo está validado en el canal:** para capas en desarrollo o separación usar Q4 (T3 no se ha probado en placa ni escalón).
+
+### Codo mezclador (`Test/manual/mixing_elbow.py`: T6 curvos con capa límite, SA y calor, agua)
+
+- En 28 963 nodos converge en 194 iteraciones (30 min). Masa exacta (6e-16); T media de salida 28.44 °C frente a 28.53 °C del balance. **La temperatura local no es fiable:** va de 13.8 a
+  44.1 °C con entradas a 20 y 40 °C. No se ha investigado dónde ocurre; sospecha: el SUPG con k de una ley entra sin difusión en τ ni en el residuo.
+- En 14 450 nodos no cierra: sin SUPG en el flujo se estanca en 2e-3 relativo (agotó los 57 min), y con SUPG se detiene a las 33 iteraciones (T de 18.1 a 48.8 °C). Sin referencia de campos: solo los balances.
+- La física de calor no tiene difusividad turbulenta propia. El caso la añade con `setConductivityLaw(k + ρ Cp ν_t / Pr_t, depends_on=('nut',))`, y no se ha validado por separado.
+- **El pseudo-transitorio no arranca desde u = 0 con una entrada impuesta:** se viola la continuidad, la presión del paso crece como 1/CFL y bajar el CFL agranda el residuo, hasta detenerse tras 10 pasos rechazados. Hay que partir de un
+  campo sin divergencia: un Stokes en la misma malla, o flujo uniforme. El solver no lo detecta.
+- La malla del cuaderno (`lc = 0.6` mm) daría cientos de miles de elementos, y aun así sin capa límite; sin funciones de pared hace falta y⁺ ≈ 1.
 
 ### Fluidos (Etapa 17, viscoelástico)
 - `Model(psc=[ff, ve])`, solo con Taylor–Hood, estudios estacionarios y BDF2 (Crank–Nicolson se rechaza). Isotermo, sin superficie
@@ -355,8 +371,14 @@ Lo que sigue pendiente:
 - **Solver grande:** GMRES con `Preconditioners.SaddlePoint` resuelve 3.15 millones de incógnitas en 276 s (110 iteraciones),
   donde PARDISO se queda sin memoria. Hasta unas 800 000, PARDISO es más rápido (28.6 s frente a 46.9 s). Solo flujo sin otros
   campos y solo probado en Stokes y Carreau, sin inercia. Con igual orden no se ha probado.
-- **Taylor–Hood, sin validar:** turbulencia (SA, SST) y especies en Q9/T6, y flujo con Re alto y capas sin resolver (sin SUPG). El SUPG del calor deja fuera
-  la difusión, que en elementos cuadráticos no se anula. Los ejemplos que dibujan con `mtri.Triangulation` esperan T3.
+- **Taylor–Hood y huecos menores (`Test/test_quadratic_gaps.py`, sin commit):**
+  - Canal Re_τ = 395 en Q9/T6: SA 19.99–20.00 (DNS 20.1); SST 19.42–19.48 (1D independiente 19.49), en 13–73 iteraciones. Solo el canal: ver la placa y el escalón en la sección de turbulencia.
+  - Especies con reacción frente a la solución exacta: orden 2 en Q4, 3.7 en Q9 y 2.5 en T6 (nodal; no se ha explicado por qué T6 no llega a 3). El SUPG deja la reacción fuera de su residuo.
+  - SUPG escalar consistente en cuadráticos (usa la difusión, con `Discretization.hessian`/`laplacian`): capa Pe = 500, T mín −0.10 frente a −0.38 sin SUPG (Q9) y −0.15 frente a −0.62 (T6). Sigue habiendo sobreoscilación. En turbulencia no se usa (`k_in_residual=False`): media ecuación no es un residuo, y creaba un flujo espurio que bajaba U_c⁺ un 10 %.
+  - Taylor–Hood con `setStabilization('SUPG')`, opcional: da robustez, no precisión. Cavidad Re = 5000 en 16²: 72 iteraciones frente a 500 sin converger, pero con más error frente a Ghia (0.243 frente a 0.188); en 32², 0.060 frente a 0.045.
+  - GMRES de bloques con más campos (ILU en los demás): igual que PARDISO, pero las iteraciones crecen con la malla (Ra = 1e4: 95, 98 y 144; SST en Q9: 211). No se midió el tiempo frente a PARDISO.
+  - Gráficos: `Mesh.triangulation()` en cualquier elemento, usado por `postProcess2D` y 5 ejemplos, ya ejecutados sin error (el cilindro repite sus valores).
+  - Paso adaptativo: un problema lineal ensambla una sola tangente (pulso de calor: 24 → 1) y dt no cambia si crecería menos de 20 %. No lineal, poca mejora: cavidad Re = 400, 17 → 14 tangentes, pero 362 → 406 iteraciones.
 - Mallas de gmsh: `Mesh.read_msh` / `Mesh.from_gmsh_model` admiten un solo tipo de elemento 2D (T3, Q4, T6 o Q9); las mallas mixtas se rechazan.
   En T3 y Q4 los arcos se aproximan por polígonos (error geométrico O(h²)); T6 y Q9 de gmsh son curvos.
 - Sin tetraedros/hexaedros ni 3D. `Model.region_field` asigna coeficientes por región física (`mesh.regions`, índices de

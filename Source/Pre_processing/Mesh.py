@@ -232,6 +232,28 @@ class Mesh:
 
         return self.boundary_facets(selector)
 
+    def plot_triangles(self):
+
+        """Triangles of nodes that cover the mesh, to draw a nodal field: every node is used, so a T6 gives 4 and a Q9 gives 8. Q4 gives 2, T3 itself."""
+
+        pattern = {3: [(0, 1, 2)], 4: [(0, 1, 2), (0, 2, 3)],
+                   6: [(0, 3, 5), (3, 1, 4), (5, 4, 2), (3, 4, 5)],
+                   9: [(0, 4, 8), (0, 8, 7), (4, 1, 5), (4, 5, 8), (7, 8, 6), (7, 6, 3), (8, 5, 2), (8, 2, 6)]}
+        triangles = []
+        for element in self.EL:
+            ids = element.getNodesId()
+            triangles += [[ids[i] for i in tri] for tri in pattern[len(ids)]]
+        return np.array(triangles, dtype=int)
+
+    def triangulation(self, scale=1.0):
+
+        """matplotlib Triangulation of the nodes, for tricontourf and the like, on any 2D mesh. scale: multiplies the coordinates (1e3: mm)."""
+
+        import matplotlib.tri as mtri
+
+        xy = scale * np.array([node.coor[:2] for node in self.NL], dtype=float)
+        return mtri.Triangulation(xy[:, 0], xy[:, 1], self.plot_triangles())
+
     def getNoN(self):
 
         return len(self.NL)

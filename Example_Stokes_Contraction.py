@@ -121,7 +121,7 @@ files = model.exportVTK(os.path.join('resultados_vtk', 'contraccion'))
 print("Archivos para ParaView:", files)
 
 # ----- Graficos -----
-triang = mtri.Triangulation(xy[:, 0] * 1e3, xy[:, 1] * 1e3, [e.getNodesId() for e in mesh.EL])
+triang = mesh.triangulation(scale=1e3)
 
 fig, axes = plt.subplots(3, 1, figsize=(10, 10), constrained_layout=True)
 

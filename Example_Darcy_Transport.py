@@ -14,7 +14,6 @@ import os
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.tri as mtri
 
 from Source.Pre_processing.Mesh import Mesh
 from Source.core import Model
@@ -98,9 +97,7 @@ print("Archivos para ParaView:", files)
 
 # ----- Graficos -----
 xy = np.array([node.coor for node in mesh.NL])
-triangles = [[e[0], e[1], e[2]] for e in (el.getNodesId() for el in mesh.EL)] + \
-            [[e[0], e[2], e[3]] for e in (el.getNodesId() for el in mesh.EL)]
-triang = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles)
+triang = mesh.triangulation()
 
 fig, axes = plt.subplots(3, 1, figsize=(8, 10), constrained_layout=True)
 

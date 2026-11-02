@@ -140,12 +140,13 @@ def supg_tau(disc, c, v, k=None):
     return np.where(amag > 0, h * xi / (2.0 * safe_a), 0.0)
 
 
-def supg_terms(disc, c, v, tau, m=None, f=None):
+def supg_terms(disc, c, v, tau, m=None, f=None, k=None):
 
     """SUPG matrices with the weight tau (a . grad N_i), a = c v: (stiffness, mass, source).
 
-    stiffness_ij = integral tau (a . grad N_i)(a . grad N_j);  mass_ij = integral tau (a . grad N_i) m N_j;
-    source_i = integral tau (a . grad N_i) f. m and f are None when the equation has no mass or source.
+    stiffness_ij = integral tau (a . grad N_i)(a . grad N_j - k lap N_j);  mass_ij = integral tau (a . grad N_i) m N_j;
+    source_i = integral tau (a . grad N_i) f. m and f are None when the equation has no mass or source; the diffusion k
+    enters only on quadratic elements (lap N_j vanishes on linear ones), where the residual would be inconsistent without it.
     """
 
     a = at_gauss(disc, c)[..., None] * _velocity(disc, v)
@@ -153,6 +154,9 @@ def supg_terms(disc, c, v, tau, m=None, f=None):
     wt = disc.detJw * tau
 
     K = np.einsum('eg,egi,egj->eij', wt, wa, wa)
+    laplacian = None if k is None else disc.laplacian
+    if laplacian is not None:
+        K = K - np.einsum('eg,egi,egj->eij', wt * at_gauss(disc, k), wa, laplacian)
     M = None if m is None else np.einsum('eg,egi,gj->eij', wt * at_gauss(disc, m), wa, disc.N)
     F = None if f is None else np.einsum('eg,egi->ei', wt * at_gauss(disc, f), wa)
 
@@ -265,7 +269,38 @@ def element_size(disc):
     return measure ** (1.0 / disc.dim)
 
 
-def pspg_tau(disc, mu, rho=0.0, speed=0.0, dt=None):
+def stress_divergence(disc, mu):
+
+    """Sparse V (nel * ngp * dim, n_nodes * dim): div(mu (grad u + grad u^T)) at the Gauss points from the second derivatives of a
+    quadratic element, for a uniform mu inside each element; u node-major. Axisymmetric: with the hoop terms of the stress."""
+
+    import scipy.sparse as sp
+
+    nel, ngp, nne, dim = disc.B.shape
+    H = disc.hessian
+    m = at_gauss(disc, mu)
+
+    block = np.zeros((nel, ngp, dim, nne, dim))                          # (e, g, a, k, c)
+    laplace = np.einsum('egkbb->egk', H)
+    for a in range(dim):
+        block[:, :, a, :, a] += m[..., None] * laplace
+        for c in range(dim):
+            block[:, :, a, :, c] += m[..., None] * H[:, :, :, a, c]
+
+    if disc.axisymmetric:
+        r = disc.radius[..., None]
+        block[:, :, 0, :, 0] += m[..., None] * (2.0 * disc.B[..., 0] / r - 2.0 * disc.N[None] / r ** 2)
+        block[:, :, 1, :, 0] += m[..., None] * disc.B[..., 1] / r
+        block[:, :, 1, :, 1] += m[..., None] * disc.B[..., 0] / r
+
+    rows = (np.arange(nel * ngp).reshape(nel, ngp)[:, :, None] * dim + np.arange(dim))[:, :, :, None, None]
+    cols = (disc.conn[:, :, None] * dim + np.arange(dim))[:, None, None]
+
+    return sp.coo_matrix((block.ravel(), (np.broadcast_to(rows, block.shape).ravel(), np.broadcast_to(cols, block.shape).ravel())),
+                         shape=(nel * ngp * dim, disc.n_nodes * dim)).tocsr()
+
+
+def pspg_tau(disc, mu, rho=0.0, speed=0.0, dt=None, scale=1.0):
 
     """PSPG parameter (nel, ngp): tau = 1 / sqrt((2 rho / dt)^2 + (2 rho |u| / h)^2 + (12 mu / h^2)^2).
 
@@ -274,7 +309,7 @@ def pspg_tau(disc, mu, rho=0.0, speed=0.0, dt=None):
     (rho = 0). Creeping flow: tau = h^2 / (12 mu). speed: |u| at the Gauss points (Navier-Stokes); dt: time step.
     """
 
-    h = element_size(disc)[:, None]
+    h = scale * element_size(disc)[:, None]
     rho = at_gauss(disc, rho)
 
     inv2 = (12.0 * at_gauss(disc, mu) / h ** 2) ** 2 + (2.0 * rho * np.asarray(speed) / h) ** 2

@@ -56,6 +56,8 @@ class ReferenceElement:
     # Quadratic elements: each non-vertex node as a combination of the vertices, (node, ((vertex, weight), ...)). A nodal
     # field that satisfies these relations is linear (bilinear) in the element: the pressure of Taylor-Hood.
     linear_subspace: tuple = ()
+    # d2N (npts, nne, dim, dim) in the reference coordinates; None if they vanish in the reference element's sense of use
+    _second: Callable = None
 
     @property
     def n_nodes(self):
@@ -68,6 +70,17 @@ class ReferenceElement:
         points = np.asarray(points, dtype=float)
 
         return self._shape(points.reshape(len(points), self.dim))
+
+    def second_derivatives(self, points):
+
+        """d2N / dxi_a dxi_b (npts, nne, dim, dim) at points (npts, dim); None for the linear elements."""
+
+        if self._second is None:
+            return None
+
+        points = np.asarray(points, dtype=float)
+
+        return self._second(points.reshape(len(points), self.dim))
 
     def quadrature(self, order=2):
 
@@ -129,6 +142,17 @@ def _quad9_shape(points):
     return N, dN
 
 
+def _quad9_second(points):
+    nodes = [-1.0, 0.0, 1.0]
+    Nx, dNx = lagrange_1d(nodes, points[:, 0])
+    Ny, dNy = lagrange_1d(nodes, points[:, 1])
+    d2 = np.array([1.0, -2.0, 1.0])                  # of a parabola on -1, 0, 1: constant
+    xx = d2[_QUAD9_I][None] * Ny[:, _QUAD9_J]
+    xy = dNx[:, _QUAD9_I] * dNy[:, _QUAD9_J]
+    yy = Nx[:, _QUAD9_I] * d2[_QUAD9_J][None]
+    return np.stack([np.stack([xx, xy], axis=-1), np.stack([xy, yy], axis=-1)], axis=-1)
+
+
 # ----- linear triangle -----
 
 TRI3_NODES = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
@@ -173,6 +197,14 @@ def _tri6_shape(points):
     return N, np.stack([dxi, deta], axis=-1)
 
 
+def _tri6_second(points):
+    xx = np.array([4.0, 4.0, 0.0, -8.0, 0.0, 0.0])
+    xy = np.array([4.0, 0.0, 0.0, -4.0, 4.0, -4.0])
+    yy = np.array([4.0, 0.0, 4.0, 0.0, 0.0, -8.0])
+    H = np.stack([np.stack([xx, xy], axis=-1), np.stack([xy, yy], axis=-1)], axis=-1)
+    return np.broadcast_to(H, (len(points),) + H.shape).copy()
+
+
 ELEMENTS = {
     'point': ReferenceElement('point', 0, np.zeros((1, 0)), (), 'point', _point_shape, _point_quadrature),
     'line2': ReferenceElement('line2', 1, np.array([[-1.0], [1.0]]), ((0,), (1,)), 'point',
@@ -185,11 +217,13 @@ ELEMENTS = {
                               _quad4_shape, _quad_quadrature),
     'tri6': ReferenceElement('tri6', 2, TRI6_NODES.copy(), ((0, 3, 1), (1, 4, 2), (2, 5, 0)), 'line3',
                              _tri6_shape, _tri_quadrature, default_order=3,
-                             linear_subspace=((3, ((0, 0.5), (1, 0.5))), (4, ((1, 0.5), (2, 0.5))), (5, ((2, 0.5), (0, 0.5))))),
+                             linear_subspace=((3, ((0, 0.5), (1, 0.5))), (4, ((1, 0.5), (2, 0.5))), (5, ((2, 0.5), (0, 0.5)))),
+                             _second=_tri6_second),
     'quad9': ReferenceElement('quad9', 2, QUAD9_NODES.copy(), ((0, 4, 1), (1, 5, 2), (2, 6, 3), (3, 7, 0)), 'line3',
                               _quad9_shape, _quad_quadrature, default_order=3,
                               linear_subspace=((4, ((0, 0.5), (1, 0.5))), (5, ((1, 0.5), (2, 0.5))), (6, ((2, 0.5), (3, 0.5))),
-                                               (7, ((3, 0.5), (0, 0.5))), (8, ((0, 0.25), (1, 0.25), (2, 0.25), (3, 0.25))))),
+                                               (7, ((3, 0.5), (0, 0.5))), (8, ((0, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)))),
+                              _second=_quad9_second),
 }
 
 

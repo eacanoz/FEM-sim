@@ -40,6 +40,7 @@ SUITES = [
     "Test/test_regions_pressure.py",
     "Test/test_viscoelastic.py",
     "Test/test_slip_ptt.py",
+    "Test/test_quadratic_gaps.py",
 ]
 
 

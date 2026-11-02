@@ -305,6 +305,7 @@ class System:
 
         # Dofs that must stay positive (turbulent k and omega, ...): the Newton solvers limit their steps accordingly
         self.positive = np.zeros(n, dtype=bool)
+        self.positive_floor = np.zeros(n)
 
         # Functions of the state that say if it is acceptable: the nonlinear solvers treat any other state as a failed step
         self._admissible = []
@@ -397,15 +398,16 @@ class System:
 
         return self._restriction @ J + self._subspace_rows
 
-    def require_positive(self, dofs):
+    def require_positive(self, dofs, floor=0.0):
 
-        """Marks dofs whose values must stay positive: the Newton updates clip them (clip_positive)."""
+        """Marks dofs whose values must stay above `floor`: the Newton updates clip them (clip_positive)."""
 
         self.positive[np.asarray(dofs, dtype=int)] = True
+        self.positive_floor[np.asarray(dofs, dtype=int)] = floor
 
-    def clip_positive(self, x, floor=0.0):
+    def clip_positive(self, x):
 
-        """x with its positive dofs raised to at least `floor` (local clipping of a Newton update). Dirichlet dofs keep
+        """x with its positive dofs raised to at least their floor (local clipping of a Newton update). Dirichlet dofs keep
         their values: k = 0 on a wall is exact, and raising it would leave a residual that never vanishes."""
 
         clipped = self.positive & ~self.is_dirichlet
@@ -414,8 +416,25 @@ class System:
             return x
 
         x = x.copy()
-        x[clipped] = np.maximum(x[clipped], floor)
+        x[clipped] = np.maximum(x[clipped], self.positive_floor[clipped])
         return x
+
+    def hold_clipped(self, J, R, x):
+
+        """J and R with the rows of the dofs held at their floor, with a residual that pushes them below it (J dx = -R).
+
+        k >= 0 is an inequality, whose solution leaves a positive residual where k = 0: the clip of the update alone keeps asking
+        for what it never gets, and the residual cannot close. A held dof has no equation (dx = 0, no residual), and it comes
+        back as soon as its residual changes sign (semi-smooth Newton: Hintermueller, Ito & Kunisch 2002)."""
+
+        held = self.positive & ~self.is_dirichlet & (x <= self.positive_floor) & (R > 0.0)
+
+        if not np.any(held):
+            return J, R
+
+        R = R.copy()
+        R[held] = 0.0
+        return (sp.diags((~held).astype(float)) @ J + sp.diags(held.astype(float))).tocsr(), R
 
     def require_admissible(self, check):
 

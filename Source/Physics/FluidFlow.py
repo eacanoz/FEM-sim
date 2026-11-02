@@ -31,6 +31,8 @@
 #
 # Taylor-Hood (Q2/Q1, P2/P1), chosen by the mesh: Galerkin without PSPG, SUPG or a recovered stress, third order in u and
 # second in p. The pressure keeps a value at every node, tied to the vertices (System.restrict_to_linear_subspace).
+# setStabilization('SUPG') adds SUPG for layers that the mesh does not resolve at high Re, with the exact viscous force of the
+# quadratic element in the residual (for a law of viscosity: without it, a small inconsistency).
 #
 # Boundary conditions: velocity (any component, None leaves it free), no slip, symmetry/slip on walls aligned
 # with the axes (normal component fixed), outlet (normal traction -p n, optionally fully developed: tangential
@@ -84,6 +86,7 @@ class ff(physics):
 
         # A quadratic mesh means Taylor-Hood: inf-sup stable, so without PSPG or the stress it needs
         self.taylor_hood = bool(ELEMENTS[element_type_of(model.mesh)].linear_subspace)
+        self.taylor_hood_supg = False
         if self.taylor_hood:
             self.Stab = None
             self.viscous_projection = False
@@ -175,14 +178,18 @@ class ff(physics):
 
     def setStabilization(self, method='PSPG'):
 
-        """'PSPG' (default) or None (only stable with inf-sup elements, not with equal order)."""
+        """'PSPG' (default of equal order) or None (only stable with inf-sup elements, not with equal order). With Taylor-Hood, no
+        stabilization of the pressure is needed: None, or 'SUPG' for convection-dominated flows on coarse meshes."""
 
-        if method not in (None, 'PSPG'):
-            raise ValueError(f"Estabilizacion desconocida: {method!r} (use 'PSPG' o None).")
-        if method is not None and self.taylor_hood:
+        if method not in (None, 'PSPG', 'SUPG'):
+            raise ValueError(f"Estabilizacion desconocida: {method!r} (use 'PSPG', 'SUPG' o None).")
+        if method == 'PSPG' and self.taylor_hood:
             raise ValueError("Taylor-Hood (malla cuadratica) es estable sin estabilizacion de la presion.")
+        if method == 'SUPG' and not self.taylor_hood:
+            raise ValueError("SUPG sin PSPG solo es para Taylor-Hood: con igual orden, setInertia ya lo incluye.")
 
-        self.Stab = method
+        self.taylor_hood_supg = method == 'SUPG'
+        self.Stab = 'PSPG' if method == 'PSPG' else None
 
     def setInertia(self, on=True, linearization='newton'):
 
@@ -296,7 +303,9 @@ class ff(physics):
         rho du/dt enters the stabilized momentum residual at the new time level (no frozen stabilized masses)."""
 
         V = Q = None
-        if self.viscous_projection:
+        if self.taylor_hood_supg and self.viscosity_law is None:
+            V = ops.stress_divergence(disc, self.mu)
+        elif self.viscous_projection:
             if self.viscosity_law is None:
                 V = ops.recovered_stress_divergence(disc, self.mu)
             else:
@@ -587,7 +596,8 @@ class FlowTerm:
         self.inertia = flow.inertia
         self.newton = flow.linearization == 'newton'
         self.pspg = flow.Stab == 'PSPG'
-        self.supg = flow.inertia and not flow.taylor_hood
+        self.supg = flow.inertia and (not flow.taylor_hood or flow.taylor_hood_supg)
+        self.tau_scale = 0.5 if flow.taylor_hood else 1.0            # the spacing of the nodes of a quadratic element
         self.fields = list(flow.viscosity_fields)       # fields read by the viscosity law
         self.heating = flow.heating_field
         # Boussinesq body forces f_b = c (phi - reference), c = -rho0 beta g
@@ -688,7 +698,7 @@ class FlowTerm:
         time = self.system.time
         # tau without the time step (Bochev, Gunzburger & Shadid 2004): a dt-dependent tau shifts the discrete
         # steady state, spoils the temporal convergence at a fixed mesh and weakens PSPG for small steps
-        tau = ops.pspg_tau(disc, mu_tau, self.rho, speed=speed)
+        tau = ops.pspg_tau(disc, mu_tau, self.rho, speed=speed, scale=self.tau_scale)
 
         ru = layout.element_dofs(disc.conn, 'u')
         rp = layout.element_dofs(disc.conn, 'p')

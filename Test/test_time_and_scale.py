@@ -434,19 +434,18 @@ def test_block_preconditioner_with_a_viscosity_law():
     assert np.max(np.abs(model.sol['u'] - direct.sol['u'])) < 1e-5
 
 
-def test_block_preconditioner_is_only_for_the_flow_alone():
+def test_block_preconditioner_needs_a_flow():
 
     mesh = rect((1.0, 1.0), (2, 2), order=2)
-    model = Model(name='coupled', dim=2, mesh=mesh, mat=material('X', miu=1.0, rho=1.0, k=1.0, Cp=1.0), psc=[ff, ht])
-    model.physics.fluid.addBC_NoSlipEdges(mesh.boundary_edges(None))
-    model.physics.heat.addBC_TemperatureEdges(mesh.boundary_edges(None), 1.0)
+    model = Model(name='heat', dim=2, mesh=mesh, mat=material('X', k=1.0, rho=1.0, Cp=1.0), psc=ht)
+    model.physics.addBC_TemperatureEdges(mesh.boundary_edges(None), 1.0)
     model.solverConfiguration(Study=StudyType.steady_state, Type=ProblemType.linear, **BLOCK)
     try:
         model.solve()
     except ValueError:
         pass
     else:
-        raise AssertionError("the block preconditioner must refuse other fields")
+        raise AssertionError("no flow, no block preconditioner")
 
 
 if __name__ == "__main__":
@@ -455,7 +454,7 @@ if __name__ == "__main__":
              test_adaptive_steps_with_a_time_function_and_errors, test_newton_settles_with_a_zero_pressure,
              test_crank_nicolson_pressure_is_second_order, test_wall_distance_is_exact, test_turbulent_pipe_against_prandtl,
              test_tangent_of_axisymmetric_sst, test_block_preconditioner, test_block_preconditioner_with_a_viscosity_law,
-             test_block_preconditioner_is_only_for_the_flow_alone]
+             test_block_preconditioner_needs_a_flow]
     failed = 0
     for t in tests:
         try:

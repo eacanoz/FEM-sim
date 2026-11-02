@@ -210,7 +210,7 @@ class sa(physics):
 
         rows = layout.element_dofs(disc.conn, 'nut')
         system.add_mass(layout.scatter_matrix(ops.mass(disc, self.M_const), rows, rows))
-        self.add_convection(system, layout, disc, 'nut', k=self.nu)
+        self.add_convection(system, layout, disc, 'nut', k=self.nu, k_in_residual=False)
 
         law = cached_law(('spalart-allmaras', self.nu), lambda: PointwiseLaw(sa_law(self.nu)))
         system.add_gradient_law(law, ['nut', 'u', 'wall_distance'], ['nut'])
@@ -333,6 +333,7 @@ class sst(physics):
         self.nu = self.mu / self.rho
 
         self.walls = []
+        self.k_inflow = None         # smallest k given on an inflow: sets the floor of k
         self.vel = 'u'
         self.Convection = True
         self.Stab = 'SUPG'
@@ -355,6 +356,8 @@ class sst(physics):
         """k and omega on the edges (inlets): e.g. k = 1.5 (I U)^2 with the turbulence intensity I, and
         omega = k / nu_t for a chosen ratio nu_t / nu."""
 
+        if k > 0.0:
+            self.k_inflow = float(k) if self.k_inflow is None else min(self.k_inflow, float(k))
         nodes = self.modelRef._mesh.NL
         for edge in edges:
             for node_id in edge:
@@ -414,12 +417,14 @@ class sst(physics):
 
         wall_nodes, omega_wall = self._wall_omega(model.mesh, d)
         system.set_dirichlet(layout.node_dofs('ln_omega', wall_nodes)[:, 0], np.log(omega_wall))
-        system.require_positive(layout.dofs('k')[:, 0])
+        # Above zero: k = 0 is a kink of the model (no production, no eddy viscosity), and the nodes at the edge of a boundary
+        # layer jump on and off it, so the residual of a flat plate does not close. A thousandth of the inflow value changes nothing.
+        system.require_positive(layout.dofs('k')[:, 0], floor=1e-3 * self.k_inflow if self.k_inflow else 0.0)
 
         for name in ('k', 'ln_omega'):
             rows = layout.element_dofs(disc.conn, name)
             system.add_mass(layout.scatter_matrix(ops.mass(disc, self.M_const), rows, rows))
-            self.add_convection(system, layout, disc, name, k=self.nu)
+            self.add_convection(system, layout, disc, name, k=self.nu, k_in_residual=False)
 
         axisymmetric = disc.axisymmetric
         law = cached_law(('k-omega-sst', self.nu, axisymmetric), lambda: PointwiseLaw(sst_law(self.nu, axisymmetric)))

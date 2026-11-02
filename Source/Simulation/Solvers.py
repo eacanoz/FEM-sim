@@ -102,13 +102,14 @@ class modelSolver():
 
     def _saddle_point(self, A_ff, free):
 
-        """Block preconditioner of the flow: velocity and pressure of the free dofs, Schur diagonal from the flow physics."""
+        """Block preconditioner of the flow: velocity and pressure of the free dofs, Schur diagonal from the flow physics, the
+        other fields with an incomplete LU."""
 
         model = self.model
         flow = next((part for part in getattr(model.physics, 'parts', {'flow': model.physics}).values()
                      if getattr(part, 'computes_velocity', False)), None)
-        if flow is None or set(model.layout.names) != {'u', 'p'}:
-            raise ValueError("El precondicionador de bloques es para el flujo solo: campos u y p.")
+        if flow is None:
+            raise ValueError("El precondicionador de bloques necesita un flujo: campos u y p.")
 
         number = np.cumsum(free) - 1
         u, p = model.layout.dofs('u').ravel(), model.layout.dofs('p')[:, 0]
@@ -121,7 +122,10 @@ class modelSolver():
         modes[0::2, 0], modes[1::2, 1] = 1.0, 1.0
         modes[0::2, 2], modes[1::2, 2] = -xy[:, 1], xy[:, 0]
 
-        return saddle_point_preconditioner(A_ff, number[u[free[u]]], number[p[free[p]]], schur[free[p]], modes[free[u]])
+        rest = np.concatenate([model.layout.dofs(name).ravel() for name in model.layout.names if name not in ('u', 'p')] or [[]]).astype(int)
+
+        return saddle_point_preconditioner(A_ff, number[u[free[u]]], number[p[free[p]]], schur[free[p]], modes[free[u]],
+                                           number[rest[free[rest]]])
 
     def construcProblem(self):
 
@@ -281,15 +285,17 @@ class modelSolver():
         Modified Newton (option 'Reuse Tangent'): the tangent and its factorization stay in use, also from one time step
         to the next, while each iteration reduces the residual at least by half; otherwise the iteration is discarded
         and the tangent rebuilt. An assembly with its factorization costs several residual evaluations, and the state
-        changes little between iterations of a step. A change of alpha by more than 30 % or of theta also rebuilds it.
+        changes little between iterations of a step. A change of alpha by more than 30 % or of theta also rebuilds it. A
+        system without nonlinear terms assembles once, however dt moves: a change of alpha by more than 10 % only adds
+        alpha M again and factorizes.
 
         Adaptive steps (BDF2, option 'Adaptive Tolerance'): the local truncation error comes from the difference with a
         quadratic extrapolation of the last three states, h (h + k) / ((2 h + k) (h + k + l)) (x - x_pred) for the steps
         h, k, l, measured per field relative to its size, the largest value it has reached and the amplitude of its time
         functions (a field that starts at zero has no size of its own), over the differential dofs. A step above the
-        tolerance is repeated; dt follows (tol / e)^(1/3). dt never more than doubles (zero stability needs a ratio below
-        1 + sqrt(2)), nor exceeds 'Adaptive Max Step'. The first steps, without enough history, use the given time step:
-        choose it small.
+        tolerance is repeated; dt follows (tol / e)^(1/3), but a growth below 20 % is left out, because keeping dt keeps the
+        factorization of the tangent. dt never more than doubles (zero stability needs a ratio below 1 + sqrt(2)), nor
+        exceeds 'Adaptive Max Step'. The first steps, without enough history, use the given time step: choose it small.
         """
 
         system = self.model._system()
@@ -323,7 +329,7 @@ class modelSolver():
         reuse = self.solverOptions.get('Reuse Tangent', True)
 
         self.tangent_assemblies = 0
-        J, J_alpha, J_theta = None, None, None
+        J, J_core, J_alpha, J_theta = None, None, None, None
 
         fields = [self.model.layout.dofs(name).ravel() for name in self.model.layout.names]
 
@@ -388,19 +394,23 @@ class modelSolver():
                     return F
 
                 def step_tangent(state):
-                    self.tangent_assemblies += 1
-                    system.time = context
-                    tangent, _ = system.residual_and_tangent(state)
-                    tangent = alpha * M + sp.diags(weight) @ tangent
-                    if th < 1.0:
-                        J_old = at_old_level(lambda old: system.residual_and_tangent(old)[0], state)
-                        tangent = tangent + (1.0 - th) * (differential @ J_old @ to_algebraic)
-                    return tangent.tocsr()
+                    nonlocal J_core
+                    if not (system.is_linear and J_theta == th):
+                        self.tangent_assemblies += 1
+                        system.time = context
+                        tangent, _ = system.residual_and_tangent(state)
+                        J_core = sp.diags(weight) @ tangent
+                        if th < 1.0:
+                            J_old = at_old_level(lambda old: system.residual_and_tangent(old)[0], state)
+                            J_core = J_core + (1.0 - th) * (differential @ J_old @ to_algebraic)
+                    return (alpha * M + J_core).tocsr()
 
                 # The tangent belongs to this state?
-                fresh = J is None or J_theta != th or abs(alpha / J_alpha - 1.0) > 0.3 or not reuse
-                if fresh:
+                change = np.inf if J is None else abs(alpha / J_alpha - 1.0)
+                fresh = J is None or J_theta != th or not reuse or (not system.is_linear and change > 0.3)
+                if fresh or change > 0.1 and system.is_linear:
                     J, J_alpha, J_theta = step_tangent(x), alpha, th
+                    fresh = True
 
                 F = step_residual(x)
                 scale = np.maximum(np.abs(J.diagonal()), 1.0) * system.field_scales(x)
@@ -417,7 +427,7 @@ class modelSolver():
                         x_try = system.clip_positive(x + weights * dx)
                         F_try = step_residual(x_try)
                         norm_try = np.linalg.norm(F_try / scale) if system.is_admissible(x_try) else np.nan
-                        settled = np.isfinite(norm_try) and negligible(dx, x)
+                        settled = np.isfinite(norm_try) and negligible(x_try - x, x)
                         if settled:
                             x, F, norm = x_try, F_try, norm_try
                             break
@@ -427,7 +437,6 @@ class modelSolver():
                         J, J_alpha, J_theta, fresh = step_tangent(x), alpha, th, True
                         dx = self._solve_system(J, -F)
 
-                    settled = negligible(dx, x)
                     lam = 1.0
                     while True:
                         x_try = system.clip_positive(x + lam * weights * dx)   # positive fields stay positive
@@ -436,6 +445,7 @@ class modelSolver():
                         if (np.isfinite(norm_try) and norm_try < (1.0 - 1e-4 * lam) * norm) or lam <= 1.0 / 64:
                             break
                         lam *= 0.5
+                    settled = lam == 1.0 and negligible(x_try - x, x)
                     x, F, norm = x_try, F_try, norm_try
                     if settled and np.isfinite(norm):
                         break
@@ -481,7 +491,7 @@ class modelSolver():
                         self.rejected_steps += 1
                         x, dt = x_n, dt * max(factor, 0.2)
                         continue
-                    dt_next = dt * min(max(factor, 0.2), 2.0)
+                    dt_next = dt if factor < 1.2 else dt * min(factor, 2.0)
                     dt_next = min(dt_next, self.solverOptions.get('Adaptive Max Step') or np.inf)
 
                 self.step_iterations.append(iteration)
@@ -583,6 +593,7 @@ class modelSolver():
         J, R = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
 
         system = self.model._system()
+        J, R = system.hold_clipped(J, R, x)
         scale = np.maximum(np.abs(J.diagonal()), 1.0) * system.field_scales(x)
         weights = system.relaxation_weights(self.solverOptions.get('Relaxation'))
 
@@ -609,6 +620,7 @@ class modelSolver():
                 self.updateSolution(x_try)
 
                 J_try, R_try = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
+                J_try, R_try = system.hold_clipped(J_try, R_try, x_try)
                 norm_try = scaled_norm(R_try) if system.is_admissible(x_try) else np.nan
 
                 finite = np.isfinite(norm_try)
@@ -625,7 +637,7 @@ class modelSolver():
             if diverged:
                 break
 
-            settled = lam == 1.0 and system.negligible_update(dX, x)
+            settled = lam == 1.0 and system.negligible_update(x_try - x, x)  # what moved: a clipped dof asks for more, in vain
             x, J, R, norm_R = x_try, J_try, R_try, norm_try
 
             sim_logger.info(f"| {iteration:^6} | {norm_R:^15.4e} | {norm_R / norm_R0:^15.4e} | {lam:^12.4f}")
@@ -667,7 +679,7 @@ class modelSolver():
 
         sim_logger.info("------- Starting pseudo-transient nonlinear solver -------")
 
-        rtol, atol, max_iterations = 1e-10, 1e-10, 500
+        rtol, atol, max_iterations = 1e-10, 1e-10, self.solverOptions.get('Nonlinear Max Iterations') or 500
         cfl = float(self.solverOptions.get('CFL0', 10.0))
         cfl_min, cfl_max, cfl_growth, max_rise = 1e-6, 1e14, 4.0, 4.0
 
@@ -680,6 +692,7 @@ class modelSolver():
         self.updateSolution(x)
 
         J, R = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
+        J, R = system.hold_clipped(J, R, x)
 
         scale = np.maximum(np.abs(J.diagonal()), 1.0) * system.field_scales(x)
         weights = system.relaxation_weights(self.solverOptions.get('Relaxation'))
@@ -700,6 +713,7 @@ class modelSolver():
             self.updateSolution(x_try)
 
             J_try, R_try = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
+            J_try, R_try = system.hold_clipped(J_try, R_try, x_try)
             norm_try = np.linalg.norm(R_try / scale) if system.is_admissible(x_try) else np.nan
 
             if not np.isfinite(norm_try) or norm_try > max_rise * norm_R:
@@ -712,8 +726,11 @@ class modelSolver():
                 cfl = min(cfl * np.clip(ratio, 1.05, cfl_growth), cfl_max)
             else:
                 cfl = cfl * max(ratio, 0.5)
-            settled = system.negligible_update(dX, x)
+            settled = system.negligible_update(x_try - x, x)                # what moved: a clipped dof asks for more, in vain
             x, J, R, norm_R = x_try, J_try, R_try, norm_try
+            # The fields grow along the march (k starts at its freestream value): the norm follows their size
+            scale = np.maximum(np.abs(J.diagonal()), 1.0) * system.field_scales(x)
+            norm_R = np.linalg.norm(R / scale)
 
             sim_logger.info(f"| {iteration:^6} | ||R|| {norm_R:.4e} | ||R||/||R0|| {norm_R / norm_R0:.4e} | CFL {cfl:.3e}")
 

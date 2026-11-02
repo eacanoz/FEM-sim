@@ -163,6 +163,20 @@ es singular para un fluido que adelgaza.
 - VTK binario / XDMF: solo si el tamaño de los archivos lo exige.
 - Hecha: limpieza de `docs/ESTADO.md`.
 
+## Pausa del viscoelástico: huecos menores y SST
+
+Objetivo: que el usuario pueda probar por su cuenta con ejemplos de otros programas (`example_mixing_elbow.ipynb`). Resultados medidos en `docs/ESTADO.md`.
+
+Hecho: SUPG consistente en cuadráticos; Taylor–Hood con SUPG opcional; SA y SST en canal Q9/T6; especies en Q9/T6; GMRES de bloques con más campos; `Mesh.triangulation`; paso
+adaptativo; placa SST en Q4 con residuo cerrado; escalón con SST y SA en Q4; codo mezclador con los balances de masa y energía.
+
+Sin resolver, para decidir si se aborda:
+
+1. Sobreoscilación de T en el codo (13.8 a 44.1 °C con entradas a 20 y 40): localizarla y revisar el SUPG con k de una ley.
+2. SST en mallas cuadráticas fuera del canal (placa y escalón no cierran). Por ahora, Q4.
+3. Arranque del pseudo-transitorio desde u = 0 con entrada impuesta: hoy hay que dar un campo sin divergencia.
+4. Difusividad turbulenta en calor y especies como opción de la física, con validación propia.
+
 ## Orden recomendado
 
 1. Commit de SST experimental + generalización de viscosidad.

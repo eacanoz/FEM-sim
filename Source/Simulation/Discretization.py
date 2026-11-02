@@ -74,6 +74,8 @@ class Discretization:
 
         invJ = np.linalg.inv(J)  # invJ[e, g, b, a] = dxi_b / dx_a
 
+        self._invJ, self._coords, self._points = invJ, coords, points
+
         self.N = N
         self.B = np.einsum('gkb,egba->egka', dN, invJ)
         self.area = np.abs(detJ) * weights          # plane measure (no r factor)
@@ -92,6 +94,42 @@ class Discretization:
             self.detJw = self.area
 
         self._facet_owner = None
+
+    @property
+    def hessian(self):
+
+        """Physical second derivatives d2N / dx_a dx_b (nel, ngp, nne, dim, dim) of a quadratic element, also curved; None for
+        linear elements, where they vanish. Built once."""
+
+        if getattr(self, '_hessian', None) is None:
+            d2N = self.element.second_derivatives(self._points)
+            if d2N is None:
+                return None
+            # d2x/dxi dxi of the isoparametric map, and d2N/dx dx = J^-T (d2N/dxi dxi - dN/dx_c d2x_c/dxi dxi) J^-1
+            d2x = np.einsum('eka,gkbc->egabc', self._coords, d2N)
+            reference = d2N[None] - np.einsum('egka,egabc->egkbc', self.B, d2x)
+            self._hessian = np.einsum('egbi,egkbc,egcj->egkij', self._invJ, reference, self._invJ)
+
+        return self._hessian
+
+    @property
+    def laplacian(self):
+
+        """Laplacian of the shape functions (nel, ngp, nne), with the term dN/dr / r if axisymmetric; None for linear elements in
+        the plane, where it vanishes."""
+
+        hessian = self.hessian
+        if hessian is None:
+            return None
+
+        return np.einsum('egkaa->egk', hessian) + (self.hoop_gradient if self.axisymmetric else 0.0)
+
+    @property
+    def hoop_gradient(self):
+
+        """dN/dr / r (nel, ngp, nne) of an axisymmetric discretization."""
+
+        return self.B[..., 0] / self.radius[..., None]
 
     @property
     def radius(self):

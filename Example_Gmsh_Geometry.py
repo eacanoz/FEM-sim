@@ -13,7 +13,6 @@ import time
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.tri as mtri
 import gmsh
 
 from Source.Pre_processing.Mesh import Mesh
@@ -94,9 +93,7 @@ def solve(mesh, setup):
 
 
 def plot_mesh_and_field(ax, model, title):
-    xy = np.array([n.coor for n in model.mesh.NL])
-    tris = np.array([e.getNodesId() for e in model.mesh.EL])
-    triang = mtri.Triangulation(xy[:, 0], xy[:, 1], tris)
+    triang = model.mesh.triangulation()
     contour = ax.tricontourf(triang, np.asarray(model.sol['T']), levels=30, cmap='inferno')
     ax.triplot(triang, color='white', lw=0.25, alpha=0.5)
     ax.figure.colorbar(contour, ax=ax, label='T [C]')

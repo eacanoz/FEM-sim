@@ -17,7 +17,6 @@ import time
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.tri as mtri
 import gmsh
 
 from Source.Pre_processing.Mesh import Mesh
@@ -136,7 +135,7 @@ print(f"Serie para ParaView: {files[-1]} ({len(files) - 1} instantes)")
 # ----- Gráficos -----
 fig = plt.figure(figsize=(14, 8))
 gs = fig.add_gridspec(2, 2)
-triang = mtri.Triangulation(xy[:, 0], xy[:, 1], [e.getNodesId() for e in mesh.EL])
+triang = mesh.triangulation()
 G = model.geometry
 omega = G.project(G.gradient(U_hist[..., -1])[..., 1, 0] - G.gradient(U_hist[..., -1])[..., 0, 1])
 

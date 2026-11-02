@@ -17,7 +17,6 @@ import time
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.tri as mtri
 import gmsh
 
 from Source.Pre_processing.Mesh import Mesh
@@ -129,7 +128,7 @@ print("Archivos para ParaView:", files)
 fig = plt.figure(figsize=(14, 9))
 gs = fig.add_gridspec(2, 3)
 
-triang = mtri.Triangulation(xy[:, 0] * 1e3, xy[:, 1] * 1e3, [e.getNodesId() for e in mesh.EL])
+triang = mesh.triangulation(scale=1e3)
 window = dict(xlim=(0, 2.5), ylim=(LB * 1e3 - 2.0, LB * 1e3 + 3.0))
 
 ax = fig.add_subplot(gs[:, 0])

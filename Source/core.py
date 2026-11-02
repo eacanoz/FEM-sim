@@ -176,7 +176,7 @@ class Model(object):
     def solverConfiguration(self, Study=StudyType.steady_state, Type=ProblemType.linear, Method=SolverType.direct, Solver = DirectSolvers.PARDISO, 
                             timeDisc = 1, timeStep=0.05, totalTime = 3, prec = Preconditioners.iLU, tol = 1e-10, maxiter = None,
                             timeScheme='theta', globalization='newton', cfl0=10.0, relaxation=None, reuseTangent=True, adaptiveTol=None,
-                            adaptiveMaxStep=None):
+                            adaptiveMaxStep=None, nonlinearMaxIter=None):
 
         """Configures the solver for the model based on the provided options.
 
@@ -190,7 +190,8 @@ class Model(object):
 
         Steady nonlinear studies: globalization 'newton' (line search) or 'pseudo-transient' (local pseudo-time step with
         a CFL that starts at cfl0 and grows as the residual falls, for hard problems or poor initial guesses; it reaches
-        the same steady solution). relaxation = {field: factor} takes only that fraction of the update of a field."""
+        the same steady solution). relaxation = {field: factor} takes only that fraction of the update of a field.
+        nonlinearMaxIter: limit of the pseudo-transient march (default 500)."""
 
         if timeScheme not in ('theta', 'BDF2'):
             raise ValueError(f"Esquema temporal desconocido: {timeScheme!r} (use 'theta' o 'BDF2').")
@@ -218,7 +219,8 @@ class Model(object):
             'Relaxation': relaxation,
             'Reuse Tangent': reuseTangent,
             'Adaptive Tolerance': adaptiveTol,
-            'Adaptive Max Step': adaptiveMaxStep
+            'Adaptive Max Step': adaptiveMaxStep,
+            'Nonlinear Max Iterations': nonlinearMaxIter
         }
 
 
@@ -290,24 +292,15 @@ class Model(object):
 
     def postProcess2D(self, variable=None, levels=30, step=None, ax=None, vmin=None, vmax=None):
 
-        """Filled contour of the nodal solution on a 2D mesh (a Q4 is split into two triangles; T3 are drawn as they are).
+        """Filled contour of the nodal solution on a 2D mesh (the triangles of Mesh.plot_triangles; a Q4 is split into two triangles; T3 are drawn as they are).
 
         step: index of a time step of a transient solution (default: the final state). ax: draw on an
         existing axes instead of opening a figure. vmin, vmax: fixed color range (to compare steps).
         """
 
-        import matplotlib.tri as mtri
-
         variable = variable or next(iter(self.physics.var))
 
-        xy = np.array([node.coor[:2] for node in self._mesh.NL], dtype=float)
-
-        triangles = []
-        for element in self._mesh.EL:
-            ids = element.getNodesId()
-            triangles += [ids[:3]] if len(ids) in (3, 6) else [[ids[0], ids[1], ids[2]], [ids[0], ids[2], ids[3]]]
-
-        triang = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles)
+        triang = self._mesh.triangulation()
 
         values = self.physics.var[variable].values if step is None else np.asarray(self.sol[variable])[..., step]
         if np.ndim(values) == 2:
