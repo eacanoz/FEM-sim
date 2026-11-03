@@ -187,6 +187,73 @@ def test_taylor_hood_with_supg_at_high_reynolds():
     assert plain.nonlinear_converged and stabilized.nonlinear_converged and difference < 0.02
 
 
+def junction(element, n, order=2, gamma=None):
+    """Channel 2 x 1 with a side inlet in the bottom wall (0.8 < x < 1.2), both at 1 m/s, from rest."""
+    mesh = rect((2.0, 1.0), (2 * n, n), element, order)
+    model = Model(name='junction', dim=2, mesh=mesh, mat=material('X', miu=0.01, rho=1.0), psc=ff)
+    flow = model.physics
+    flow.setInertia(True)
+    if gamma is not None:
+        flow.setGradDiv(gamma)
+    left, out = mesh.boundary_edges(lambda x, y: x < 1e-9), mesh.boundary_edges(lambda x, y: x > 2 - 1e-9)
+    side = mesh.boundary_edges(lambda x, y: y < 1e-9 and 0.8 - 1e-9 < x < 1.2 + 1e-9)
+    flow.addBC_NoSlipEdges(mesh.boundary_edges(lambda x, y: (y < 1e-9 and not 0.8 + 1e-9 < x < 1.2 - 1e-9) or y > 1 - 1e-9))
+    flow.addBC_VelocityEdges(left, (1.0, 0.0))
+    flow.addBC_VelocityEdges(side, (0.0, 1.0))
+    flow.addBC_OutletEdges(out)
+    model.solverConfiguration(Study=StudyType.steady_state, Type=ProblemType.nonlinear, globalization='pseudo-transient', cfl0=1.0)
+    model.solve()
+    return model, flow.flowRate(mesh.boundary_edges(None))
+
+
+def test_pseudo_transient_starts_taylor_hood_from_rest():
+
+    """From u = 0 with an imposed inflow, Taylor-Hood used to reject every step (the pressure of a step grows as 1 / CFL) and
+    stop. When no step is accepted, the march starts again from one Newton step of the flow alone (Stokes). The equal-order
+    flow, which starts well from rest, does not go through it: same iterations as before (16)."""
+
+    for element, order in ((QUAD, 2), (TRI, 2), (QUAD, 1)):
+        model, imbalance = junction(element, 10, order)
+        print(f"   {element.name} order {order}: converged {model.nonlinear_converged} in {model.newton_iterations} iterations, "
+              f"mass imbalance {abs(imbalance):.1e}")
+        assert model.nonlinear_converged and abs(imbalance) < 1e-10
+        if order == 1:
+            assert model.newton_iterations < 30
+
+
+def test_grad_div_is_consistent_and_lowers_the_divergence():
+
+    """A divergence-free field the mesh represents (extension, plane and axisymmetric with its hoop term) stays exact with a large
+    gamma; in the junction the discrete div(u) goes down. Its cost in accuracy is in docs/ESTADO.md (Kovasznay)."""
+
+    a = 0.8
+    for axisymmetric in (False, True):
+        for element in (QUAD, TRI):
+            mesh = rect((1.0, 2.0), (3, 5), element)
+            distort(mesh)
+            model = Model(name='extension', dim=2, mesh=mesh, mat=material('X', miu=1.7, rho=1.0), psc=ff, axisymmetric=axisymmetric)
+            exact = (lambda r, z: (-a * r / 2, a * z)) if axisymmetric else (lambda x, y: (a * x, -a * y))
+            if axisymmetric:
+                model.physics.addBC_SymmetryEdges(mesh.boundary_edges(lambda x, y: x < 1e-9))
+            model.physics.addBC_VelocityEdges(mesh.boundary_edges(lambda x, y: x > 1e-9 or not axisymmetric), exact)
+            model.physics.setPressureReference((1.0, 0.0), 0.0)
+            model.physics.setGradDiv(1e3)
+            model.solverConfiguration(Study=StudyType.steady_state, Type=ProblemType.linear)
+            model.solve()
+            xy = xy_of(mesh)
+            error = np.max(np.abs(model.sol['u'] - np.c_[exact(xy[:, 0], xy[:, 1])]))
+            print(f"   extension, {'axisymmetric' if axisymmetric else 'plane'} {element.name}, gamma 1e3: error {error:.1e}")
+            assert error < 1e-9
+
+    def divergence(model):
+        disc = model.geometry
+        return np.sqrt((disc.detJw * np.einsum('egaa->eg', disc.gradient(np.asarray(model.sol['u']))) ** 2).sum())
+
+    plain, strong = divergence(junction(QUAD, 10)[0]), divergence(junction(QUAD, 10, gamma=10.0)[0])
+    print(f"   junction Q9: L2 of div(u) {plain:.2e} without grad-div, {strong:.2e} with gamma 10")
+    assert strong < 0.9 * plain                                  # the corners of the inlets keep most of it
+
+
 def test_stabilization_is_refused_where_it_does_not_belong():
 
     mesh = rect((1.0, 1.0), (2, 2))
@@ -495,7 +562,9 @@ def test_adaptive_step_keeps_dt_for_a_small_growth():
 if __name__ == "__main__":
     tests = [test_second_derivatives_on_curved_elements, test_supg_of_a_scalar_on_quadratic_elements,
              test_crank_nicolson_keeps_the_steady_state_with_supg_on_quadratic_elements,
-             test_taylor_hood_with_supg_at_high_reynolds, test_stabilization_is_refused_where_it_does_not_belong,
+             test_taylor_hood_with_supg_at_high_reynolds, test_pseudo_transient_starts_taylor_hood_from_rest,
+             test_grad_div_is_consistent_and_lowers_the_divergence,
+             test_stabilization_is_refused_where_it_does_not_belong,
              test_turbulence_on_quadratic_elements, test_sst_flat_plate_closes_its_residual, test_species_on_quadratic_elements,
              test_block_preconditioner_with_more_fields, test_block_preconditioner_with_turbulence,
              test_block_preconditioner_needs_a_flow, test_triangulation_of_every_element,

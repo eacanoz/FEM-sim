@@ -172,10 +172,12 @@ adaptativo; placa SST en Q4 con residuo cerrado; escalón con SST y SA en Q4; co
 
 Sin resolver, para decidir si se aborda:
 
-1. Balance de energía en el codo: T media de salida 0.05–0.10 °C por debajo del balance, por ∫T div(u) con el término convectivo no conservativo. La sobreoscilación de T ya está explicada: es resolución del frente, no el SUPG (`docs/ESTADO.md`).
-2. SST en mallas cuadráticas fuera del canal (placa y escalón no cierran). Por ahora, Q4.
-3. Arranque del pseudo-transitorio desde u = 0 con entrada impuesta: hoy hay que dar un campo sin divergencia.
-4. Difusividad turbulenta en calor y especies como opción de la física, con validación propia.
+1. SST en mallas cuadráticas fuera del canal (placa y escalón no cierran). Por ahora, Q4.
+2. Difusividad turbulenta en calor y especies como opción de la física, con validación propia.
+
+Resueltos después: el arranque del pseudo-transitorio desde u = 0 (respaldo automático con un paso de Stokes) y el balance de energía del codo, con
+`ff.setGradDiv(γ)` como opción (−0.006 °C con γ = ρUL), a costa de precisión en Kovasznay; la forma conservativa se probó y se descartó (`docs/ESTADO.md`). La
+sobreoscilación de T es resolución del frente, no el SUPG.
 
 ## Orden recomendado
 

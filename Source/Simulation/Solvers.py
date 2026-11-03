@@ -699,8 +699,8 @@ class modelSolver():
         evolves = (~(system.is_dirichlet | system.constraint)).astype(float)
 
         norm_R0 = norm_R = np.linalg.norm(R / scale)
-        iteration = 0
-        settled = False
+        iteration = accepted = 0
+        settled = flow_started = False
 
         while norm_R > atol and norm_R > rtol * norm_R0 and iteration < max_iterations and cfl >= cfl_min and not settled:
 
@@ -719,7 +719,21 @@ class modelSolver():
             if not np.isfinite(norm_try) or norm_try > max_rise * norm_R:
                 cfl *= 0.25
                 sim_logger.info(f"| {iteration:^6} | step rejected ({norm_try:.2e}), CFL -> {cfl:.3e}")
+                if cfl < cfl_min and accepted == 0 and not flow_started:
+                    flow_started = True
+                    x_start = self._flow_start(system, x)
+                    if x_start is not x:
+                        x, cfl = x_start, float(self.solverOptions.get('CFL0', 10.0))
+                        self.updateSolution(x)
+                        J, R = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
+                        J, R = system.hold_clipped(J, R, x)
+                        scale = np.maximum(np.abs(J.diagonal()), 1.0) * system.field_scales(x)
+                        norm_R0 = norm_R = np.linalg.norm(R / scale)
+                        continue
+                self.updateSolution(x)
                 continue
+
+            accepted += 1
 
             ratio = norm_R / max(norm_try, 1e-300)
             if ratio >= 0.9:                                                # small rises are part of the path: go on
@@ -747,6 +761,38 @@ class modelSolver():
         self.updateSolution(x)
 
         return x
+
+    def _flow_start(self, system, x):
+
+        """A velocity that is zero inside with an imposed inflow breaks continuity: the first pseudo-time step answers with a
+        pressure that grows as 1 / CFL, and lowering the CFL makes the residual larger, so the march stops. In that case one
+        Newton step of the flow alone (u and p, the other fields held) replaces the start. At u = 0 it is the Stokes problem
+        with the viscosity of the state (laws, turbulent viscosity), and its velocity satisfies the discrete continuity.
+        pseudoTransientSolver uses it only when the march from that start accepts no step: an equal-order flow with PSPG
+        starts well from u = 0, and from the Stokes flow of a turbulent case it would take longer (36 against 235 iterations).
+        Returns x itself when it does not apply."""
+
+        layout = self.model.layout
+        if 'u' not in layout.names or 'p' not in layout.names:
+            return x
+
+        u_dofs = layout.dofs('u').ravel()
+        imposed = system.is_dirichlet[u_dofs]
+        if np.any(x[u_dofs[~imposed]] != 0.0) or not np.any(x[u_dofs[imposed]] != 0.0):
+            return x
+
+        self.updateSolution(x)
+        J, R = self.model.assembleGlobalSystemNonLinear(self.solverOptions)
+
+        keep = np.zeros(layout.ndof)
+        keep[np.r_[u_dofs, layout.dofs('p').ravel()]] = 1.0
+        keep[system.is_dirichlet] = 0.0
+        M = sp.diags(keep)
+        dX = self._solve_newton_step((M @ J @ M + sp.diags(1.0 - keep)).tocsr(), -keep * R)
+
+        sim_logger.info("No step accepted from a velocity zero inside with an imposed inflow: the march starts again from one "
+                        "Newton step of the flow (Stokes).")
+        return x + keep * dX
 
     def updateSolution(self, x):
 

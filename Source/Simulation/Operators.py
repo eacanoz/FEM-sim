@@ -20,6 +20,7 @@ the order of DofLayout.element_dofs:
     vector_diffusion(disc, mu)          (nel, nne*dim, nne*dim) integral of mu grad(u) : grad(v)
     viscous(disc, mu)                   (nel, nne*dim, nne*dim) integral of 2 mu eps(u) : eps(v), eps = sym(grad)
     divergence(disc, c)                 (nel, nne, nne*dim)     integral of c N_i div(u)   (test: scalar, trial: vector)
+    grad_div(disc, gamma)               (nel, nne*dim, nne*dim) integral of gamma div(u) div(v)
     vector_source(disc, f)              (nel, nne*dim)          integral of f . v
     facet_vector_source(facets, t)      (nf, nnf*dim)           boundary integral of t . v (tractions)
 
@@ -254,6 +255,21 @@ def divergence(disc, c=1.0):
         D[..., 0] += np.einsum('eg,gi,egj->eij', w, disc.N, disc.hoop)
 
     return D.reshape(nel, nne, nne * dim)
+
+
+def grad_div(disc, gamma):
+
+    """integral of gamma div(u) div(v) (nel, nne*dim, nne*dim); axisymmetric: div u = du_r/dr + u_r / r + du_z/dz."""
+
+    nel, _, nne, dim = disc.B.shape
+    divN = disc.B
+    if disc.axisymmetric:
+        divN = divN.copy()
+        divN[..., 0] += disc.hoop
+
+    K = np.einsum('eg,egia,egjb->eiajb', disc.detJw * at_gauss(disc, gamma), divN, divN)
+
+    return K.reshape(nel, nne * dim, nne * dim)
 
 
 def element_size(disc):

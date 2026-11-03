@@ -1,7 +1,7 @@
 """Mixing elbow of example_mixing_elbow.ipynb, water, SA and heat on curved T6 with a boundary-layer mesh. No wall functions: y+ must be about 1.
 Exact checks: mass balance, and the mean outlet temperature from the energy balance, (U1 D1 T1 + U2 D2 T2) / (U1 D1 + U2 D2) = 28.57 C.
 Args: tag lc_mm y1_mm layers [supg]. Environment: ELBOW_JUNCTION=h_mm refines the union of the side inlet (box x 310-360, y 35-90 mm),
-ELBOW_HEAT_GALERKIN=1 leaves the heat without SUPG, ELBOW_SAVE=path keeps the fields, ELBOW_MESH_ONLY=1 stops after the mesh."""
+ELBOW_HEAT_GALERKIN=1 leaves the heat without SUPG, ELBOW_GRADDIV=gamma adds grad-div [Pa s], ELBOW_SAVE=path keeps the fields, ELBOW_MESH_ONLY=1 stops after the mesh."""
 import sys, os, time, logging
 sys.path.insert(0, os.getcwd())
 import numpy as np
@@ -106,6 +106,8 @@ fl, heat, tu = model.physics.fluid, model.physics.heat, model.physics.turbulence
 fl.setInertia(True)
 if supg:
     fl.setStabilization('SUPG')
+if os.environ.get('ELBOW_GRADDIV'):
+    fl.setGradDiv(float(os.environ['ELBOW_GRADDIV']))
 heat.setVelocity('u')
 if not os.environ.get('ELBOW_HEAT_GALERKIN'):
     heat.setStabilization('SUPG')

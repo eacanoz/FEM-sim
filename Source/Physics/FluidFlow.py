@@ -82,6 +82,7 @@ class ff(physics):
         self.buoyancy = []                           # Boussinesq terms (field, beta, reference, g) (setBoussinesq)
 
         self.pressure_reference = None               # (node id, value)
+        self.grad_div = None                         # gamma of the grad-div term (setGradDiv)
         self.slip_walls = []                         # (edges, tangential component, law) (addBC_SlipLawEdges)
 
         # A quadratic mesh means Taylor-Hood: inf-sup stable, so without PSPG or the stress it needs
@@ -209,6 +210,16 @@ class ff(physics):
     def setVelocity(self, v):
         raise AttributeError("La velocidad de 'ff' es una incognita: use condiciones de contorno (addBC_Velocity...).")
 
+    def setGradDiv(self, gamma):
+
+        """Adds integral of gamma div(u) div(v) [gamma in Pa s: number or f(x, y)]. It vanishes for the exact solution, so it is
+        consistent, and it pulls the discrete div(u) towards zero: Taylor-Hood has div(u) = 0 only against the pressure test
+        functions, and a scalar convected by such a flow gains or loses the integral of c phi div(u) (heat and species use the
+        convective form). With inertia, LSIC already adds rho |u| h / 2, small near the walls; gamma is on top of it. A large gamma
+        locks the velocity on meshes that cannot represent divergence-free fields: start near rho U L or the viscosity. None removes it."""
+
+        self.grad_div = gamma
+
     def setPressureReference(self, point=None, value=0.0, node=None):
 
         """Fixes the pressure at a node (the one closest to `point`, or `node`). Needed only when every boundary
@@ -264,6 +275,8 @@ class ff(physics):
         A = layout.scatter_matrix(-np.swapaxes(D, 1, 2), ru, rp) + layout.scatter_matrix(D, rp, ru)
         if self.viscosity_law is None:
             A = A + layout.scatter_matrix(ops.viscous(disc, self.mu), ru, ru)
+        if self.grad_div is not None:
+            A = A + layout.scatter_matrix(ops.grad_div(disc, self.grad_div), ru, ru)
         system.add_matrix(A)
 
         f = None if self.body_force is None else ops._velocity(disc, self.body_force)
