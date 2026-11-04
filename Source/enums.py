@@ -12,6 +12,7 @@ class ShapeFunctionType(Enum):
 class SolverType(Enum):
     direct = 'Direct'
     iterative = 'Iterative'
+    auto = 'Auto'
 
 class StudyType(Enum):
     steady_state = 'Steady state'

@@ -180,6 +180,10 @@ class Model(object):
 
         """Configures the solver for the model based on the provided options.
 
+        Method: SolverType.direct, .iterative or .auto (also the strings 'direct', 'iterative', 'auto'). With auto, Solver and
+        prec are ignored: the linear solver is chosen from the size and kind of the system (Source/Simulation/SolverSelection.py)
+        and falls back to the direct solver if an iterative one does not converge; tol and maxiter still apply.
+
         Transient studies: timeScheme 'theta' (timeDisc = theta: 1 implicit Euler, 0.5 Crank-Nicolson) or 'BDF2'
         (second order and L-stable: no oscillating algebraic variables such as the pressure; the first step is
         implicit Euler). Systems with nonlinear terms iterate Newton inside every step, with a modified Newton that keeps
@@ -192,6 +196,9 @@ class Model(object):
         a CFL that starts at cfl0 and grows as the residual falls, for hard problems or poor initial guesses; it reaches
         the same steady solution). relaxation = {field: factor} takes only that fraction of the update of a field.
         nonlinearMaxIter: limit of the pseudo-transient march (default 500)."""
+
+        if isinstance(Method, str):
+            Method = SolverType[Method.lower()]       # 'direct', 'iterative' or 'auto'
 
         if timeScheme not in ('theta', 'BDF2'):
             raise ValueError(f"Esquema temporal desconocido: {timeScheme!r} (use 'theta' o 'BDF2').")

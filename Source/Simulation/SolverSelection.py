@@ -36,7 +36,8 @@ def direct(label, solver):
 
 
 def krylov(label, solver, prec, **extra):
-    return Candidate(label, dict(Method=SolverType.iterative, Solver=solver, prec=prec, **extra))
+    # maxiter caps a hopeless candidate: it is reported as not converged instead of running for an hour
+    return Candidate(label, dict(Method=SolverType.iterative, Solver=solver, prec=prec, **{'maxiter': 2000, **extra}))
 
 
 # Candidates worth trying for each kind of system
@@ -61,6 +62,31 @@ CANDIDATES = {
              krylov('GMRES+Block', IterativeSolvers.GMRES, Preconditioners.SaddlePoint, tol=1e-8),
              krylov('GMRES+iLU', IterativeSolvers.GMRES, Preconditioners.iLU, tol=1e-8)],
 }
+
+
+# Thresholds of the automatic choice, in free unknowns. They come from Test/manual/solver_benchmark.py (see docs): a direct
+# solver won or tied everywhere up to the sizes measured, so the iterative methods are chosen only above them.
+SMALL_SYSTEM = 20_000          # below it SuperLU beats PARDISO (its start-up cost dominates) in scalar problems
+ITERATIVE_SCALAR = 400_000     # scalar systems: PARDISO and CG+AMG tie at 360 k unknowns in 2D; beyond it memory decides
+ITERATIVE_FLOW = 500_000       # velocity-pressure systems: the block preconditioner has not overtaken the direct solver yet
+
+
+def choose_options(free_unknowns, symmetric, flow):
+
+    """Linear solver for a system of that size and kind: the keywords of Candidate.options (Method, Solver, prec)."""
+
+    if flow:
+        if free_unknowns >= ITERATIVE_FLOW:
+            return dict(Method=SolverType.iterative, Solver=IterativeSolvers.GMRES, prec=Preconditioners.SaddlePoint)
+        return dict(Method=SolverType.direct, Solver=DirectSolvers.PARDISO)
+
+    if free_unknowns >= ITERATIVE_SCALAR:
+        if symmetric:
+            return dict(Method=SolverType.iterative, Solver=IterativeSolvers.CG, prec=Preconditioners.AMG)
+        return dict(Method=SolverType.iterative, Solver=IterativeSolvers.BiCGSTAB, prec=Preconditioners.iLU)
+
+    solver = DirectSolvers.SuperLU if free_unknowns < SMALL_SYSTEM else DirectSolvers.PARDISO
+    return dict(Method=SolverType.direct, Solver=solver)
 
 
 def benchmark(build, base, candidates, field_name, repeat=1):

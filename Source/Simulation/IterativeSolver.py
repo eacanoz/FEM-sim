@@ -131,6 +131,9 @@ class IterativeSolver:
             kwargs['callback_type'] = 'pr_norm'
             if self.options.get('Preconditioner') == Preconditioners.SaddlePoint:
                 kwargs['restart'] = 200
+            if kwargs['maxiter'] is not None:
+                # scipy counts restart cycles in gmres: convert the iteration limit
+                kwargs['maxiter'] = -(-kwargs['maxiter'] // kwargs.get('restart', 20))
         else:
             kwargs['callback'] = count
 

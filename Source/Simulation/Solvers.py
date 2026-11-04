@@ -6,7 +6,8 @@ import scipy.sparse.linalg as spla
 
 from Source.Simulation.DirectSolver import FactorizedSolver, _same_sparse
 from Source.Simulation.IterativeSolver import IterativeSolver, build_preconditioner, saddle_point_preconditioner
-from Source.enums import SolverType, StudyType, ProblemType, Preconditioners
+from Source.Simulation.SolverSelection import choose_options
+from Source.enums import SolverType, StudyType, ProblemType, Preconditioners, DirectSolvers
 from Source.logger_config import sim_logger
 
 
@@ -49,13 +50,38 @@ class modelSolver():
         self._iterative_cache = (None, None)   # (matrix, preconditioner) of the last iterative solve
         self.iterations = []                   # Krylov iterations of every iterative solve
         self.unconverged = 0                   # iterative solves that stopped without reaching the tolerance
+        self._auto_options = None              # linear solver chosen by Method auto
+        self._auto_failures = 0                # unconverged solves already answered with the direct solver
 
 
-    def _factorizer(self):
+    def _resolve_options(self, A):
+
+        """Options of the linear solves. With Method auto the choice is made once, from the size and kind of the system
+        (free unknowns, symmetry, velocity-pressure), and kept; otherwise they are the configured ones."""
+
+        if self.solverOptions['Method'] != SolverType.auto:
+            return self.solverOptions
+
+        if self._auto_options is None:
+            free = ~self.model.dirichletDofs()
+            A_ff = A.tocsr()[free][:, free]
+            symmetric = abs(A_ff - A_ff.T).max() <= 1e-10 * abs(A_ff).max() if A_ff.nnz else True
+            flow = 'u' in self.model.layout.names and 'p' in self.model.layout.names
+            chosen = choose_options(int(free.sum()), bool(symmetric), flow)
+
+            self._auto_options = {**self.solverOptions, 'Method': chosen['Method'], 'Solver': chosen['Solver'],
+                                  'Preconditioner': chosen.get('prec')}
+            label = chosen['Solver'].value + (f" + {chosen['prec'].value}" if chosen.get('prec') else "")
+            sim_logger.info(f"Auto solver: {label} ({int(free.sum())} unknowns, "
+                            f"{'symmetric' if symmetric else 'non-symmetric'}{', flow' if flow else ''})")
+
+        return self._auto_options
+
+    def _factorizer(self, options=None):
 
         """Direct solver kept by the model, so its factorization survives from one solve() to the next."""
 
-        kind = self.solverOptions['Solver']
+        kind = (options or self.solverOptions)['Solver']
         factorizer = getattr(self.model, '_factorizer', None)
 
         if factorizer is None or factorizer.kind != kind:
@@ -73,8 +99,23 @@ class modelSolver():
         (needed by CG and by AMG); the preconditioner is rebuilt only when A changes.
         """
 
-        if self.solverOptions['Method'] == SolverType.direct:
-            return self._factorizer().solve(A, b)
+        options = self._resolve_options(A)
+
+        if options['Method'] == SolverType.direct:
+            return self._factorizer(options).solve(A, b)
+
+        x = self._solve_iterative(A, b, guess, options)
+
+        if self.solverOptions['Method'] == SolverType.auto and self.unconverged > self._auto_failures:
+            # The automatic choice never returns an unconverged answer: this system goes to the direct solver
+            self._auto_failures = self.unconverged
+            sim_logger.warning("Auto solver: the iterative method did not converge; this system is solved directly.")
+            direct = {**options, 'Method': SolverType.direct, 'Solver': DirectSolvers.PARDISO}
+            return self._factorizer(direct).solve(A, b)
+
+        return x
+
+    def _solve_iterative(self, A, b, guess, options):
 
         fixed = self.model.dirichletDofs()
         free = ~fixed
@@ -88,14 +129,14 @@ class modelSolver():
 
         cached_A, preconditioner = self._iterative_cache
         if preconditioner is None or not _same_sparse(A_ff, cached_A):
-            if self.solverOptions.get('Preconditioner') == Preconditioners.SaddlePoint:
+            if options.get('Preconditioner') == Preconditioners.SaddlePoint:
                 preconditioner = self._saddle_point(A_ff, free)
             else:
-                preconditioner = build_preconditioner(A_ff, self.solverOptions.get('Preconditioner'))
+                preconditioner = build_preconditioner(A_ff, options.get('Preconditioner'))
             self._iterative_cache = (A_ff, preconditioner)
 
         x0 = None if guess is None else guess[free]
-        solver = IterativeSolver(A_ff, rhs, x0, self.solverOptions, preconditioner=preconditioner)
+        solver = IterativeSolver(A_ff, rhs, x0, options, preconditioner=preconditioner)
         x[free] = solver.solve()
         self.iterations.append(solver.iterations)
         self.unconverged += not solver.converged

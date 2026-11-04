@@ -101,7 +101,9 @@ def cavity(n, Re):
 
 
 def run(title, build, base, kind, field):
-    results = benchmark(build, base, CANDIDATES[kind], field, repeat=2)
+    only = os.environ.get('BENCH_ONLY')                      # comma-separated labels to run
+    candidates = [c for c in CANDIDATES[kind] if not only or c.label in only.split(',')]
+    results = benchmark(build, base, candidates, field, repeat=1 if only else 2)
     print(format_table(title, results), flush=True)
     print()
 
