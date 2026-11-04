@@ -263,6 +263,7 @@ class Model(object):
 
         self.timeVector = solver.timeVector
         self.solver_iterations = solver.iterations   # Krylov iterations of every linear solve (empty with direct solvers)
+        self.solver_unconverged = solver.unconverged # Krylov solves that did not reach the tolerance
         self.newton_iterations = getattr(solver, 'newton_iterations', None)   # steady nonlinear solves
         self.nonlinear_converged = getattr(solver, 'nonlinear_converged', None)   # steady nonlinear solves
         self.step_iterations = getattr(solver, 'step_iterations', None)       # Newton iterations of each time step

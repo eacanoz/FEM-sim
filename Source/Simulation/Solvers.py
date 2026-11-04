@@ -48,6 +48,7 @@ class modelSolver():
 
         self._iterative_cache = (None, None)   # (matrix, preconditioner) of the last iterative solve
         self.iterations = []                   # Krylov iterations of every iterative solve
+        self.unconverged = 0                   # iterative solves that stopped without reaching the tolerance
 
 
     def _factorizer(self):
@@ -97,6 +98,7 @@ class modelSolver():
         solver = IterativeSolver(A_ff, rhs, x0, self.solverOptions, preconditioner=preconditioner)
         x[free] = solver.solve()
         self.iterations.append(solver.iterations)
+        self.unconverged += not solver.converged
 
         return x
 
