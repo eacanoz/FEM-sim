@@ -155,8 +155,9 @@ es singular para un fluido que adelgaza.
     Espectro ilustrativo: sin comparar con experimentos.
   - **PTT y deslizamiento (añadidos):** `setModes(..., 'ptt-linear' | 'ptt-exp')`, `addBC_SlipLawEdges`. PTT llega a 1583 s⁻¹ en el reómetro, y da otra razón de Bagley: 0.96 a 618 s⁻¹,
     frente a 1.48 con Giesekus. El resultado de Bagley depende del modelo, así que hace falta ajustar datos extensionales.
-  - **No cumplido:** sin solución manufacturada; contracción sin tablas de Alves et al. 2003 y sin converger en malla a De alto; la detección de soluciones
-    falsas a Wi alto no quedó resuelta: `energy_balance` indica error, pero no las separa de una solución buena en malla gruesa.
+  - **Cumplido después:** solución manufacturada (orden 2 en u, p y b) y contracción frente a Alves et al. 2003 en tres mallas: X_R y u máx. a ≤ 0.33 % hasta
+    Wi = 2 en la fina. **No cumplido:** De alto en la malla fina (límite Wi = 2.425 con h/16, 4.475 con h/8); la detección de soluciones falsas a Wi alto:
+    `energy_balance` indica error, pero no las separa de una solución buena en malla gruesa.
   - Corregidos de paso: `System.field_scales` tomaba el ruido de una presión nula como su tamaño y Newton no paraba (viene de la
     Prioridad 1); y el criterio de parada estacionario, ahora por actualización despreciable.
 - Hechos: materiales por región (`Model.region_field`) y Cross–WLF con presión (`D3`), en `Test/test_regions_pressure.py`.

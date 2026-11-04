@@ -5,7 +5,8 @@
 #
 # Para cada De = lam U / h, con U la velocidad media aguas abajo y continuacion desde el De anterior, da:
 #   - la correccion de Couette C = dP_entrada / (2 tau_w), con tau_w = 3 mu U / h el esfuerzo newtoniano en la pared aguas abajo;
-#   - la longitud del vortice de esquina X_R, medida desde la contraccion y dividida por H;
+#   - la longitud del vortice de esquina X_R, medida desde la contraccion y dividida por h, como en Alves et al. (2003);
+#     Test/manual/contraction_alves.py la compara con sus tablas en tres mallas;
 #   - la estimacion de Tanner del hinchamiento del extrudado en la seccion desarrollada. Es solo una estimacion: el
 #     hinchamiento real necesita superficie libre, que este codigo no tiene.
 #
@@ -87,21 +88,23 @@ def entrance_correction():
     return (dp - 3 * MU * q / H ** 3 * L1 - 3 * MU * q / h ** 3 * L2) / (2 * 3 * MU * q / h ** 2)
 
 
+wall = np.flatnonzero((np.abs(xy[:, 1] - H) < 1e-9) & (xy[:, 0] < -1e-9))
+wall = wall[np.argsort(xy[wall, 0])]
+
+
 def corner_vortex():
 
-    """Donde cambia de signo du/dy a lo largo de la pared aguas arriba, X_R = distancia a la contraccion / H."""
+    """Donde cambia de signo du/dy (la vorticidad en la pared aguas arriba), proyectado a los nodos de la pared: X_R = distancia a la
+    contraccion / h."""
 
     disc = model.geometry
-    gradient = disc.gradient(model.sol['u'])[:, :, 0, 1]
-    points = disc.x_gp[..., 1] > H - 0.6 * lc_wall
-    x, shear = disc.x_gp[..., 0][points], gradient[points]
-    order = np.argsort(x)
-    x, shear = x[order], shear[order]
-    reversed_flow = np.nonzero((shear > 0.0) & (x < 0.0))[0]
-    if not len(reversed_flow):
+    shear = disc.project(disc.gradient(model.sol['u'])[:, :, 0, 1])[wall]
+    x = xy[wall, 0]
+    reversed_flow = np.nonzero(shear > 0.0)[0]
+    if not len(reversed_flow) or reversed_flow[0] == 0:
         return 0.0
     k = reversed_flow[0]
-    return 0.0 if k == 0 else -(x[k - 1] + (x[k] - x[k - 1]) * (0.0 - shear[k - 1]) / (shear[k] - shear[k - 1])) / H
+    return -(x[k - 1] + (x[k] - x[k - 1]) * (0.0 - shear[k - 1]) / (shear[k] - shear[k - 1])) / h
 
 
 def tanner_swell():
@@ -133,5 +136,5 @@ if len(rows):
     axes[0].plot(rows[:, 0], rows[:, 1], 'o-')
     axes[0].set_xlabel('De'); axes[0].set_ylabel('Correccion de Couette C'); axes[0].grid(True)
     axes[1].plot(rows[:, 0], rows[:, 2], 's-')
-    axes[1].set_xlabel('De'); axes[1].set_ylabel('Vortice de esquina X_R'); axes[1].grid(True)
+    axes[1].set_xlabel('De'); axes[1].set_ylabel('Vortice de esquina X_R / h'); axes[1].grid(True)
     plt.show()

@@ -141,7 +141,8 @@
 | Viscoelástico: transitorio | corte y extensión homogéneos frente a `solve_ivp`; arranque de Couette frente a un método de líneas independiente | `Test/test_viscoelastic.py` | orden 2; velocidad 3.4e-5 |
 | Viscoelástico: espectro | G′ y G″ de tres modos en oscilación pequeña; un modo partido en dos iguales | `Test/test_viscoelastic.py` | 0.8243/0.8242 y 2.1261/2.1270; 1e-8 |
 | Cilindro en canal (Oldroyd-B, β = 0.59) | arrastre frente a Hulsen et al., tabla de arXiv:2308.09394 | `Test/test_viscoelastic.py` (malla gruesa); fina a mano | 88 530 incógnitas: 0.000–0.05 % hasta Wi = 0.9; 24 140: 0.64 % a Wi = 1 |
-| Contracción plana 4:1 (Oldroyd-B, β = 1/9) | C y X_R frente a De, tendencia publicada; `Example_Viscoelastic_Contraction.py` | `Test/test_viscoelastic.py` (gruesa); ejemplo | llega a De = 3; De → 0: C ≈ 0.37 (newtoniano 0.374); X_R 0.363 → 0.267. **C sin converger a De alto** (De = 2.6: −1.84 con h/4, −2.02 con h/8). Sin tablas de Alves et al. 2003 a mano |
+| Contracción plana 4:1 (Oldroyd-B, β = 1/9) frente a Alves et al. 2003 | X_R / h y u máx. en el eje (tablas citadas en arXiv:2112.06829), tres mallas con elemento de esquina 0.0375, 0.0187 y 0.0094 h | `Test/manual/contraction_alves.py`; `Test/test_viscoelastic.py` (gruesa) | h/16, Wi ≤ 2: X_R a ≤ 0.33 %, u máx. a ≤ 0.22 %; h/8 a Wi = 3: +4.8 % y +0.94 %, a Wi = 4: X_R +6.8 %. Ver la sección de límites |
+| Viscoelástico: solución manufacturada | u, p y b suaves con fuentes por derivación automática (`ve.setSource`), Oldroyd-B y Giesekus, Wi ~ 1 | `Test/test_viscoelastic.py` | orden 2.0–2.6 en u, 2.0–2.3 en p, 2.0 en b (Q9 y T6) |
 | Reómetro multimodo | fluido inelástico de igual viscosidad; difusión localizada frente a sin ella | `Test/test_viscoelastic.py` (modo largo, malla gruesa); `Example_Viscoelastic_Rheometer.py` | τ_w igual a 4 cifras; caída a ≤ 1 % donde ambos convergen |
 | Deslizamiento en pared | Poiseuille con Navier (exacto en Taylor–Hood); límites adherido y libre; ley de potencia; umbral; tangente; canal Oldroyd-B | `Test/test_slip_ptt.py` | 1e-10; 1e-7; umbral a 0.1 %; tangente 1e-7 |
 | Análisis de Mooney | capilares de dos radios, ley de potencia con Navier, axisimétrico | `Test/test_slip_ptt.py` | recupera u_s = 0.07500 dado, a < 0.2 %, y la tasa verdadera a < 0.5 % |
@@ -328,7 +329,10 @@ Lo que sigue pendiente:
 - `Model(psc=[ff, ve])`, solo con Taylor–Hood, estudios estacionarios y BDF2 (Crank–Nicolson se rechaza). Isotermo, sin superficie
   libre: el hinchamiento es una estimación de Tanner, no un cálculo.
 - **Límites medidos:** canal hasta Wi de pared 128 con 16 elementos (error comprobado, 1e-3); Couette correcto hasta Wi ≈ 32–95, según
-  el factor de continuación; cilindro hasta Wi = 1 validado, sin medir más allá; contracción hasta De = 3, sin converger en malla. **Reómetro con 4 modos Giesekus:** sin ayuda, hasta
+  el factor de continuación; cilindro hasta Wi = 1 validado, sin medir más allá; contracción 4:1 (Oldroyd-B, β = 1/9) hasta Wi = 3.5 con h/4, 4.475 con h/8 y **2.425 con h/16** (continuación adaptativa hasta 1/8 del paso): el
+  límite baja al refinar, como en la literatura con SUPG (Kaufmann et al., arXiv:2112.06829: 8.27, 2.37 y 1.64 en mallas comparables). Donde converge,
+  X_R y u máx. convergen hacia Alves et al. 2003 (tabla arriba). C, sin referencia: 0.367, −0.035, −0.502, −0.988, −1.481 a Wi = 0, 0.5, 1, 1.5, 2 (h/16), a
+  2.5 % de h/8 en Wi = 2. El ejemplo medía X_R en los puntos de Gauss y por H: la medida salía cuantizada (1.417 h en tres Wi); ahora es nodal y por h. **Reómetro con 4 modos Giesekus:** sin ayuda, hasta
   γ̇ₐ ≈ 40 s⁻¹, limitado por el modo largo (λ = 1 s) con `det b → 0` en la pared junto a la esquina; con difusión artificial localizada,
   hasta **618 s⁻¹** con 159 413 incógnitas (falla a 990) y 260 s⁻¹ con 47 518: refinar llega más lejos.
 - **Difusión artificial (`setDiffusion`):** cambia la solución, y justo la pérdida de entrada. A 9 s⁻¹, frente a 0.075 bar sin ella: global
@@ -353,8 +357,7 @@ Lo que sigue pendiente:
   pseudo-transitorio en estos casos.
 - Coste: ~10 incógnitas por nodo más 3–4 por modo. 88 530 incógnitas: 25 s por Wi; 341 600 no terminó un Wi en 5 minutos. El GMRES de
   bloques no sirve aquí (solo `u` y `p`).
-- Sin verificación por solución manufacturada (prevista en el plan): el orden espacial se ha medido en canal y tubería, flujos paralelos,
-  y la convergencia en el cilindro.
+- La estimación de Tanner plana, (1 + (N1 / (2 τ_w))² / 2)^(1/4), no se ha contrastado con una fuente: la de tubo, con el exponente 1/6, sí es de Tanner (1970).
 
 ### Física y numérica
 - **Transitorio lineal sin condiciones en el tiempo:** paso fijo y una factorización. El no lineal, BDF2 y el adaptativo van

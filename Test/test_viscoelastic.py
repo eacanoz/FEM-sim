@@ -310,6 +310,78 @@ def test_channel_converges_at_second_order():
         assert rates[0] > 1.9 and rates[1] > 1.8 and rates[2] > 1.7 and rates[3] > 1.5
 
 
+def manufactured(element, n, alpha, lam=0.5, mu_s=0.5, mu_p=0.5):
+
+    """Smooth u (divergence free, entering only through x = 0), p and an SPD b on the unit square, with the sources of the momentum
+    equation and of the equation of b from automatic derivatives. Velocity everywhere on the boundary, b at the vertices of the inflow."""
+
+    A = 0.3
+
+    def exact(z):
+        x, y = z
+        u = jnp.array([1.0 + A * jnp.sin(jnp.pi * x) * jnp.sin(2 * jnp.pi * y), -A * jnp.cos(jnp.pi * x) * jnp.sin(jnp.pi * y) ** 2])
+        p = jnp.cos(jnp.pi * x) * jnp.sin(jnp.pi * y)
+        b = jnp.array([1.3 + 0.2 * jnp.sin(2 * x + y), 0.2 * jnp.cos(x - 2 * y), 1.1 + 0.15 * jnp.sin(3 * x * y)])
+        return u, p, b
+
+    def stress(z):
+        u, p, b = exact(z)
+        L = jax.jacfwd(lambda q: exact(q)[0])(z)
+        B = jnp.array([[b[0], b[1]], [b[1], b[2]]])
+        return -p * jnp.eye(2) + mu_s * (L + L.T) + mu_p / lam * (B @ B - jnp.eye(2))
+
+    def sources(z):
+        u, _, b = exact(z)
+        L = jax.jacfwd(lambda q: exact(q)[0])(z)
+        grad_b = jax.jacfwd(lambda q: exact(q)[2])(z)
+        f_b = grad_b @ u - conformation_rate(b, L, 0.0, lam, alpha)
+        f_u = -jnp.einsum('abb->a', jax.jacfwd(stress)(z))
+        return f_u, f_b
+
+    batch = jax.jit(jax.vmap(sources))
+
+    def at(x, y, which, k):
+        z = jnp.stack([jnp.ravel(jnp.asarray(x, dtype=float)), jnp.ravel(jnp.asarray(y, dtype=float))], axis=1)
+        return np.asarray(batch(z)[which][:, k]).reshape(np.shape(x))
+
+    mesh = mesh2((1.0, 1.0), (n, n), element)
+    model = Model(name='manufactured', dim=2, mesh=mesh, mat=material('X', miu=mu_s), psc=[ff, ve])
+    flow, polymer = model.physics.fluid, model.physics.viscoelastic
+    polymer.setModes([(mu_p, lam, alpha)])
+    polymer.setDEVSS(mu_p)
+    flow.setBodyForce(lambda x, y: (at(x, y, 0, 0), at(x, y, 0, 1)))
+    polymer.setSource(lambda x, y: (at(x, y, 1, 0), at(x, y, 1, 1), at(x, y, 1, 2)))
+    flow.addBC_VelocityEdges(mesh.boundary_edges(None), lambda x, y: tuple(float(v) for v in exact(jnp.array([x, y]))[0]))
+    for k in sorted({int(e) for edge in mesh.boundary_edges(lambda x, y: x < 1e-9) for e in (edge[0], edge[-1])}):
+        mesh.NL[k].BC['b0'] = polymer.setDirichletBC([float(v) for v in exact(jnp.array(mesh.NL[k].coor[:2]))[2]])
+    steady(model)
+
+    xy = xy_of(mesh)
+    u_ex, p_ex, b_ex = (np.array([np.asarray(exact(jnp.array(z))[i]) for z in xy]) for i in range(3))
+    vertices = np.unique(np.array([e.getNodesId()[:3 if element == ElementType.triangle else 4] for e in mesh.EL]).ravel())
+    dp = model.sol['p'] - p_ex
+    return (model, np.max(np.abs(model.sol['u'] - u_ex)), np.max(np.abs(dp[vertices] - dp[vertices].mean())),
+            np.max(np.abs(model.sol['b0'][vertices] - b_ex[vertices])))
+
+
+def test_manufactured_solution():
+
+    """Order of the steady equations against a manufactured solution, Oldroyd-B and Giesekus, Wi of order 1. b is linear in each
+    element, so second order is what can be asked of b and, through the stress, of u and p."""
+
+    for element, alpha in ((ElementType.quadrilateral, 0.0), (ElementType.triangle, 0.0), (ElementType.quadrilateral, 0.3)):
+        errors = []
+        for n in (8, 16, 32):
+            model, eu, ep, eb = manufactured(element, n, alpha)
+            assert model.nonlinear_converged
+            errors.append((eu, ep, eb))
+        e = np.array(errors)
+        rates = np.log2(e[:-1] / e[1:])
+        print(f"   {element.name}, alpha {alpha}: u {e[:, 0]}, p {e[:, 1]}, b {e[:, 2]}; rates {np.round(rates[-1], 2)} "
+              f"(before {np.round(rates[0], 2)})")
+        assert np.all(rates[-1] > 1.8)
+
+
 def test_giesekus_viscometric_functions():
 
     """Steady shear of Giesekus against its closed form (Bird, Armstrong & Hassager): viscosity and first normal stress."""
@@ -776,6 +848,7 @@ def test_output_of_the_modes():
 if __name__ == "__main__":
     tests = [test_rate_of_b_is_the_rate_of_the_conformation, test_tangent, test_tangent_in_a_time_step, test_couette_is_exact,
              test_a_spurious_root_is_rejected, test_continuation_in_weissenberg, test_channel_converges_at_second_order,
+             test_manufactured_solution,
              test_giesekus_viscometric_functions, test_homogeneous_flows_against_an_independent_integration,
              test_start_up_of_couette, test_axisymmetric_tangent, test_pipe, test_two_identical_modes_are_one,
              test_spectrum_in_oscillatory_shear, test_channel_without_solvent, test_cylinder_in_a_channel,

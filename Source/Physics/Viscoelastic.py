@@ -104,7 +104,8 @@ def conformation_law(mu, lam, alpha, nc, devss=False, constitutive='giesekus'):
     """Pointwise law of a mode for GradientLawTerm.
 
     Inputs: b (nc), grad b (nc x 2), u (2), grad u (4), with DEVSS-G also G (4) and grad G (8), then the data at the Gauss
-    points: tau_s, db/dt (nc), r, kappa. Outputs: for b a source (nc) and a flux (nc x 2), for u a source (2) and a flux (4).
+    points: tau_s, db/dt (nc), r, kappa, a given source s (nc). Outputs: for b a source (nc) and a flux (nc x 2), for u a source
+    (2) and a flux (4).
     """
 
     data = 3 * nc + 6 + (12 if devss else 0)
@@ -115,8 +116,9 @@ def conformation_law(mu, lam, alpha, nc, devss=False, constitutive='giesekus'):
         if devss:
             L = w[3 * nc + 6:3 * nc + 10].reshape(2, 2)
         tau_s, b_t, r, kappa = w[data], w[data + 1:data + 1 + nc], w[data + 1 + nc], w[data + 2 + nc]
+        source = w[data + 3 + nc:data + 3 + 2 * nc]
 
-        residual = grad_b @ u - conformation_rate(b, L, u[0] / r, lam, alpha, constitutive)
+        residual = grad_b @ u - conformation_rate(b, L, u[0] / r, lam, alpha, constitutive) - source
         supg = tau_s * jnp.outer(residual + b_t, u) + kappa * grad_b
 
         B = _plane(b)
@@ -167,10 +169,13 @@ class ConformationTerm(GradientLawTerm):
 
     """The equation of b of one mode and its stress in the momentum equation, all through its pointwise law."""
 
-    def __init__(self, system, law, field, nc, lam, devss=False, diffusion=0.0, where=None):
+    def __init__(self, system, law, field, nc, lam, devss=False, diffusion=0.0, where=None, source=None):
         super().__init__(system, law, [field, 'u', 'G'] if devss else [field, 'u'], [field, 'u'])
         self.field, self.nc, self.lam, self.diffusion = field, nc, lam, diffusion
         self._where = 1.0 if where is None else ops.at_gauss(system.disc, where)
+        disc = system.disc
+        self._source = (np.zeros(disc.detJw.shape + (nc,)) if source is None else
+                        np.stack(np.broadcast_arrays(*source(*[disc.x_gp[..., a] for a in range(disc.dim)])), axis=-1))
         self.tau_state = None        # evaluate tau_s at this state instead of x (to test the tangent)
         self._h = 0.5 * ops.element_size(system.disc)[:, None]               # the spacing of the nodes of the element
 
@@ -202,7 +207,7 @@ class ConformationTerm(GradientLawTerm):
             E = 0.5 * (G + np.swapaxes(G, -1, -2))
             kappa = self.diffusion * self._where * self._h ** 2 * (1.0 / self.lam + np.sqrt(2.0 * np.einsum('egab,egab->eg', E, E)))
 
-        self.gauss_inputs = np.concatenate([tau_s[..., None], b_t, r[..., None], kappa[..., None]], axis=-1)
+        self.gauss_inputs = np.concatenate([tau_s[..., None], b_t, r[..., None], kappa[..., None], self._source], axis=-1)
 
         R, J = super().contribution(x, tangent)
 
@@ -270,6 +275,7 @@ class ve(physics):
         self.devss = 0.0
         self.diffusion = 0.0
         self.diffusion_where = None
+        self.sources = {}
         self.constitutive = 'giesekus'
         self._rest = np.array([1.0, 0.0, 1.0, 1.0])[:self.nc]
 
@@ -301,6 +307,16 @@ class ve(physics):
 
         self.diffusion = float(c)
         self.diffusion_where = where
+
+    def setSource(self, f, mode=0):
+
+        """A given source in the equation of b of a mode, Db/Dt = rhs(b, grad u) + f: f(x, y) -> its nc components. It is for
+        manufactured solutions; a physical model has none. None removes it."""
+
+        if f is None:
+            self.sources.pop(mode, None)
+        else:
+            self.sources[mode] = f
 
     def _set_fields(self):
 
@@ -511,7 +527,8 @@ class ve(physics):
             devss = bool(self.devss)
             law = cached_law(('conformation', mu, lam, alpha, self.nc, devss, self.constitutive),
                              lambda: PointwiseLaw(conformation_law(mu, lam, alpha, self.nc, devss, self.constitutive)))
-            system.add_term(ConformationTerm(system, law, field, self.nc, lam, devss, self.diffusion, self.diffusion_where))
+            system.add_term(ConformationTerm(system, law, field, self.nc, lam, devss, self.diffusion, self.diffusion_where,
+                                             self.sources.get(m)))
 
             for edges in self.outlets:
                 system.add_term(PolymerTractionTerm(system, disc.facets(edges), field, mu, lam))
