@@ -212,6 +212,23 @@ class Arrhenius(ViscosityLaw):
         return aT * self.law(aT ** 2 * gamma2, T)
 
 
+def wlf_shift(C1, C2, T_ref):
+
+    """a_T(T) = 10^(-C1 (T - T_ref) / (C2 + T - T_ref)), T and T_ref in °C, C2 in K: for ve.setTemperatureShift (Fitting.fit_wlf
+    gives C1 and C2). Valid above T_ref - C2."""
+
+    C1, C2, T_ref = float(C1), float(C2), float(T_ref)
+    return lambda T: 10.0 ** (-C1 * (T - T_ref) / (C2 + T - T_ref))
+
+
+def arrhenius_shift(E_R, T_ref):
+
+    """a_T(T) = exp(E_R (1/T - 1/T_ref)), T in °C (Kelvin inside), E_R = E_a / R [K]: for ve.setTemperatureShift."""
+
+    E_R, T_ref = float(E_R), float(T_ref)
+    return lambda T: jnp.exp(E_R * (1.0 / (T + KELVIN_OFFSET) - 1.0 / (T_ref + KELVIN_OFFSET)))
+
+
 class Exponential(ViscosityLaw):
 
     """mu(gamma_dot, T) = mu_ref(gamma_dot) exp(-b (T - T_ref)): a simple temperature factor (b [1/K])."""

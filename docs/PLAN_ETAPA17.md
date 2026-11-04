@@ -187,7 +187,7 @@ sobreoscilación de T es resolución del frente, no el SUPG.
 | Deslizamiento en pared (Navier, con umbral) | Hecho (`addBC_SlipLawEdges`, `NavierSlip`, `PowerSlip`) |
 | Modelo PTT | Hecho (`'ptt-linear'`, `'ptt-exp'`) |
 | Ajuste de parámetros | Hecho con datos sintéticos (`Source/Physics/Fitting.py`, `Example_Fit_Rheology.py`); falta probarlo con datos de un material real |
-| Viscoelástico no isotermo (WLF en λ, calentamiento viscoso) | Pendiente; el ajuste ya da C1 y C2 de los tiempos de relajación |
+| Viscoelástico no isotermo (WLF en λ, calentamiento viscoso) | Hecho (`ve.setTemperatureShift`, `ve.setViscousHeating`, `Test/test_viscoelastic_thermal.py`, `Example_Viscoelastic_NonIsothermal.py`) |
 | Compresibilidad (pvT, Tait) | Pendiente |
 | Superficie libre | Pendiente |
 | Llenado de molde (VOF o conjunto de nivel) | Pendiente |

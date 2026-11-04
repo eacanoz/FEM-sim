@@ -39,6 +39,13 @@
 # An indefinite b also squares to a conformation, and it is a spurious solution: the solvers reject any state whose b is not
 # positive definite (System.require_admissible). Checking the nodes is enough: the cone is convex and b is linear in an element.
 #
+# Non-isothermal flow (setTemperatureShift, setViscousHeating), by time-temperature superposition: lam(T) = a_T(T) lam and
+# mu(T) = a_T(T) mu, so the modulus G = mu / lam and the stress G (c - I) of a given b do not change; only the relaxation of the
+# equation of b does. T is an input of the law, and the tangent has d/dT. The heating is fraction * tau : grad u [+ tau_tt u_r / r]
+# into the temperature: fraction = 1 when the elasticity is entropic (all the work of the polymer stress becomes heat, Peters &
+# Baaijens 1997), 0 when the stored part is energy and not heat. The solvent has its own heating, flow.setViscousHeating, and its
+# own viscosity law in T.
+#
 # The equation of b is hyperbolic: it takes values only at the inflow (addBC_InflowEdges). Its tangent is automatic, with
 # tau_s frozen. An outlet of the flow physics fixes the total normal traction; addBC_OutletEdges of this physics takes the
 # polymer stress out of it, so that the given pressure is the pressure of a developed flow.
@@ -99,16 +106,19 @@ def conformation_rate(b, L, hoop, lam, alpha, constitutive='giesekus'):
     return jnp.concatenate([plane, jnp.array([hoop * b[3] - 0.5 / lam * relaxation_t / b[3]])])
 
 
-def conformation_law(mu, lam, alpha, nc, devss=False, constitutive='giesekus'):
+def conformation_law(mu, lam, alpha, nc, devss=False, constitutive='giesekus', shift=None, heating=0.0):
 
     """Pointwise law of a mode for GradientLawTerm.
 
-    Inputs: b (nc), grad b (nc x 2), u (2), grad u (4), with DEVSS-G also G (4) and grad G (8), then the data at the Gauss
-    points: tau_s, db/dt (nc), r, kappa, a given source s (nc). Outputs: for b a source (nc) and a flux (nc x 2), for u a source
-    (2) and a flux (4).
+    Inputs: b (nc), grad b (nc x 2), u (2), grad u (4), with DEVSS-G also G (4) and grad G (8), with a temperature shift (or heating)
+    T (1) and grad T (2), then the data at the Gauss points: tau_s, db/dt (nc), r, kappa, a given source s (nc). Outputs: for b a
+    source (nc) and a flux (nc x 2), for u a source (2) and a flux (4), with heating for T a source (1) and a flux (2).
+    shift: a_T(T) multiplying lam; heating: the fraction of tau : grad u that goes into T.
     """
 
-    data = 3 * nc + 6 + (12 if devss else 0)
+    thermal = shift is not None or heating
+    T_at = 3 * nc + 6 + (12 if devss else 0)
+    data = T_at + (3 if thermal else 0)
 
     def law(w):
         b, grad_b = w[:nc], w[nc:3 * nc].reshape(nc, 2)
@@ -117,15 +127,22 @@ def conformation_law(mu, lam, alpha, nc, devss=False, constitutive='giesekus'):
             L = w[3 * nc + 6:3 * nc + 10].reshape(2, 2)
         tau_s, b_t, r, kappa = w[data], w[data + 1:data + 1 + nc], w[data + 1 + nc], w[data + 2 + nc]
         source = w[data + 3 + nc:data + 3 + 2 * nc]
+        lam_T = lam * shift(w[T_at]) if shift is not None else lam
 
-        residual = grad_b @ u - conformation_rate(b, L, u[0] / r, lam, alpha, constitutive) - source
+        residual = grad_b @ u - conformation_rate(b, L, u[0] / r, lam_T, alpha, constitutive) - source
         supg = tau_s * jnp.outer(residual + b_t, u) + kappa * grad_b
 
         B = _plane(b)
-        stress = mu / lam * (B @ B - jnp.eye(2))
+        stress = mu / lam * (B @ B - jnp.eye(2))                    # G (c - I): G = mu / lam does not shift
         hoop_force = mu / lam * (b[3] * b[3] - 1.0) / r if nc == 4 else 0.0
+        out = [residual, supg.ravel(), jnp.array([hoop_force, 0.0]), stress.ravel()]
 
-        return jnp.concatenate([residual, supg.ravel(), jnp.array([hoop_force, 0.0]), stress.ravel()])
+        if heating:
+            grad_u = w[3 * nc + 2:3 * nc + 6].reshape(2, 2)          # the velocity gradient itself, also with DEVSS-G
+            power = jnp.sum(stress * grad_u) + (mu / lam * (b[3] * b[3] - 1.0) * u[0] / r if nc == 4 else 0.0)
+            out += [jnp.array([-heating * power]), jnp.zeros(2)]     # R_T -= integral N fraction tau : grad u
+
+        return jnp.concatenate(out)
 
     return law
 
@@ -169,9 +186,12 @@ class ConformationTerm(GradientLawTerm):
 
     """The equation of b of one mode and its stress in the momentum equation, all through its pointwise law."""
 
-    def __init__(self, system, law, field, nc, lam, devss=False, diffusion=0.0, where=None, source=None):
-        super().__init__(system, law, [field, 'u', 'G'] if devss else [field, 'u'], [field, 'u'])
+    def __init__(self, system, law, field, nc, lam, devss=False, diffusion=0.0, where=None, source=None, temperature=None,
+                 heating=False, shift=None):
+        inputs = [field, 'u', 'G'] if devss else [field, 'u']
+        super().__init__(system, law, inputs + ([temperature] if temperature else []), [field, 'u'] + ([temperature] if heating else []))
         self.field, self.nc, self.lam, self.diffusion = field, nc, lam, diffusion
+        self.temperature, self.shift = temperature, shift
         self._where = 1.0 if where is None else ops.at_gauss(system.disc, where)
         disc = system.disc
         self._source = (np.zeros(disc.detJw.shape + (nc,)) if source is None else
@@ -193,7 +213,11 @@ class ConformationTerm(GradientLawTerm):
         u = disc.interpolate(np.asarray(fields['u'], dtype=float))
         speed_field = fields['u'] if self.tau_state is None else layout.split(self.tau_state)['u']
         speed_u = disc.interpolate(np.asarray(speed_field, dtype=float))
-        tau_s = 1.0 / np.sqrt((2.0 * np.linalg.norm(speed_u, axis=-1) / self._h) ** 2 + (2.0 / self.lam) ** 2)
+        lam = self.lam
+        if self.shift is not None:                                   # tau_s with the local relaxation time, frozen like |u|
+            state = fields if self.tau_state is None else layout.split(self.tau_state)
+            lam = self.lam * np.asarray(self.shift(jnp.asarray(disc.interpolate(np.asarray(state[self.temperature], dtype=float)))))
+        tau_s = 1.0 / np.sqrt((2.0 * np.linalg.norm(speed_u, axis=-1) / self._h) ** 2 + (2.0 / lam) ** 2)
 
         b_t = np.zeros((nel, ngp, nc))
         if time is not None:
@@ -276,6 +300,9 @@ class ve(physics):
         self.diffusion = 0.0
         self.diffusion_where = None
         self.sources = {}
+        self.shift = None                # a_T(T) of the relaxation times (setTemperatureShift)
+        self.temperature = None          # the field T read by the shift or heated (setTemperatureShift, setViscousHeating)
+        self.heating = 0.0               # fraction of tau : grad u into T (setViscousHeating)
         self.constitutive = 'giesekus'
         self._rest = np.array([1.0, 0.0, 1.0, 1.0])[:self.nc]
 
@@ -307,6 +334,26 @@ class ve(physics):
 
         self.diffusion = float(c)
         self.diffusion_where = where
+
+    def setTemperatureShift(self, shift, field='T'):
+
+        """Time-temperature superposition: lam(T) = a_T(T) lam and mu(T) = a_T(T) mu for every mode, with the temperature field
+        `field` of the same model (Model(psc=[ff, ht, ve])). shift: a_T(T) with jax.numpy, T in °C, e.g. Rheology.wlf_shift(C1, C2,
+        T_ref) or Rheology.arrhenius_shift(E_R, T_ref) (the modes are then those at T_ref). None removes it. The values at the
+        inflows use the temperature given to addBC_InflowEdges, or the current T field there."""
+
+        self.shift = shift
+        self.temperature = field if shift is not None or self.heating else None
+        for edges, gradient, temperature in self.inflows:
+            self._set_inflow(edges, gradient, temperature)
+
+    def setViscousHeating(self, on=True, field='T', fraction=1.0):
+
+        """The work of the polymer stress, fraction * tau : grad u [W/m3], as a heat source of `field`. fraction = 1: entropic
+        elasticity, all of it becomes heat; less than 1 when part of it is stored as energy. The solvent: flow.setViscousHeating."""
+
+        self.heating = float(fraction) if on else 0.0
+        self.temperature = field if self.shift is not None or self.heating else None
 
     def setSource(self, f, mode=0):
 
@@ -340,14 +387,17 @@ class ve(physics):
 
         self.modes = [(mu, lam * factor, alpha) for mu, lam, alpha in self.modes]
 
-        for edges, gradient in self.inflows:
-            self._set_inflow(edges, gradient)
+        for edges, gradient, temperature in self.inflows:
+            self._set_inflow(edges, gradient, temperature)
 
-    def developed(self, L, hoop=0.0, mode=0):
+    def developed(self, L, hoop=0.0, mode=0, T=None):
 
-        """The steady b of a homogeneous flow with velocity gradient L (2 x 2) and hoop strain rate, from the rest state."""
+        """The steady b of a homogeneous flow with velocity gradient L (2 x 2) and hoop strain rate, from the rest state; at the
+        temperature T if the relaxation times shift with it."""
 
         mu, lam, alpha = self.modes[mode]
+        if self.shift is not None and T is not None:
+            lam = lam * float(self.shift(jnp.asarray(float(T))))
         L = jnp.asarray(L, dtype=float)
         rate = jax.jit(lambda b: conformation_rate(b, L, hoop, lam, alpha, self.constitutive))
         solution = solve_ivp(lambda t, b: np.asarray(rate(jnp.asarray(b))), (0.0, 100.0 * lam), self._rest, method='LSODA',
@@ -355,25 +405,31 @@ class ve(physics):
 
         return solution.y[:, -1]
 
-    def addBC_InflowEdges(self, edges, gradient):
+    def addBC_InflowEdges(self, edges, gradient, temperature=None):
 
         """Values of b at an inflow: the steady state of the velocity gradient there, gradient(x, y) -> L (2 x 2). On the
-        vertices of the edges, for each mode. A function that returns zeros gives the rest state."""
+        vertices of the edges, for each mode. A function that returns zeros gives the rest state. With setTemperatureShift, the
+        relaxation times are those of `temperature` (a number or a function of x, y; by default the current T field there)."""
 
-        self.inflows.append((list(edges), gradient))
-        self._set_inflow(edges, gradient)
+        self.inflows.append((list(edges), gradient, temperature))
+        self._set_inflow(edges, gradient, temperature)
 
-    def _set_inflow(self, edges, gradient):
+    def _set_inflow(self, edges, gradient, temperature=None):
 
         nodes = self.modelRef._mesh.NL
         vertices = sorted({int(n) for edge in edges for n in (edge[0], edge[-1])})
+
+        T_field = None
+        if self.shift is not None and temperature is None:
+            T_field = np.asarray(self.modelRef.physics.var[self.temperature].values, dtype=float)
 
         for m in range(len(self.modes)):
             for k in vertices:
                 x, y = nodes[k].coor[:2]
                 L = np.asarray(gradient(x, y), dtype=float)
                 hoop = 0.0
-                nodes[k].BC[f'b{m}'] = self.setDirichletBC(list(self.developed(L, hoop, m)))
+                T = (temperature(x, y) if callable(temperature) else temperature) if T_field is None else T_field[k]
+                nodes[k].BC[f'b{m}'] = self.setDirichletBC(list(self.developed(L, hoop, m, T)))
 
     def addBC_OutletEdges(self, edges):
 
@@ -525,10 +581,14 @@ class ve(physics):
             system.add_mass(layout.scatter_matrix(ops.vector_mass(disc, 1.0, self.nc), rows, rows))
 
             devss = bool(self.devss)
-            law = cached_law(('conformation', mu, lam, alpha, self.nc, devss, self.constitutive),
-                             lambda: PointwiseLaw(conformation_law(mu, lam, alpha, self.nc, devss, self.constitutive)))
+            if self.temperature is not None and self.temperature not in layout.names:
+                raise ValueError(f"El viscoelastico no isotermo usa el campo '{self.temperature}', que no existe en el modelo "
+                                 "(Model(psc=[ff, ht, ve])).")
+            shift, heating = self.shift, self.heating
+            law = cached_law(('conformation', mu, lam, alpha, self.nc, devss, self.constitutive, shift, heating),
+                             lambda: PointwiseLaw(conformation_law(mu, lam, alpha, self.nc, devss, self.constitutive, shift, heating)))
             system.add_term(ConformationTerm(system, law, field, self.nc, lam, devss, self.diffusion, self.diffusion_where,
-                                             self.sources.get(m)))
+                                             self.sources.get(m), self.temperature, bool(heating), shift))
 
             for edges in self.outlets:
                 system.add_term(PolymerTractionTerm(system, disc.facets(edges), field, mu, lam))

@@ -146,6 +146,7 @@
 | Reómetro multimodo | fluido inelástico de igual viscosidad; difusión localizada frente a sin ella | `Test/test_viscoelastic.py` (modo largo, malla gruesa); `Example_Viscoelastic_Rheometer.py` | τ_w igual a 4 cifras; caída a ≤ 1 % donde ambos convergen |
 | Deslizamiento en pared | Poiseuille con Navier (exacto en Taylor–Hood); límites adherido y libre; ley de potencia; umbral; tangente; canal Oldroyd-B | `Test/test_slip_ptt.py` | 1e-10; 1e-7; umbral a 0.1 %; tangente 1e-7 |
 | Análisis de Mooney | capilares de dos radios, ley de potencia con Navier, axisimétrico | `Test/test_slip_ptt.py` | recupera u_s = 0.07500 dado, a < 0.2 %, y la tasa verdadera a < 0.5 % |
+| Viscoelástico no isotermo | tangente con d/dT y calentamiento, plano y axisimétrico, con y sin DEVSS-G; T uniforme = isotermo con λ·a_T; Couette con calentamiento y viscosidad en T frente a `solve_bvp` (a_T del centro 0.51) | `Test/test_viscoelastic_thermal.py` | tangente ≤ 2.4e-10; isotermo 1e-15; Couette orden 1.93–2.02 en T, u, τ_xy y τ_xx (Q9 y T6) |
 | Ajuste de parámetros (`Source/Physics/Fitting.py`) | datos sintéticos de parámetros conocidos, exactos y con 2–3 % de dispersión: Cross–WLF, factores a_T y WLF/Arrhenius, espectro de Maxwell, α de Giesekus y ε de PTT, y la cadena completa sobre un espectro ancho | `Test/test_fitting.py`, `Example_Fit_Rheology.py` | exactos: 1e-6 o mejor; con ruido, dentro de 4σ; cadena: log a_T a 0.013, η0 a 2.2 %, espectro 2.5 % rms, α 0.273 ± 0.023 (0.3) |
 | PTT (lineal y exponencial) | ecuación de `b`; viscometría (N₁ = 2λτ²/μ); extensión frente a `solve_ivp`; corte y extensión transitorios; tangente plana y axisimétrica | `Test/test_slip_ptt.py` | 1e-11; 1e-6; orden 2 en el tiempo; 1e-7 |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
@@ -356,7 +357,12 @@ Lo que sigue pendiente:
   - **WLF:** C1 y C2 uno a uno se mueven ~8 % con el ruido de cuatro a_T; el desplazamiento que dan, a ±0.013 en log10 a_T.
   - **α y ε:** solo desde la viscosidad de corte, dentro de la ventana del espectro. Sin datos extensionales, que fijarían mejor el
     parámetro del que dependen las pérdidas de Bagley.
-  - El desplazamiento WLF de los tiempos de relajación todavía no lo usa la física viscoelástica (isoterma).
+- **Viscoelástico no isotermo (`ve.setTemperatureShift`, `ve.setViscousHeating`):** λ y μ_p con a_T(T) (`Rheology.wlf_shift`, `arrhenius_shift`;
+  `Fitting.fit_wlf` da C1 y C2), G constante; el calentamiento es `fraction` · τ : ∇u (1: elasticidad entrópica). El solvente lleva su ley en T y
+  `flow.setViscousHeating` aparte. Sin desplazamiento vertical (ρT / ρ_ref T_ref = 1); `inelasticEquivalent` no lo incluye. Reómetro capilar
+  (`Example_Viscoelastic_NonIsothermal.py`, 49 584 incógnitas, malla gruesa): a 241.6 1/s, ΔT máx. 0.81 K, T de mezcla +0.72 K (cota adiabática
+  ΔP / ρ Cp = 2.7 K), caída −0.4 % y pérdida de entrada +2.3 % frente al isotermo; 4–5 iteraciones por tasa. En un capilar de 1 mm el efecto es
+  pequeño; en dados de producción, con más caudal y menos conducción, crece. Sin referencia experimental.
 - **Deslizamiento en pared (`addBC_SlipLawEdges`, `NavierSlip`, `PowerSlip`):** solo paredes alineadas con los ejes. En el reómetro Giesekus con β = 5×10⁶ Pa·s/m, la caída baja a la
   mitad a 9 s⁻¹ (2.12 frente a 4.24 bar), pero el alcance se queda en 151 s⁻¹ (241 sin deslizamiento): la transición en la esquina es más dura. Parámetros ilustrativos.
 - **`converged=True` no garantiza la solución a Wi alto:** Couette reporta convergencia con error en `τ_xx` de 19 % a Wi = 64 con factor 2,
