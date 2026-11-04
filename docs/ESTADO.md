@@ -146,6 +146,7 @@
 | Reómetro multimodo | fluido inelástico de igual viscosidad; difusión localizada frente a sin ella | `Test/test_viscoelastic.py` (modo largo, malla gruesa); `Example_Viscoelastic_Rheometer.py` | τ_w igual a 4 cifras; caída a ≤ 1 % donde ambos convergen |
 | Deslizamiento en pared | Poiseuille con Navier (exacto en Taylor–Hood); límites adherido y libre; ley de potencia; umbral; tangente; canal Oldroyd-B | `Test/test_slip_ptt.py` | 1e-10; 1e-7; umbral a 0.1 %; tangente 1e-7 |
 | Análisis de Mooney | capilares de dos radios, ley de potencia con Navier, axisimétrico | `Test/test_slip_ptt.py` | recupera u_s = 0.07500 dado, a < 0.2 %, y la tasa verdadera a < 0.5 % |
+| Ajuste de parámetros (`Source/Physics/Fitting.py`) | datos sintéticos de parámetros conocidos, exactos y con 2–3 % de dispersión: Cross–WLF, factores a_T y WLF/Arrhenius, espectro de Maxwell, α de Giesekus y ε de PTT, y la cadena completa sobre un espectro ancho | `Test/test_fitting.py`, `Example_Fit_Rheology.py` | exactos: 1e-6 o mejor; con ruido, dentro de 4σ; cadena: log a_T a 0.013, η0 a 2.2 %, espectro 2.5 % rms, α 0.273 ± 0.023 (0.3) |
 | PTT (lineal y exponencial) | ecuación de `b`; viscometría (N₁ = 2λτ²/μ); extensión frente a `solve_ivp`; corte y extensión transitorios; tangente plana y axisimétrica | `Test/test_slip_ptt.py` | 1e-11; 1e-6; orden 2 en el tiempo; 1e-7 |
 | Malla 2D frente a referencia | coordenadas y conectividad iguales a `2DFEM.py` | comprobación manual | igual |
 
@@ -344,6 +345,18 @@ Lo que sigue pendiente:
   618, 990 y 1583 s⁻¹ (malla gruesa, s = 4). El aumento de Bagley depende del modelo, no solo de la curva de viscosidad: hace falta ajustar datos
   extensionales. **Sin validar frente a experimentos**, ni con un espectro medido.
 - **PTT llega más lejos que Giesekus:** en el reómetro con s = 4, 94 s⁻¹ sin difusión (Giesekus ~40) y al menos 1583 s⁻¹ con difusión local (Giesekus 241).
+- **Ajuste de parámetros (`Source/Physics/Fitting.py`):** sobre errores relativos (logaritmos). Validado solo con datos sintéticos: sin datos
+  de un material real todavía. Lo que mide cada ajuste y sus límites:
+  - **Cross–WLF:** A2 fijo en 51.6 K por defecto. D1, D2 y A1 uno a uno quedan mal determinados con cuatro temperaturas en 60 K (D1 cambia
+    órdenes de magnitud entre muestras de ruido), pero μ0(T) en las temperaturas medidas queda a ≤ 4 %: no extrapolar en temperatura. Un
+    Cross de un solo n deja un 13 % sobre un espectro que acaba en 1e-3 s, porque la viscosidad cae cada vez más rápido: 3.6 % con modos
+    hasta 1e-5 s, como un fundido.
+  - **Espectro:** 2 tiempos por década, una década más a cada lado de la ventana; sin ella, los modos cortos se acumulan en el primero
+    (12 % frente a 2.4 %). `refine=True` baja el rms, pero puede mover η0 (+9 % en ese caso). Fuera de la ventana de frecuencias es extrapolación.
+  - **WLF:** C1 y C2 uno a uno se mueven ~8 % con el ruido de cuatro a_T; el desplazamiento que dan, a ±0.013 en log10 a_T.
+  - **α y ε:** solo desde la viscosidad de corte, dentro de la ventana del espectro. Sin datos extensionales, que fijarían mejor el
+    parámetro del que dependen las pérdidas de Bagley.
+  - El desplazamiento WLF de los tiempos de relajación todavía no lo usa la física viscoelástica (isoterma).
 - **Deslizamiento en pared (`addBC_SlipLawEdges`, `NavierSlip`, `PowerSlip`):** solo paredes alineadas con los ejes. En el reómetro Giesekus con β = 5×10⁶ Pa·s/m, la caída baja a la
   mitad a 9 s⁻¹ (2.12 frente a 4.24 bar), pero el alcance se queda en 151 s⁻¹ (241 sin deslizamiento): la transición en la esquina es más dura. Parámetros ilustrativos.
 - **`converged=True` no garantiza la solución a Wi alto:** Couette reporta convergencia con error en `τ_xx` de 19 % a Wi = 64 con factor 2,

@@ -180,6 +180,20 @@ Resueltos después: el arranque del pseudo-transitorio desde u = 0 (respaldo aut
 `ff.setGradDiv(γ)` como opción (−0.006 °C con γ = ρUL), a costa de precisión en Kovasznay; la forma conservativa se probó y se descartó (`docs/ESTADO.md`). La
 sobreoscilación de T es resolución del frente, no el SUPG.
 
+## Ampliación para procesamiento de polímeros
+
+| Ampliación | Estado |
+|---|---|
+| Deslizamiento en pared (Navier, con umbral) | Hecho (`addBC_SlipLawEdges`, `NavierSlip`, `PowerSlip`) |
+| Modelo PTT | Hecho (`'ptt-linear'`, `'ptt-exp'`) |
+| Ajuste de parámetros | Hecho con datos sintéticos (`Source/Physics/Fitting.py`, `Example_Fit_Rheology.py`); falta probarlo con datos de un material real |
+| Viscoelástico no isotermo (WLF en λ, calentamiento viscoso) | Pendiente; el ajuste ya da C1 y C2 de los tiempos de relajación |
+| Compresibilidad (pvT, Tait) | Pendiente |
+| Superficie libre | Pendiente |
+| Llenado de molde (VOF o conjunto de nivel) | Pendiente |
+| Cristalización y solidificación | Pendiente, sobre lo no isotermo |
+| 3D | Pendiente |
+
 ## Orden recomendado
 
 1. Commit de SST experimental + generalización de viscosidad.
