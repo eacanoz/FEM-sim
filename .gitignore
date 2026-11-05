@@ -1,6 +1,8 @@
 # Archivos generados al ejecutar simulaciones, ejemplos y pruebas
 Logs/
 resultados_vtk/
+graphify-out/
+docs/
 
 # Python
 __pycache__/

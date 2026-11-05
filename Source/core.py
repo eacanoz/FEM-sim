@@ -115,6 +115,19 @@ class Model(object):
 
         return self._geometry
 
+    def moveNodes(self, xy):
+
+        """New coordinates of the nodes (n_nodes, dim), for a domain that changes shape (FreeSurface): the topology, the boundary
+        groups and the conditions stay, and the discretization is built again on the next solve. The fields keep their nodal values."""
+
+        xy = np.asarray(xy, dtype=float)
+        if xy.shape != (self._mesh.getNoN(), self._PD):
+            raise ValueError(f"Se esperaban {self._mesh.getNoN()} x {self._PD} coordenadas.")
+        for node, c in zip(self._mesh.NL, xy):
+            node.coor = tuple(float(v) for v in c)
+        self._geometry = None
+        self._system_cache = None
+
     def region_field(self, values, default=None):
 
         """A coefficient by region of an imported mesh, {'name': value}, for any property given at the Gauss points

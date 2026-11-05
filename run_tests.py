@@ -44,6 +44,7 @@ SUITES = [
     "Test/test_quadratic_gaps.py",
     "Test/test_fitting.py",
     "Test/test_viscoelastic_thermal.py",
+    "Test/test_free_surface.py",
 ]
 
 

@@ -146,6 +146,8 @@
 | Reómetro multimodo | fluido inelástico de igual viscosidad; difusión localizada frente a sin ella | `Test/test_viscoelastic.py` (modo largo, malla gruesa); `Example_Viscoelastic_Rheometer.py` | τ_w igual a 4 cifras; caída a ≤ 1 % donde ambos convergen |
 | Deslizamiento en pared | Poiseuille con Navier (exacto en Taylor–Hood); límites adherido y libre; ley de potencia; umbral; tangente; canal Oldroyd-B | `Test/test_slip_ptt.py` | 1e-10; 1e-7; umbral a 0.1 %; tangente 1e-7 |
 | Análisis de Mooney | capilares de dos radios, ley de potencia con Navier, axisimétrico | `Test/test_slip_ptt.py` | recupera u_s = 0.07500 dado, a < 0.2 %, y la tasa verdadera a < 0.5 % |
+| Superficie libre: hinchamiento newtoniano | método de la línea de corriente; plano frente a 1.190 ± 0.002 (Tanner 2002, en arXiv:1408.5167; publicados 1.184–1.200); axisimétrico frente a ≈ 1.127 (fuente secundaria); flujo tapón | `Test/test_free_surface.py`, `Test/manual/die_swell.py` | plano 1.19112, 1.18907, 1.18786 (borde 0.025 a 0.00625 H), orden ≈ 0.8, extrapolado ≈ 1.186 (el elemento singular de Georgiou y Boudouvis da 1.1863); axisimétrico 1.13356, 1.13063, 1.12883; tapón 1e-13; 11–13 iteraciones |
+| Superficie libre: hinchamiento viscoelástico | Giesekus α = 0.2, β = 1/9, Wi = λU/H hasta 3; límite newtoniano; tres mallas | `Test/manual/die_swell_ve.py`, `Example_Die_Swell.py`, `Ejemplo_Hinchamiento_Extrudado.ipynb` | B − B_newt ∝ Wi a Wi bajo (dB/dWi ≈ −0.45); mínimo 1.150 cerca de Wi = 0.25 y luego casi lineal, 1.371 a Wi = 3 (malla 0.025): la tendencia publicada, sin tabla de referencia; incertidumbre de malla 0.2–0.3 % |
 | Viscoelástico no isotermo | tangente con d/dT y calentamiento, plano y axisimétrico, con y sin DEVSS-G; T uniforme = isotermo con λ·a_T; Couette con calentamiento y viscosidad en T frente a `solve_bvp` (a_T del centro 0.51) | `Test/test_viscoelastic_thermal.py` | tangente ≤ 2.4e-10; isotermo 1e-15; Couette orden 1.93–2.02 en T, u, τ_xy y τ_xx (Q9 y T6) |
 | Ajuste de parámetros (`Source/Physics/Fitting.py`) | datos sintéticos de parámetros conocidos, exactos y con 2–3 % de dispersión: Cross–WLF, factores a_T y WLF/Arrhenius, espectro de Maxwell, α de Giesekus y ε de PTT, y la cadena completa sobre un espectro ancho | `Test/test_fitting.py`, `Example_Fit_Rheology.py` | exactos: 1e-6 o mejor; con ruido, dentro de 4σ; cadena: log a_T a 0.013, η0 a 2.2 %, espectro 2.5 % rms, α 0.273 ± 0.023 (0.3) |
 | PTT (lineal y exponencial) | ecuación de `b`; viscometría (N₁ = 2λτ²/μ); extensión frente a `solve_ivp`; corte y extensión transitorios; tangente plana y axisimétrica | `Test/test_slip_ptt.py` | 1e-11; 1e-6; orden 2 en el tiempo; 1e-7 |
@@ -357,6 +359,18 @@ Lo que sigue pendiente:
   - **WLF:** C1 y C2 uno a uno se mueven ~8 % con el ruido de cuatro a_T; el desplazamiento que dan, a ±0.013 en log10 a_T.
   - **α y ε:** solo desde la viscosidad de corte, dentro de la ventana del espectro. Sin datos extensionales, que fijarían mejor el
     parámetro del que dependen las pérdidas de Bagley.
+- **Superficie libre (`Source/Physics/FreeSurface.py`, `Model.moveNodes`):** estacionaria, por el método de la línea de corriente (Tanner): flujo con
+  tracción nula en la superficie, dh/ds = u_t / u_s desde el borde del dado, nodos movidos en la dirección transversal en proporción, y repetir.
+  Sirve con cualquier física del código, plano o axisimétrico, sin incógnitas nuevas. Converge en 10–13 iteraciones (factor ≈ 0.3 por iteración)
+  también con Giesekus hasta Wi = 3. Límites:
+  - El borde del dado es singular: B converge en malla con orden ≈ 0.8. La condición cinemática se cumple en los nodos; el caudal que cruza la
+    superficie baja como h² (5e-6 Q con borde 0.00625 H), y |u·n|/|u| queda en ~3 % junto al borde.
+  - Viscoelástico: entre mallas de borde 0.05, 0.025 y 0.0125 H la convergencia deja de ser monótona a Wi ≥ 0.75 (saltos 0.0005–0.0008 y
+    luego 0.0013–0.0015): la capa de esfuerzos del borde no está resuelta; incertidumbre de 0.2–0.3 % en B.
+  - Sin referencia tabulada para el viscoelástico: Crochet y Keunings (1982) está escaneado y el estudio con VOF (JNNFM 2018) no tiene tablas
+    abiertas. Se comprueba el límite newtoniano, que el efecto a Wi bajo es lineal y la tendencia publicada (mínimo a Wi > 0, luego aumento).
+  - Mover nodos solo en la dirección transversal sirve para hinchamientos moderados; sin remallado, tensión superficial ni gravedad. El
+    no isotermo con superficie libre no se ha probado.
 - **Viscoelástico no isotermo (`ve.setTemperatureShift`, `ve.setViscousHeating`):** λ y μ_p con a_T(T) (`Rheology.wlf_shift`, `arrhenius_shift`;
   `Fitting.fit_wlf` da C1 y C2), G constante; el calentamiento es `fraction` · τ : ∇u (1: elasticidad entrópica). El solvente lleva su ley en T y
   `flow.setViscousHeating` aparte. Sin desplazamiento vertical (ρT / ρ_ref T_ref = 1); `inelasticEquivalent` no lo incluye. Reómetro capilar
