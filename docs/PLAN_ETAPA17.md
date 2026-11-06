@@ -190,7 +190,7 @@ sobreoscilación de T es resolución del frente, no el SUPG.
 | Viscoelástico no isotermo (WLF en λ, calentamiento viscoso) | Hecho (`ve.setTemperatureShift`, `ve.setViscousHeating`, `Test/test_viscoelastic_thermal.py`, `Example_Viscoelastic_NonIsothermal.py`) |
 | Compresibilidad (pvT, Tait) | Hecho (`Rheology.TaitPVT`, `Fitting.fit_tait`, `ff.setDensityLaw`, `Example_Packing.py`): plano, Taylor–Hood; empaque isotermo frente a la difusión de presión |
 | Superficie libre | Hecho, estacionaria (`Source/Physics/FreeSurface.py`): newtoniano plano y axisimétrico frente a la literatura, Giesekus hasta Wi = 3; sin tensión superficial ni remallado |
-| Llenado de molde (VOF o conjunto de nivel) | Pendiente |
+| Llenado de molde (VOF o conjunto de nivel) | En curso, Hele-Shaw 2.5D (`Source/Physics/HeleShaw.py`): etapa 1 isoterma hecha (volúmenes de control); faltan temperatura en el espesor, empaque y el ejemplo. Navier–Stokes de dos fases y 3D, más adelante |
 | Cristalización y solidificación | Pendiente, sobre lo no isotermo |
 | 3D | Pendiente |
 

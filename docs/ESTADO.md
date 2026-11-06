@@ -146,6 +146,7 @@
 | Reómetro multimodo | fluido inelástico de igual viscosidad; difusión localizada frente a sin ella | `Test/test_viscoelastic.py` (modo largo, malla gruesa); `Example_Viscoelastic_Rheometer.py` | τ_w igual a 4 cifras; caída a ≤ 1 % donde ambos convergen |
 | Deslizamiento en pared | Poiseuille con Navier (exacto en Taylor–Hood); límites adherido y libre; ley de potencia; umbral; tangente; canal Oldroyd-B | `Test/test_slip_ptt.py` | 1e-10; 1e-7; umbral a 0.1 %; tangente 1e-7 |
 | Análisis de Mooney | capilares de dos radios, ley de potencia con Navier, axisimétrico | `Test/test_slip_ptt.py` | recupera u_s = 0.07500 dado, a < 0.2 %, y la tasa verdadera a < 0.5 % |
+| Llenado Hele-Shaw (plano medio), isotermo | fluidez del espesor (newtoniano y ley de potencia exactos); tira a caudal constante y disco con entrada central frente a sus soluciones exactas, newtoniano y ley de potencia n = 0.35 | `Test/test_hele_shaw.py`, `Test/manual/hele_shaw_strip.py`, `Test/manual/hele_shaw_disk.py` | fluidez 3e-12; masa frente a Q t 1e-14; tira: presión de entrada +1.54, +0.78, +0.39 % (orden 1 en el volumen de control); disco: frente a un volumen de control del radio exacto, presión de entrada −0.13 % (1 mm) y −0.01 % (0.5 mm), ley de potencia +0.14 % |
 | Ecuación de estado (Tait de dos dominios) y su ajuste | ramas fundido y sólido; ajuste de datos sintéticos con 0.02 % de dispersión; ajuste de medidas reales (PP con 30 % de fibra de vidrio, 560 puntos de 0.1 a 200 MPa y 20 a 280 °C) | `Test/test_compressible.py`; `Fitting.fit_tait` | ramas 1e-12; sintético: error 0.058 %, transición a 0.37 K; medidas: rms 0.036 % (fundido 0.017, sólido 0.013, transición 0.08 %), máximo 0.43 %, T_t = 180.7 °C + 0.17 K/MPa |
 | Flujo compresible (`ff.setDensityLaw`) | tangente (también la parte temporal sola, y con Cross y Cross–WLF); densidad constante = grad-div con γ = −2/3 μ; canal estacionario frente a lubricación (ρ +27 %); empaque frente a la serie de la difusión de presión; calentamiento por compresión | `Test/test_compressible.py` | tangente ≤ 3.2e-9; grad-div 1e-14; canal 1.4e-4 de p_in, caudal másico entrada = salida a 1e-6; empaque 1.2e-3 a 1.2e-4 (Q9 y T6); calentamiento 4e-5 |
 | Superficie libre: hinchamiento newtoniano | método de la línea de corriente; plano frente a 1.190 ± 0.002 (Tanner 2002, en arXiv:1408.5167; publicados 1.184–1.200); axisimétrico frente a ≈ 1.127 (fuente secundaria); flujo tapón | `Test/test_free_surface.py`, `Test/manual/die_swell.py` | plano 1.19112, 1.18907, 1.18786 (borde 0.025 a 0.00625 H), orden ≈ 0.8, extrapolado ≈ 1.186 (el elemento singular de Georgiou y Boudouvis da 1.1863); axisimétrico 1.13356, 1.13063, 1.12883; tapón 1e-13; 11–13 iteraciones |
@@ -361,6 +362,15 @@ Lo que sigue pendiente:
   - **WLF:** C1 y C2 uno a uno se mueven ~8 % con el ruido de cuatro a_T; el desplazamiento que dan, a ±0.013 en log10 a_T.
   - **α y ε:** solo desde la viscosidad de corte, dentro de la ventana del espectro. Sin datos extensionales, que fijarían mejor el
     parámetro del que dependen las pérdidas de Bagley.
+- **Llenado Hele-Shaw (`Source/Physics/HeleShaw.py`), etapa 1, isotermo:** presión div(S ∇p) = 0 con la fluidez S = ∫ z²/η dz del espesor (tabulada
+  por espesor, en capas de Gauss–Legendre, para cualquier ley de viscosidad), Newton con la tangente completa (Picard no converge con n = 0.35)
+  arrancado por Picard amortiguado; frente por volúmenes de control con factor de llenado (FAN, Wang y Hieber): masa exacta, frente a un volumen de
+  control. Elementos lineales (T3, Q4). Límites y lo aprendido:
+  - Un conjunto de nivel transportado por la velocidad de una mezcla fundido–aire se probó primero y se descartó: el caudal de los elementos que corta
+    el frente y del aire junto a él no es fiable con un salto de fluidez de 1e4 (el frente de un disco salía 1.5 % lento o 4.6 % rápido según cómo se
+    reconstruyera la velocidad). Antes de eso, en la tira, hizo falta fluidez constante por elemento y evaluar el fundido a su propio gradiente.
+  - Se avanza un nodo por paso: 5835 pasos y 11 min en un cuarto de disco con 0.5 mm. Llenar varios nodos por paso queda pendiente.
+  - Sin temperatura todavía (etapa 2: capas en el espesor, molde frío, capa congelada), sin empaque (etapa 3: Tait) ni entradas por presión.
 - **Compresibilidad (`Rheology.TaitPVT`, `Fitting.fit_tait`, `ff.setDensityLaw`):** continuidad conservativa (1/ρ_ref)[∂ρ/∂t + ∇·(ρu)], con la
   derivada temporal del paso (BDF2 o Euler; no Crank–Nicolson), −2/3 μ div u en el esfuerzo y, opcional, el calentamiento β T Dp/Dt. Sin ley de
   densidad todo sigue igual. La transición del Tait se suaviza en `width` K (1 K deja 0.036 % de error con medidas reales). Límites:
