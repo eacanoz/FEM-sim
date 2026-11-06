@@ -188,7 +188,7 @@ sobreoscilación de T es resolución del frente, no el SUPG.
 | Modelo PTT | Hecho (`'ptt-linear'`, `'ptt-exp'`) |
 | Ajuste de parámetros | Hecho con datos sintéticos (`Source/Physics/Fitting.py`, `Example_Fit_Rheology.py`); falta probarlo con datos de un material real |
 | Viscoelástico no isotermo (WLF en λ, calentamiento viscoso) | Hecho (`ve.setTemperatureShift`, `ve.setViscousHeating`, `Test/test_viscoelastic_thermal.py`, `Example_Viscoelastic_NonIsothermal.py`) |
-| Compresibilidad (pvT, Tait) | Pendiente |
+| Compresibilidad (pvT, Tait) | Hecho (`Rheology.TaitPVT`, `Fitting.fit_tait`, `ff.setDensityLaw`, `Example_Packing.py`): plano, Taylor–Hood; empaque isotermo frente a la difusión de presión |
 | Superficie libre | Hecho, estacionaria (`Source/Physics/FreeSurface.py`): newtoniano plano y axisimétrico frente a la literatura, Giesekus hasta Wi = 3; sin tensión superficial ni remallado |
 | Llenado de molde (VOF o conjunto de nivel) | Pendiente |
 | Cristalización y solidificación | Pendiente, sobre lo no isotermo |

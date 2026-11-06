@@ -312,6 +312,9 @@ class System:
 
         # Rows of a constraint (the pressure of an incompressible flow): they never get a pseudo-time term
         self.constraint = np.zeros(n, dtype=bool)
+        # Rows without a mass matrix that still evolve in time, through a term that reads the step (the pressure of a compressible
+        # flow): they count when the transient Newton decides that an update is negligible
+        self.evolving = np.zeros(n, dtype=bool)
 
         self.is_dirichlet = np.zeros(n, dtype=bool)
         self.dirichlet_value = np.zeros(n)

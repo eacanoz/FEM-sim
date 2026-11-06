@@ -122,13 +122,18 @@ class CarreauYasuda(ViscosityLaw):
 class Cross(ViscosityLaw):
 
     """mu = mu0 / (1 + (mu0 gamma_dot / tau_star)^(1 - n)): zero-shear plateau mu0, power law of index n beyond
-    the shear stress tau_star [Pa]."""
+    the shear stress tau_star [Pa].
 
-    def __init__(self, mu0, tau_star, n):
-        self.mu0, self.tau_star, self.n = float(mu0), float(tau_star), float(n)
+    gamma_min [1/s]: the shear rate is taken as sqrt(gamma_dot^2 + gamma_min^2). The law itself is finite at rest, but its
+    derivative in gamma_dot^2 grows as gamma_dot^-(1+n) there: a melt that comes to rest (packing, a closed end) gives Newton an
+    unbounded tangent. A gamma_min of 1e-2 1/s changes mu at rest by (mu0 gamma_min / tau_star)^(1-n) (about 1 % for a PP) and
+    nothing where it flows. 0 (the default) is the law as written."""
+
+    def __init__(self, mu0, tau_star, n, gamma_min=0.0):
+        self.mu0, self.tau_star, self.n, self.gamma_min = float(mu0), float(tau_star), float(n), float(gamma_min)
 
     def __call__(self, gamma2, T):
-        x2 = (self.mu0 / self.tau_star) ** 2 * gamma2 + _TINY
+        x2 = (self.mu0 / self.tau_star) ** 2 * (gamma2 + self.gamma_min ** 2) + _TINY
         return self.mu0 / (1.0 + x2 ** ((1.0 - self.n) / 2.0))
 
 
@@ -141,12 +146,13 @@ class CrossWLF(ViscosityLaw):
     with T and D2 in Kelvin (the law converts the model temperature from °C). The pressure enters through D3 [K/Pa]:
     T* = D2 + D3 p and A2 = A2~ + D3 p, so that mu0 = D1 exp(-A1 (T - D2 - D3 p) / (A2~ + T - D2)). With D3 > 0 the
     pressure is read as a field of the flow itself, with its absolute level: use the true pressure at the outlet.
-    Valid above T* (roughly the glass transition)."""
+    Valid above T* (roughly the glass transition). gamma_min: as in Cross, for flows that come to rest."""
 
     uses_temperature = True
 
-    def __init__(self, n, tau_star, D1, D2, A1, A2, D3=0.0):
+    def __init__(self, n, tau_star, D1, D2, A1, A2, D3=0.0, gamma_min=0.0):
         self.n, self.tau_star, self.D1, self.D2, self.A1, self.A2, self.D3 = map(float, (n, tau_star, D1, D2, A1, A2, D3))
+        self.gamma_min = float(gamma_min)
         self.uses_pressure = self.D3 != 0.0
 
     def zero_shear(self, T, p=0.0):
@@ -155,7 +161,7 @@ class CrossWLF(ViscosityLaw):
 
     def __call__(self, gamma2, T, p=0.0):
         mu0 = self.zero_shear(T, p)
-        x2 = (mu0 / self.tau_star) ** 2 * gamma2 + _TINY
+        x2 = (mu0 / self.tau_star) ** 2 * (gamma2 + self.gamma_min ** 2) + _TINY
         return mu0 / (1.0 + x2 ** ((1.0 - self.n) / 2.0))
 
 
@@ -240,3 +246,40 @@ class Exponential(ViscosityLaw):
 
     def __call__(self, gamma2, T):
         return self.law(gamma2, T) * jnp.exp(-self.b * (T - self.T_ref))
+
+
+class TaitPVT:
+
+    """Two-domain modified Tait equation of state of polymers (the form of the injection-molding databases): specific volume
+    v(p, T) [m3/kg], density 1 / v. T in the units of the model (°C, Kelvin inside), p [Pa] absolute.
+
+        v = v0(T) [1 - C ln(1 + p / B(T))] + vt(T, p),   C = 0.0894,   T_t(p) = b5 + b6 p   (transition)
+        melt,  T > T_t:  v0 = b1m + b2m (T - b5),  B = b3m exp(-b4m (T - b5)),  vt = 0
+        solid, T < T_t:  v0 = b1s + b2s (T - b5),  B = b3s exp(-b4s (T - b5)),  vt = b7 exp(b8 (T - b5) - b9 p)
+
+    b1 [m3/kg], b2 [m3/kg K], b3 [Pa], b4 [1/K], b5 [K], b6 [K/Pa], b7 [m3/kg], b8 [1/K], b9 [1/Pa]. The jump between the domains is
+    smoothed over `width` [K] (a logistic weight) so that Newton can differentiate it; width -> 0 is the sharp law. Written with
+    jax.numpy: the flow and the heat physics differentiate it in p and T."""
+
+    names = ('b1m', 'b2m', 'b3m', 'b4m', 'b1s', 'b2s', 'b3s', 'b4s', 'b5', 'b6', 'b7', 'b8', 'b9')
+
+    def __init__(self, b1m, b2m, b3m, b4m, b1s, b2s, b3s, b4s, b5, b6, b7, b8, b9, C=0.0894, width=1.0):
+        self.b = dict(zip(self.names, map(float, (b1m, b2m, b3m, b4m, b1s, b2s, b3s, b4s, b5, b6, b7, b8, b9))))
+        self.C, self.width = float(C), float(width)
+
+    def transition(self, p):
+        """T_t(p) [°C]."""
+        return self.b['b5'] + self.b['b6'] * p - KELVIN_OFFSET
+
+    def specific_volume(self, p, T):
+        b = self.b
+        TK = T + KELVIN_OFFSET
+        dT = TK - b['b5']
+        melt = (b['b1m'] + b['b2m'] * dT) * (1.0 - self.C * jnp.log1p(p / (b['b3m'] * jnp.exp(-b['b4m'] * dT))))
+        solid = ((b['b1s'] + b['b2s'] * dT) * (1.0 - self.C * jnp.log1p(p / (b['b3s'] * jnp.exp(-b['b4s'] * dT))))
+                 + b['b7'] * jnp.exp(b['b8'] * dT - b['b9'] * p))
+        w = 0.5 * (1.0 + jnp.tanh((TK - b['b5'] - b['b6'] * p) / (2.0 * max(self.width, 1e-12))))
+        return w * melt + (1.0 - w) * solid
+
+    def density(self, p, T):
+        return 1.0 / self.specific_volume(p, T)

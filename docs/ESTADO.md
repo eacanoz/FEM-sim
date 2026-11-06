@@ -146,6 +146,8 @@
 | Reómetro multimodo | fluido inelástico de igual viscosidad; difusión localizada frente a sin ella | `Test/test_viscoelastic.py` (modo largo, malla gruesa); `Example_Viscoelastic_Rheometer.py` | τ_w igual a 4 cifras; caída a ≤ 1 % donde ambos convergen |
 | Deslizamiento en pared | Poiseuille con Navier (exacto en Taylor–Hood); límites adherido y libre; ley de potencia; umbral; tangente; canal Oldroyd-B | `Test/test_slip_ptt.py` | 1e-10; 1e-7; umbral a 0.1 %; tangente 1e-7 |
 | Análisis de Mooney | capilares de dos radios, ley de potencia con Navier, axisimétrico | `Test/test_slip_ptt.py` | recupera u_s = 0.07500 dado, a < 0.2 %, y la tasa verdadera a < 0.5 % |
+| Ecuación de estado (Tait de dos dominios) y su ajuste | ramas fundido y sólido; ajuste de datos sintéticos con 0.02 % de dispersión; ajuste de medidas reales (PP con 30 % de fibra de vidrio, 560 puntos de 0.1 a 200 MPa y 20 a 280 °C) | `Test/test_compressible.py`; `Fitting.fit_tait` | ramas 1e-12; sintético: error 0.058 %, transición a 0.37 K; medidas: rms 0.036 % (fundido 0.017, sólido 0.013, transición 0.08 %), máximo 0.43 %, T_t = 180.7 °C + 0.17 K/MPa |
+| Flujo compresible (`ff.setDensityLaw`) | tangente (también la parte temporal sola, y con Cross y Cross–WLF); densidad constante = grad-div con γ = −2/3 μ; canal estacionario frente a lubricación (ρ +27 %); empaque frente a la serie de la difusión de presión; calentamiento por compresión | `Test/test_compressible.py` | tangente ≤ 3.2e-9; grad-div 1e-14; canal 1.4e-4 de p_in, caudal másico entrada = salida a 1e-6; empaque 1.2e-3 a 1.2e-4 (Q9 y T6); calentamiento 4e-5 |
 | Superficie libre: hinchamiento newtoniano | método de la línea de corriente; plano frente a 1.190 ± 0.002 (Tanner 2002, en arXiv:1408.5167; publicados 1.184–1.200); axisimétrico frente a ≈ 1.127 (fuente secundaria); flujo tapón | `Test/test_free_surface.py`, `Test/manual/die_swell.py` | plano 1.19112, 1.18907, 1.18786 (borde 0.025 a 0.00625 H), orden ≈ 0.8, extrapolado ≈ 1.186 (el elemento singular de Georgiou y Boudouvis da 1.1863); axisimétrico 1.13356, 1.13063, 1.12883; tapón 1e-13; 11–13 iteraciones |
 | Superficie libre: hinchamiento viscoelástico | Giesekus α = 0.2, β = 1/9, Wi = λU/H hasta 3; límite newtoniano; tres mallas | `Test/manual/die_swell_ve.py`, `Example_Die_Swell.py`, `Ejemplo_Hinchamiento_Extrudado.ipynb` | B − B_newt ∝ Wi a Wi bajo (dB/dWi ≈ −0.45); mínimo 1.150 cerca de Wi = 0.25 y luego casi lineal, 1.371 a Wi = 3 (malla 0.025): la tendencia publicada, sin tabla de referencia; incertidumbre de malla 0.2–0.3 % |
 | Viscoelástico no isotermo | tangente con d/dT y calentamiento, plano y axisimétrico, con y sin DEVSS-G; T uniforme = isotermo con λ·a_T; Couette con calentamiento y viscosidad en T frente a `solve_bvp` (a_T del centro 0.51) | `Test/test_viscoelastic_thermal.py` | tangente ≤ 2.4e-10; isotermo 1e-15; Couette orden 1.93–2.02 en T, u, τ_xy y τ_xx (Q9 y T6) |
@@ -359,6 +361,20 @@ Lo que sigue pendiente:
   - **WLF:** C1 y C2 uno a uno se mueven ~8 % con el ruido de cuatro a_T; el desplazamiento que dan, a ±0.013 en log10 a_T.
   - **α y ε:** solo desde la viscosidad de corte, dentro de la ventana del espectro. Sin datos extensionales, que fijarían mejor el
     parámetro del que dependen las pérdidas de Bagley.
+- **Compresibilidad (`Rheology.TaitPVT`, `Fitting.fit_tait`, `ff.setDensityLaw`):** continuidad conservativa (1/ρ_ref)[∂ρ/∂t + ∇·(ρu)], con la
+  derivada temporal del paso (BDF2 o Euler; no Crank–Nicolson), −2/3 μ div u en el esfuerzo y, opcional, el calentamiento β T Dp/Dt. Sin ley de
+  densidad todo sigue igual. La transición del Tait se suaviza en `width` K (1 K deja 0.036 % de error con medidas reales). Límites:
+  - Solo Taylor–Hood y solo en el plano. La inercia y el ρCp del calor usan la densidad del material, no ρ(p, T).
+  - La masa se balancea exactamente en espacio; en tiempo, ∂ρ/∂t = ρ_p ∂p/∂t + ρ_T ∂T/∂t es de primer orden en la linealización del paso.
+  - La presión del modelo es manométrica: la ley lee p + `ambient`. Con densidad no hay referencia automática de presión (la fija la masa).
+  - Corregido de paso, para todos los transitorios no lineales: el criterio de actualización despreciable compara con el tamaño que ha alcanzado
+    cada campo, no solo con su valor actual (un fundido que queda en reposo tiene u ~ 0 y Newton no podía declarar el paso resuelto), y cuenta la
+    presión compresible, que evoluciona sin matriz de masa (`System.evolving`).
+  - `Cross` y `CrossWLF` aceptan `gamma_min`: en reposo la derivada de Cross no tiene cota. El empaque se resolvió sin depender de ello (lo que
+    faltaba era d μ / d γ̇ en la tangente de −2/3 μ div u: sin eso Newton convergía linealmente, 9–30 iteraciones por paso frente a 2–4).
+  - Empaque con las medidas del PP con fibra (`Example_Packing.py`: pvT y viscosidad Cross–WLF ajustadas, rms 0.036 % y 0.12 %): 50 MPa en rampa de
+    5 ms a 230 °C, isotermo; la presión llega al extremo cerrado en ~6 ms y entra un 5.23 % más de masa, el aumento de densidad del Tait. 106 pasos
+    adaptativos en 25 s. Un salto de presión en t = 0 obliga al paso adaptativo a bajar sin fin: hay que usar una rampa.
 - **Superficie libre (`Source/Physics/FreeSurface.py`, `Model.moveNodes`):** estacionaria, por el método de la línea de corriente (Tanner): flujo con
   tracción nula en la superficie, dh/ds = u_t / u_s desde el borde del dado, nodos movidos en la dirección transversal en proporción, y repetir.
   Sirve con cualquier física del código, plano o axisimétrico, sin incógnitas nuevas. Converge en 10–13 iteraciones (factor ≈ 0.3 por iteración)

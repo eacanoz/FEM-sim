@@ -381,9 +381,13 @@ class modelSolver():
             amplitude[dofs] = np.abs(values)
         sizes = [max(np.abs(x[dofs]).max(), amplitude[dofs].max()) for dofs in fields]
 
+        counted = differential_dofs | (system.evolving & ~dirichlet)    # a compressible pressure evolves without a mass matrix
+
         def negligible(update, state):
-            return all(np.abs(update[dofs[differential_dofs[dofs]]]).max(initial=0.0)
-                       <= 1e-10 * max(np.abs(state[dofs]).max(), 1e-30) for dofs in fields)
+            # against the size the field has reached (sizes), not only its value now: a melt coming to rest after packing has u ~ 0,
+            # and an update below 1e-10 of that is below round-off
+            return all(np.abs(update[dofs[counted[dofs]]]).max(initial=0.0)
+                       <= 1e-10 * max(np.abs(state[dofs]).max(), size, 1e-30) for dofs, size in zip(fields, sizes))
 
         clock = time.time()
         step = 0

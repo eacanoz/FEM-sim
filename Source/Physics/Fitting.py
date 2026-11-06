@@ -316,3 +316,72 @@ def fit_nonlinear_parameter(modes, gamma_dot, eta, constitutive='giesekus', solv
     std = float(np.sqrt((r @ r) / max(len(r) - 1, 1) / max(J @ J, 1e-300)))
     name = 'alpha' if constitutive == 'giesekus' else 'epsilon'
     return Fit({name: a}, {name: std}, float(np.sqrt(np.mean(r ** 2))), [(mu, lam, a) for mu, lam, *_ in modes])
+
+
+# ----- equation of state -----
+
+def fit_tait(p, T, v, width=1.0, margin=8.0):
+
+    """Two-domain Tait (Rheology.TaitPVT) from pvT data: absolute pressure p [Pa], T [°C], specific volume v [m3/kg].
+
+    By stages, each with its own data: the transition T_t at each pressure (the steepest rise of v with T, the middle of it) gives b5 and
+    b6 by a straight line; the melt points (T > T_t + margin) give b1m..b4m; the solid points (T < T_t - margin) give b1s..b4s with
+    b7..b9; then all 13 together on every point, with the smoothed law of `width` [K]. On relative errors. A semicrystalline polymer
+    crystallizes over some kelvin, which the sharp Tait law does not follow: the rms of the points within `margin` of T_t is reported
+    apart. Returns a Fit whose model is the TaitPVT; params also holds 'rms_melt', 'rms_solid', 'rms_transition'."""
+
+    from Source.Physics.Rheology import TaitPVT
+
+    p, T, v = (np.ravel(np.asarray(a, dtype=float)) for a in (p, T, v))
+    TK = T + KELVIN_OFFSET
+    C = 0.0894
+
+    # transition at each pressure
+    Tt = []
+    for q in np.unique(p):
+        m = p == q
+        o = np.argsort(TK[m])
+        t, w = TK[m][o], v[m][o]
+        k = np.argmax(np.diff(w) / np.diff(t))
+        Tt.append((q, 0.5 * (t[k] + t[k + 1])))
+    Tt = np.array(Tt)
+    b6, b5 = np.polyfit(Tt[:, 0], Tt[:, 1], 1) if len(Tt) > 1 else (0.0, Tt[0, 1])
+    transition = b5 + b6 * p
+    melt, solid = TK > transition + margin, TK < transition - margin
+
+    def tait(q, dT, b1, b2, b3, b4):
+        return (b1 + b2 * dT) * (1.0 - C * np.log1p(q / (b3 * np.exp(-b4 * dT))))
+
+    def fit_branch(mask, extra):
+        q, dT, w = p[mask], TK[mask] - b5, v[mask]
+        b1 = float(np.max(w))
+        x0 = [b1, 5e-7, np.log(1.5e8), 4e-3] + ([np.log(max(1e-6, 0.01 * b1)), 0.05, 1e-8] if extra else [])
+
+        def residual(x):
+            model = tait(q, dT, x[0], x[1], np.exp(x[2]), x[3])
+            if extra:
+                model = model + np.exp(x[4]) * np.exp(x[5] * dT - x[6] * q)
+            return model / w - 1.0
+
+        return least_squares(residual, x0, x_scale='jac').x
+
+    xm = fit_branch(melt, False)
+    xs = fit_branch(solid, True)
+    start = np.array([*xm, *xs, b5, b6])
+
+    def law_of(x, sharp=False):
+        return TaitPVT(x[0], x[1], np.exp(x[2]), x[3], x[4], x[5], np.exp(x[6]), x[7], x[11], x[12], np.exp(x[8]), x[9], x[10],
+                       width=1e-6 if sharp else width)
+
+    def residual(x):
+        return np.asarray(law_of(x).specific_volume(p, T)) / v - 1.0
+
+    result = least_squares(residual, start, x_scale='jac')
+    law = law_of(result.x)
+    r = residual(result.x)
+    near = ~(melt | solid)
+    params = dict(law.b)
+    params.update({'rms_melt': float(np.sqrt(np.mean(r[melt] ** 2))), 'rms_solid': float(np.sqrt(np.mean(r[solid] ** 2))),
+                   'rms_transition': float(np.sqrt(np.mean(r[near] ** 2))) if near.any() else 0.0,
+                   'max_error': float(np.max(np.abs(r)))})
+    return Fit(params, {}, float(np.sqrt(np.mean(r ** 2))), law)

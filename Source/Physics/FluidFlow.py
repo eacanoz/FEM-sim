@@ -82,6 +82,8 @@ class ff(physics):
         self.buoyancy = []                           # Boussinesq terms (field, beta, reference, g) (setBoussinesq)
 
         self.pressure_reference = None               # (node id, value)
+        self.density_law = None                      # rho(p, T) of a compressible flow (setDensityLaw)
+        self.density_options = {}
         self.grad_div = None                         # gamma of the grad-div term (setGradDiv)
         self.slip_walls = []                         # (edges, tangential component, law) (addBC_SlipLawEdges)
 
@@ -164,6 +166,25 @@ class ff(physics):
 
     def setDensity(self, rho):
         self.rho = rho
+
+    def setDensityLaw(self, law, temperature='T', ambient=1.0e5, compression_heating=False, T=None):
+
+        """Compressible flow with the density rho(p, T) of `law` (an object with density(p, T), e.g. Rheology.TaitPVT, or a function
+        rho(p, T) written with jax.numpy), p absolute [Pa] = the pressure of the model + `ambient`, T from the field `temperature`
+        (Model(psc=[ff, ht])) or the fixed value T without one. Continuity in conservative form, scaled by the density of the material
+        rho_ref (its order, for the conditioning): (1 / rho_ref) [d rho / dt + div(rho u)] = 0, so that the mass is balanced exactly; the
+        time derivative enters through the step (BDF2 or implicit Euler), which is what makes a packing pressure. The viscous stress gets
+        -2/3 mu div(u) I. compression_heating: the source beta T Dp/Dt of the temperature (beta = -d ln rho / dT, T absolute). The
+        inertia and rho Cp of the heat keep the density of the material. Taylor-Hood only (the PSPG of equal order assumes div u = 0).
+        None makes the flow incompressible again."""
+
+        if law is not None and not self.taylor_hood:
+            raise ValueError("El flujo compresible necesita Taylor-Hood: una malla cuadratica (order=2).")
+        if law is not None and getattr(self.modelRef, 'axisymmetric', False):
+            raise ValueError("El flujo compresible esta validado solo en el plano (div u axisimetrico lleva u_r / r).")
+        self.density_law = law
+        self.density_options = {'temperature': temperature if T is None else None, 'ambient': float(ambient), 'T': T,
+                                'heating': bool(compression_heating)}
 
     def setBodyForce(self, f):
 
@@ -302,8 +323,11 @@ class ff(physics):
                 system.add_matrix(sp.coo_matrix((-S.data, (p_dofs[S.row], u_dofs[S.col])),
                                                 shape=(layout.ndof, layout.ndof)).tocsr())
 
+        if self.density_law is not None:
+            system.add_term(CompressibleTerm(system, self))
+
         reference = self.pressure_reference
-        if reference is None and not self._pressure_level_set(model):
+        if reference is None and self.density_law is None and not self._pressure_level_set(model):
             reference = (self._pressure_nodes()[0], 0.0)
             sim_logger.info(f"Ningun contorno fija la presion: p = 0 en el nodo {reference[0]} (use setPressureReference).")
         if reference is not None:
@@ -541,6 +565,132 @@ class ff(physics):
         self.facet_bcs.append({'type': 'Traction', 'field': 'u', 'facets': list(edges), 'traction': t})
 
 
+
+
+def compressible_law(density, ambient, rho_ref, thermal, T_fixed, heating):
+
+    """Pointwise law of the compressible terms for GradientLawTerm. Inputs: p, grad p (2), u (2), grad u (4) [, T, grad T (2)], then the data
+    p_t, T_t, mu. Outputs: for p a source (1) and a flux (2); for u a source (2) and a flux (4); with heating, for T a source and a flux (2)."""
+
+    import jax
+    import jax.numpy as jnp
+    rho_of = density.density if hasattr(density, 'density') else density
+
+    def law(w):
+        p, gp, u, L = w[0], w[1:3], w[3:5], w[5:9].reshape(2, 2)
+        if thermal:
+            T, gT, data = w[9], w[10:12], w[12:]
+        else:
+            T, gT, data = T_fixed, jnp.zeros(2), w[9:]
+        p_t, T_t, mu = data[0], data[1], data[2]
+        P = p + ambient
+        rho = rho_of(P, T)
+        rho_p = jax.grad(rho_of, 0)(P, T)
+        rho_T = jax.grad(rho_of, 1)(P, T) if thermal else 0.0
+        div = L[0, 0] + L[1, 1]
+        source = (rho_p * (p_t + u @ gp) + rho_T * (T_t + u @ gT) + (rho - rho_ref) * div) / rho_ref
+        out = [jnp.array([source]), jnp.zeros(2), jnp.zeros(2), (-2.0 / 3.0 * mu * div * jnp.eye(2)).ravel()]
+        if heating:
+            beta = -rho_T / rho
+            out += [jnp.array([-beta * (T + 273.15) * (p_t + u @ gp)]), jnp.zeros(2)]
+        return jnp.concatenate(out)
+
+    return law
+
+
+class CompressibleTerm:
+
+    """The compressible part of the flow (ff.setDensityLaw): continuity and -2/3 mu div u, through a pointwise law. The time derivatives
+    come from the step (system.time). mu is that of the flow at the state: the law sees it as data, and the tangent adds its derivatives
+    in gamma_dot^2 and in the fields of the viscosity law (T), as the flow term does: a melt that thins with n ~ 0.3 needs them, or Newton
+    converges linearly."""
+
+    def __init__(self, system, flow):
+        from Source.Simulation.System import GradientLawTerm
+        options = flow.density_options
+        self.system, self.flow = system, flow
+        self.temperature = options['temperature']
+        thermal = self.temperature is not None
+        if thermal and self.temperature not in system.layout.names:
+            raise ValueError(f"La densidad depende del campo '{self.temperature}', que no existe en el modelo (Model(psc=[ff, ht])).")
+        heating = options['heating'] and thermal
+        rho_ref = float(np.mean(np.asarray(flow.rho, dtype=float)))
+        if not rho_ref > 0:
+            raise ValueError("El flujo compresible necesita la densidad de referencia del material (rho).")
+        key = ('compressible', flow.density_law, options['ambient'], rho_ref, thermal, options['T'], heating)
+        law = cached_law(key, lambda: PointwiseLaw(compressible_law(flow.density_law, options['ambient'], rho_ref, thermal,
+                                                                    0.0 if options['T'] is None else float(options['T']), heating)))
+        inputs = ['p', 'u'] + ([self.temperature] if thermal else [])
+        outputs = ['p', 'u'] + ([self.temperature] if heating else [])
+        self.term = GradientLawTerm(system, law, inputs, outputs)
+        system.evolving[system.layout.dofs('p').ravel()] = True        # d rho / dt: the pressure evolves, though its rows have no mass
+
+    def contribution(self, x, tangent=True):
+        system, disc, layout = self.system, self.system.disc, self.system.layout
+        time = system.time
+        if time is not None and not time.get('old_level', False) and time['theta'] < 1.0:
+            raise ValueError("El flujo compresible no admite Crank-Nicolson: use timeScheme='BDF2' o Euler implicito.")
+        shape = disc.detJw.shape
+        p_t = T_t = np.zeros(shape)
+        if time is not None and not time.get('old_level', False):
+            rate = layout.split(time['alpha'] * x + time['beta'])
+            p_t = disc.interpolate(np.asarray(rate['p'], dtype=float)[:, 0] if np.ndim(rate['p']) == 2 else rate['p'])
+            if self.temperature is not None:
+                T_t = disc.interpolate(np.asarray(rate[self.temperature], dtype=float).reshape(-1))
+        flow_term = next((t for t in system._terms if isinstance(t, FlowTerm)), None)
+        mu = ops.at_gauss(disc, self.flow.mu) if flow_term is None else flow_term.viscosity(x, False)[0]
+        self.term.gauss_inputs = np.stack([p_t, T_t, np.broadcast_to(mu, shape)], axis=-1)
+        R, J = self.term.contribution(x, tangent)
+        if tangent and time is not None and not time.get('old_level', False):
+            J = J + self._time_tangent(x, time)
+        if tangent and flow_term is not None and flow_term.law is not None:
+            J = J + self._viscosity_tangent(x, flow_term)
+        return R, J
+
+    def _viscosity_tangent(self, x, flow_term):
+
+        """d/dU of integral -2/3 mu div u div v through mu(gamma_dot^2, fields): -2/3 div u (dmu/dg2 dg2/dU_jc + dmu/df_k N_j) div N_ia."""
+
+        disc, layout = self.system.disc, self.system.layout
+        nel, ngp, nne, dim = disc.B.shape
+        _, u, G, _ = flow_term._kinematics(x)
+        _, _, _, dg2 = flow_term._strain(u, G, True)
+        _, mu_g2, mu_F = flow_term.viscosity(x, True)
+        div = np.einsum('egaa->eg', G)
+        c = -2.0 / 3.0 * disc.detJw * div
+        ru = layout.element_dofs(disc.conn, 'u')
+        K = np.einsum('eg,eg,egjc,egia->eiajc', c, mu_g2, dg2, disc.B).reshape(nel, nne * dim, nne * dim)
+        J = layout.scatter_matrix(K, ru, ru)
+        for k, name in enumerate(flow_term.fields):
+            KF = np.einsum('eg,eg,gj,egia->eiaj', c, mu_F[..., k], disc.N, disc.B).reshape(nel, nne * dim, nne)
+            J = J + layout.scatter_matrix(KF, ru, layout.element_dofs(disc.conn, name))
+        return J
+
+    def _time_tangent(self, x, time):
+
+        """d/dx of (1 / rho_ref) (rho_p p_t + rho_T T_t) through x' = alpha x + beta: alpha times the coefficients, mass-like."""
+
+        import jax
+        system, disc, layout = self.system, self.system.disc, self.system.layout
+        options = self.flow.density_options
+        rho_of = self.flow.density_law.density if hasattr(self.flow.density_law, 'density') else self.flow.density_law
+        rho_ref = float(np.mean(np.asarray(self.flow.rho, dtype=float)))
+        fields = layout.split(x)
+        p = disc.interpolate(np.asarray(fields['p'], dtype=float).reshape(-1)) + options['ambient']
+        T = (disc.interpolate(np.asarray(fields[self.temperature], dtype=float).reshape(-1)) if self.temperature is not None
+             else np.full(p.shape, float(options['T'])))
+        rho_p = np.asarray(jax.vmap(jax.grad(rho_of, 0))(p.ravel(), T.ravel())).reshape(p.shape)
+        rows = layout.element_dofs(disc.conn, 'p')
+        J = layout.scatter_matrix(np.einsum('eg,gi,gj->eij', disc.detJw * time['alpha'] * rho_p / rho_ref, disc.N, disc.N), rows, rows)
+        if self.temperature is not None:
+            rho_T = np.asarray(jax.vmap(jax.grad(rho_of, 1))(p.ravel(), T.ravel())).reshape(p.shape)
+            cols = layout.element_dofs(disc.conn, self.temperature)
+            J = J + layout.scatter_matrix(np.einsum('eg,gi,gj->eij', disc.detJw * time['alpha'] * rho_T / rho_ref, disc.N, disc.N), rows, cols)
+            if options['heating']:
+                ugp = np.einsum('egk,egk->eg', disc.interpolate(np.asarray(fields['u'], dtype=float)), disc.gradient(np.asarray(fields['p'], dtype=float).reshape(-1)))
+                beta = -rho_T / np.asarray(jax.vmap(rho_of)(p.ravel(), T.ravel())).reshape(p.shape)
+                J = J + layout.scatter_matrix(np.einsum('eg,gi,gj->eij', -disc.detJw * time['alpha'] * beta * (T + 273.15), disc.N, disc.N), cols, rows)
+        return J
 
 
 class WallSlipTerm:
