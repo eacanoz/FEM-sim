@@ -87,7 +87,7 @@ def test_sealed_cooling():
         states = []
 
         def on_step(f):
-            rho = np.asarray(f.density['nodal'](f.p, f.T)[0])
+            rho = np.asarray(f.density['nodal'](f.p, f.T, np.zeros_like(f.T))[0])
             states.append((f.p.mean(), np.max(np.abs(f.volume * rho - f.mass) / f.mass), f.T[:, 0].mean(), np.mean(f.p == 0.0)))
 
         fill.pack(0.0, 0.0, t_cool=20.0, dt_max=dt_max, progress=False, on_step=on_step)

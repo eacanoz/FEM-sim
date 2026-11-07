@@ -49,6 +49,7 @@ SUITES = [
     "Test/test_hele_shaw.py",
     "Test/test_hele_shaw_thermal.py",
     "Test/test_hele_shaw_packing.py",
+    "Test/test_hele_shaw_crystallization.py",
 ]
 
 

@@ -191,7 +191,7 @@ sobreoscilación de T es resolución del frente, no el SUPG.
 | Compresibilidad (pvT, Tait) | Hecho (`Rheology.TaitPVT`, `Fitting.fit_tait`, `ff.setDensityLaw`, `Example_Packing.py`): plano, Taylor–Hood; empaque isotermo frente a la difusión de presión |
 | Superficie libre | Hecho, estacionaria (`Source/Physics/FreeSurface.py`): newtoniano plano y axisimétrico frente a la literatura, Giesekus hasta Wi = 3; sin tensión superficial ni remallado |
 | Llenado de molde (VOF o conjunto de nivel) | En curso, Hele-Shaw 2.5D (`Source/Physics/HeleShaw.py`): etapas 1 (isoterma), 2 (temperatura en el espesor, capa congelada, tiro corto, `Example_Filling_NonIsothermal.py`) y 3 (empaque con Tait y contracción volumétrica, `Example_Packing_HeleShaw.py`) hechas, con llenado compresible, cambio V/P y calentamiento por compresión. Navier–Stokes de dos fases y 3D, más adelante |
-| Cristalización y solidificación | Pendiente, sobre lo no isotermo |
+| Cristalización y solidificación | Hecho en el llenado Hele-Shaw (`Source/Physics/Crystallization.py`, `setCrystallization`): Nakamura / Hoffman–Lauritzen quiescente, calor latente, no flujo por X, pvT con X; con parámetros de otro iPP a falta de DSC del material. Inducida por el flujo, pendiente |
 | 3D | Pendiente |
 
 ## Orden recomendado

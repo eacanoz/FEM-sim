@@ -50,13 +50,13 @@ def test_fluidity_kernel():
 
     kernel = _thermal_kernel(lambda g2, T: CROSS(g2, T), np.linspace(0, 1, 21), None)
     b, G, T = np.full(4, 1e-3), np.array([1e4, 1e6, 1e7, 1e8]), np.full((4, 20), 230.0)
-    S, dS, flow, heat, _ = (np.asarray(a) for a in kernel(b, G, T, np.zeros((4, 20, 2))))
+    S, dS, flow, heat, _ = (np.asarray(a) for a in kernel(b, G, T, np.zeros((4, 20, 2)), np.zeros((4, 20), bool)))
     err = np.max(np.abs(S / GapFluidity(CROSS, T=230.0, layers=32)(b, G) - 1))
-    fd = (np.asarray(kernel(b, G * (1 + 1e-6), T, np.zeros((4, 20, 2)))[0]) - S) / (G * 1e-6)
+    fd = (np.asarray(kernel(b, G * (1 + 1e-6), T, np.zeros((4, 20, 2)), np.zeros((4, 20), bool))[0]) - S) / (G * 1e-6)
     err_d = np.max(np.abs(dS / fd - 1))
     sums = max(np.max(np.abs(flow.sum(1) / (S * G / 2) - 1)), np.max(np.abs((heat * 1e-3 / 20).sum(1) / (S * G ** 2 / 2) - 1)))
     frozen = _thermal_kernel(newtonian, np.linspace(0, 1, 21), 100.0)
-    Sf = float(np.asarray(frozen(np.array([1e-3]), np.array([1e6]), np.where(np.arange(20) < 12, 200.0, 50.0)[None, :], np.zeros((1, 20, 2)))[0])[0])
+    Sf = float(np.asarray(frozen(np.array([1e-3]), np.array([1e6]), np.where(np.arange(20) < 12, 200.0, 50.0)[None, :], np.zeros((1, 20, 2)), np.zeros((1, 20), bool))[0])[0])
     err_f = abs(Sf / (2 * 0.6e-3 ** 3 / 3000.0) - 1)
     note(f"fluidity against GapFluidity {err:.1e}, derivative against differences {err_d:.1e}, cell sums {sums:.1e}, frozen layer {err_f:.1e}")
     assert err < 1e-6 and err_d < 1e-5 and sums < 1e-12 and err_f < 1e-12

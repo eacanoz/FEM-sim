@@ -39,6 +39,11 @@
 # incompressible filling, with the flow rates of the previous step. With temperature, the compression heats the melt, beta T Dp/Dt
 # (beta = -(1/rho) d(rho)/dT from the state law): dp/dt at the node, and u . grad p from the flow that reaches each cell.
 #
+# Crystallization (setCrystallization): each cell carries the Nakamura time tau = integral K(T) dt, transported with the melt like the
+# temperature (fresh melt at tau = 0); X = 1 - exp(-tau^n). The latent heat rho L dX/dt enters the conduction across the gap (a few
+# iterations with the rate at the mean temperature of the step); cells with X >= X_noflow stop flowing; with a pvT law the density
+# follows X, (1 - X) v_melt + X v_solid, instead of the transition temperature, and the shrinkage uses the crystallinity reached.
+#
 # Linear elements (T3, Q4). SI units: gap [m], pressure [Pa], flow rate [m3/s]; temperature in the units of the viscosity law (°C).
 import time
 
@@ -135,12 +140,12 @@ def _thermal_kernel(law, edges, T_noflow):
     wq = d[:, None] * 0.5 * w
     frozen_below = -np.inf if T_noflow is None else float(T_noflow)
 
-    def kernel(b, G, Tc, guess):
+    def kernel(b, G, Tc, guess, solid):
         z = b[:, None, None] * zq
         wz = b[:, None, None] * wq
         T = jnp.broadcast_to(Tc[:, :, None], z.shape)
         tau = z * G[:, None, None]
-        melt = T >= frozen_below
+        melt = (T >= frozen_below) & ~solid[:, :, None]                         # solid: crystallized beyond X_noflow
         Ts = jnp.where(melt, T, jnp.maximum(frozen_below, -1e300))           # a frozen cell: its viscosity at the no-flow temperature
         tau_s = jnp.maximum(tau, 1e-300)
 
@@ -234,42 +239,93 @@ class HeleShawFilling:
         disc = self.disc
         area = _scatter_vector(disc, np.einsum('eg,gi->ei', disc.detJw, disc.N), disc.conn)
         weights = np.einsum('eg,gi->ei', disc.detJw * self.h, disc.N)                      # integral N_i h over each element
-        self.thermal = dict(T_melt=float(T_melt), T_mold=float(T_mold), rhocp=float(rho) * float(cp), k=float(k),
+        self.thermal = dict(T_melt=float(T_melt), T_mold=float(T_mold), rhocp=float(rho) * float(cp), rho=float(rho), k=float(k),
                             htc=None if htc is None else float(htc), T_noflow=T_noflow, heating=bool(viscous_heating),
                             edges=edges, dz=np.diff(edges), kernel=_thermal_kernel(fn, edges, T_noflow),
                             b_node=self.volume / (2.0 * area), weights=weights)
         self.T = np.full((len(self.xy), len(edges) - 1), float(T_melt))
         return self
 
-    def setDensity(self, density, ambient=1e5, compression_heating=True):
+    def setDensity(self, density, ambient=1e5, compression_heating=True, crystallinity=False):
 
         """Compressible melt for the filling and the packing: density(p_abs, T) [kg/m3] written with jax.numpy (TaitPVT(...).density),
         p_abs = the pressure of the model + ambient [Pa]. compression_heating: beta T Dp/Dt in the energy (with setThermal); beta from
-        the law, or for a TaitPVT density its own expansion without the jump of the transition."""
+        the law, or for a TaitPVT density its own expansion without the jump of the transition. crystallinity: the law is
+        density(p_abs, T, X) with the relative crystallinity X of setCrystallization (TaitPVT(...).density_crystallinity)."""
 
         import jax
         jax.config.update("jax_enable_x64", True)
         import jax.numpy as jnp
         dz = jnp.asarray(self.thermal['dz'] if self.thermal is not None else np.ones(1))
 
-        def mean(p, T):
-            return jnp.sum(dz * density(p[:, None] + ambient, T), axis=1)
+        law = density if crystallinity else (lambda p, T, X: density(p, T))
 
-        own = getattr(getattr(density, '__self__', None), 'expansion', None)       # TaitPVT(...).density: its own beta, without the jump
+        def mean(p, T, X):
+            return jnp.sum(dz * law(p[:, None] + ambient, T, X), axis=1)
 
-        def expansion(p, T):                                                       # beta = -d log(rho) / dT per cell
+        own = None if crystallinity else getattr(getattr(density, '__self__', None), 'expansion', None)   # TaitPVT(...).density
+
+        def expansion(p, T, X):                                                    # beta = -d log(rho) / dT per cell, at fixed X
             P = jnp.broadcast_to(p[:, None] + ambient, T.shape)
             if own is not None:
                 return own(P, T)
-            return -jax.jvp(lambda TT: jnp.log(density(P, TT)), (T,), (jnp.ones_like(T),))[1]
+            return -jax.jvp(lambda TT: jnp.log(law(P, TT, X)), (T,), (jnp.ones_like(T),))[1]
 
         def gate(p, T):
-            return jax.jvp(lambda q: density(q + ambient, T), (p,), (jnp.ones_like(p),))
+            return jax.jvp(lambda q: law(q + ambient, T, jnp.zeros_like(T)), (p,), (jnp.ones_like(p),))
 
-        self.density = dict(law=density, ambient=float(ambient), heating=bool(compression_heating),
-                            nodal=jax.jit(lambda p, T: jax.jvp(lambda q: mean(q, T), (p,), (jnp.ones_like(p),))),
+        self.density = dict(law=law, ambient=float(ambient), heating=bool(compression_heating),
+                            nodal=jax.jit(lambda p, T, X: jax.jvp(lambda q: mean(q, T, X), (p,), (jnp.ones_like(p),))),
                             beta=jax.jit(expansion), gate=jax.jit(gate))
         return self
+
+    def setCrystallization(self, kinetics, latent_heat, X_noflow=None, pvt=None, ambient=1e5, compression_heating=True):
+
+        """Quiescent crystallization (needs setThermal): kinetics a Crystallization.NakamuraHoffman; latent_heat [J/kg] released at X = 1
+        (the latent heat of the crystal times its maximum absolute crystallinity times the polymer fraction of a filled grade); cells with
+        X >= X_noflow stop flowing (None: only T_noflow); pvt: a TaitPVT whose density then follows X (setDensity is called with it)."""
+
+        if self.thermal is None:
+            raise ValueError("La cristalizacion necesita setThermal.")
+        self.crystal = dict(kinetics=kinetics, latent=float(latent_heat), X_noflow=None if X_noflow is None else float(X_noflow))
+        self.tau = np.zeros_like(self.T)
+        if pvt is not None:
+            self.setDensity(pvt.density_crystallinity, ambient, compression_heating, crystallinity=True)
+        return self
+
+    def crystallinity(self):
+
+        """Relative crystallinity of each cell across the gap at each node (zeros without crystallization)."""
+
+        if getattr(self, 'crystal', None) is None:
+            return np.zeros_like(self._temperature_cells())
+        return self.crystal['kinetics'].crystallinity(self.tau)
+
+    def _crystallinity_cells(self):
+        if getattr(self, 'crystal', None) is None:
+            return np.zeros_like(self._temperature_cells())
+        ahead, rate = getattr(self, '_ahead', 0.0), getattr(self, '_tau_rate', None)
+        tau = self.tau if (rate is None or ahead == 0.0) else self.tau + ahead * rate
+        return self.crystal['kinetics'].crystallinity(tau)
+
+    def _freezes(self):
+        return self.thermal is not None and (self.thermal['T_noflow'] is not None or
+                                             (getattr(self, 'crystal', None) is not None and self.crystal['X_noflow'] is not None))
+
+    def _frozen_cells(self, T, X):
+        frozen = np.zeros(T.shape, dtype=bool)
+        if self.thermal['T_noflow'] is not None:
+            frozen |= T < self.thermal['T_noflow']
+        if getattr(self, 'crystal', None) is not None and self.crystal['X_noflow'] is not None:
+            frozen |= X >= self.crystal['X_noflow']
+        return frozen
+
+    def _element_frozen(self):
+
+        """Frozen cells of each element (nel, ncells): by the mean temperature and crystallinity of its nodes."""
+
+        conn = self.disc.conn
+        return self._frozen_cells(self.T[conn].mean(axis=1), self.crystallinity()[conn].mean(axis=1))
 
     def full_density(self):
 
@@ -289,17 +345,16 @@ class HeleShawFilling:
 
         """Mean density across the gap at each node, and its derivative in p."""
 
-        rho, drho = self.density['nodal'](self.p if p is None else p, self._temperature_cells())
+        rho, drho = self.density['nodal'](self.p if p is None else p, self._temperature_cells(), self._crystallinity_cells())
         return np.asarray(rho), np.asarray(drho)
 
     def frozen_fraction(self):
 
         """Fraction of the gap below the no-flow temperature at each node."""
 
-        th = self.thermal
-        if th is None or th['T_noflow'] is None:
+        if not self._freezes():
             return np.zeros(len(self.xy))
-        return (self.T < th['T_noflow']) @ th['dz']
+        return self._frozen_cells(self.T, self.crystallinity()) @ self.thermal['dz']
 
     def mean_temperature(self):
 
@@ -348,7 +403,8 @@ class HeleShawFilling:
             guess = self.thermal.get('guess')
             if guess is None:
                 guess = np.zeros(Tc.shape + (2,))
-            S, dS_e, flow, heat, g = (np.asarray(a) for a in self.thermal['kernel'](0.5 * self.h.mean(axis=1), G_e, Tc, guess))
+            solid = self._element_frozen() if getattr(self, 'crystal', None) is not None else np.zeros(Tc.shape, dtype=bool)
+            S, dS_e, flow, heat, g = (np.asarray(a) for a in self.thermal['kernel'](0.5 * self.h.mean(axis=1), G_e, Tc, guess, solid))
             self.thermal['guess'] = g
             self._layers = (flow, heat, G_e)
             Sg = np.broadcast_to(S[:, None], w.shape)
@@ -386,9 +442,9 @@ class HeleShawFilling:
             F += _scatter_vector(disc, ops.facet_source(facets, Q / facets.detJw.sum()), facets.nodes)
         filled = self.fill_factor >= 1.0
         active = np.any(filled[disc.conn], axis=1)                              # elements that carry melt
-        if self.thermal is not None and self.thermal['T_noflow'] is not None:
+        if self._freezes():
             # an element frozen through the whole gap carries nothing: filled nodes surrounded by such elements drop out of the unknowns
-            active &= np.any(self.T[disc.conn].mean(axis=1) >= self.thermal['T_noflow'], axis=1)
+            active &= ~np.all(self._element_frozen(), axis=1)
             # and so do pockets of melt that the frozen elements cut off from the front (no node at p = 0): their pressure is undefined
             from scipy.sparse.csgraph import connected_components
             nn = disc.conn.shape[1]
@@ -510,7 +566,15 @@ class HeleShawFilling:
         A = sp.diags(diag) - M
         for X in mixer:
             A = A - X
-        self.T = spla.spsolve(A.tocsc(), rhs).reshape(nc, n).T.copy()
+        crystal = getattr(self, 'crystal', None)
+        if crystal is None:
+            self.T = spla.spsolve(A.tocsc(), rhs).reshape(nc, n).T.copy()
+        else:                                                                       # the Nakamura time rides with the melt (fresh: 0)
+            tau_start = self.tau.copy()
+            old_tau = self.tau.T.ravel()
+            both = spla.spsolve(A.tocsc(), np.column_stack([rhs, np.where(idle, old_tau, content * old_tau)]))
+            self.T = both[:, 0].reshape(nc, n).T.copy()
+            self.tau = np.maximum(both[:, 1].reshape(nc, n).T, 0.0)
         compression = None
         if p_old is not None and self.density is not None and self.density['heating']:
             # Dp/Dt per cell: the change at the node, and the pressure difference of the melt that arrives (u . grad p)
@@ -518,7 +582,7 @@ class HeleShawFilling:
             dp_in = np.asarray(M.sum(axis=1)).ravel() * P - M @ P                        # sum_j q_ij (p_i - p_j), mass flows
             mass_cells = (new[None, :] * dz[:, None]).ravel()
             DpDt = np.tile((self.p - p_old) / dt, nc) + np.where(mass_cells > 0, dp_in / np.maximum(mass_cells, 1e-300), 0.0)
-            beta = np.asarray(self.density['beta'](self.p, self.T))
+            beta = np.asarray(self.density['beta'](self.p, self.T, self.crystallinity()))
             compression = (beta * (self.T + KELVIN_OFFSET)) * DpDt.reshape(nc, n).T          # W/m3, at the start of the conduction
         # conduction across the gap, with the heating, where there is melt
         melt = self.fill_factor > 0
@@ -544,7 +608,25 @@ class HeleShawFilling:
             rhs += h * node_heat[melt]
         if compression is not None:
             rhs += h * compression[melt]
-        self.T[melt] = _tridiagonal(lower, diagz, upper, rhs)
+        if crystal is None:
+            self.T[melt] = _tridiagonal(lower, diagz, upper, rhs)
+        else:
+            # latent heat: tau grows with the rate at the mean temperature of the step, fixed point on that temperature
+            kin, rho_L = crystal['kinetics'], th['rho'] * crystal['latent']
+            T_conv, tau_conv = self.T[melt], self.tau[melt]
+            X_conv = kin.crystallinity(tau_conv)
+            T_new = T_conv
+            for _ in range(30):
+                tau_new = tau_conv + dt * kin.rate(0.5 * (T_conv + T_new))
+                T_next = _tridiagonal(lower, diagz, upper, rhs + h * rho_L * (kin.crystallinity(tau_new) - X_conv) / dt)
+                change = np.max(np.abs(T_next - T_new)) if T_next.size else 0.0
+                T_new = T_next if change < 5.0 else 0.5 * (T_new + T_next)       # damped while the release is strong
+                if change < 1e-8:
+                    break
+            tau_new = tau_conv + dt * kin.rate(0.5 * (T_conv + T_new))
+            T_final = _tridiagonal(lower, diagz, upper, rhs + h * rho_L * (kin.crystallinity(tau_new) - X_conv) / dt)
+            self.T[melt], self.tau[melt] = T_final, tau_new
+            self._tau_rate = (self.tau - tau_start) / dt
         self._T_rate = (self.T - T_start) / dt
 
     # ----- the filling -----
@@ -553,9 +635,14 @@ class HeleShawFilling:
 
     def _open_elements(self):
         active = np.ones(len(self.disc.conn), dtype=bool)
-        if self.thermal is not None and self.thermal['T_noflow'] is not None:
-            active = np.any(self.T[self.disc.conn].mean(axis=1) >= self.thermal['T_noflow'], axis=1)
+        if self._freezes():
+            active = ~np.all(self._element_frozen(), axis=1)
         return active
+
+    def _gate_nodes(self):
+        if not self.gates:
+            return np.zeros(0, dtype=int)
+        return np.unique(np.concatenate([f.nodes.ravel() for f, _ in self.gates]))
 
     def _gate_rates(self):
 
@@ -590,7 +677,7 @@ class HeleShawFilling:
 
     def _pack_solve(self, dt, p_gate, inject, front, tol, max_iterations):
         disc, n = self.disc, len(self.xy)
-        gate_nodes = np.unique(np.concatenate([f.nodes.ravel() for f, _ in self.gates]))
+        gate_nodes = self._gate_nodes()
         fixed = np.zeros(n, dtype=bool)
         p = self.p.copy()
         if p_gate is not None:
@@ -603,7 +690,7 @@ class HeleShawFilling:
         p[clamped] = 0.0
         open_e = self._open_elements()
         F, dF = np.zeros(n), np.zeros(n)
-        for _ in range(5):                                                          # active set of the nodes at ambient pressure
+        for _ in range(20):                                                         # active set of the nodes at ambient pressure
             for k in range(1, max_iterations + 1):
                 gp = disc.gradient(p)
                 G = np.linalg.norm(gp, axis=-1)
@@ -642,7 +729,9 @@ class HeleShawFilling:
         if inject:
             F, _ = self._gate_mass(p)
         flux = dt * (_scatter(disc, Ke) @ p)
-        m_new = np.where(clamped, m_old - flux + dt * F, self.volume * rho)
+        # the mass by the balance of the step everywhere but the held gate: equal to V rho(p) where the step converged, and the mass is
+        # kept exactly even where the active set did not settle
+        m_new = np.where(fixed, self.volume * rho, m_old - flux + dt * F)
         inflow = np.where(fixed, (m_new - m_old + flux) / dt, F)
         self.p = p
         self._step = (Ke, inflow, open_e)
@@ -653,7 +742,7 @@ class HeleShawFilling:
         """The filling with the compressible melt: _pack_step with the gates injecting, each step until the next node is full."""
 
         n = len(self.xy)
-        gate_nodes = np.unique(np.concatenate([f.nodes.ravel() for f, _ in self.gates]))
+        gate_nodes = self._gate_nodes()
         if getattr(self, 'mass', None) is None:
             self.mass = self.fill_factor * self.volume * self.full_density()
         rate = getattr(self, '_fill_rate', None)
@@ -736,7 +825,7 @@ class HeleShawFilling:
             self.pack_history = []
             self.T_room = float(T_room)
             self._switchover = self.time
-        gate_nodes = np.unique(np.concatenate([f.nodes.ravel() for f, _ in self.gates]))
+        gate_nodes = self._gate_nodes()
         t0, end = self._switchover, self._switchover + t_pack + t_cool
         dt, step, start = dt_first, 0, time.perf_counter()
         while self.time < end - 1e-12:
@@ -762,7 +851,7 @@ class HeleShawFilling:
             self.time += dt
             self.fill_time[done] = self.time
             step += 1
-            if self.thermal is not None and self.thermal['T_noflow'] is not None:
+            if self._freezes():
                 frozen = np.isnan(self.v_frozen) & (self.frozen_fraction() >= 1.0 - 1e-12)
                 self.v_frozen[frozen] = self.volume[frozen] / self.mass[frozen]
             self.pack_history.append((self.time, float(self.mass.sum()), float(self.p[gate_nodes].mean()), float(inflow.sum()),
@@ -784,7 +873,8 @@ class HeleShawFilling:
 
         with np.errstate(divide='ignore', invalid='ignore'):
             v = np.where(np.isnan(self.v_frozen), self.volume / self.mass, self.v_frozen)
-        v_room = 1.0 / float(self.density['law'](self.density['ambient'], self.T_room))
+        X = self.crystallinity() @ (self.thermal['dz'] if self.thermal is not None else np.ones(1))   # the crystallinity reached
+        v_room = 1.0 / np.asarray(self.density['law'](self.density['ambient'], np.full_like(X, self.T_room), X))
         return np.where(np.isnan(self.fill_time), np.nan, 1.0 - v_room / v)
 
     def melt_volume(self):
@@ -804,7 +894,7 @@ class HeleShawFilling:
             compressible = self.density is not None
         if compressible:
             return self._fill_compressible(t_end, progress, every, on_step, switchover)
-        gate_nodes = np.unique(np.concatenate([f.nodes.ravel() for f, _ in self.gates]))
+        gate_nodes = self._gate_nodes()
         start, step = time.perf_counter(), 0
         while self.time < t_end and not np.all(self.fill_factor >= 1.0):
             if switchover is not None and self.fill_factor @ self.volume >= switchover * self.volume.sum():

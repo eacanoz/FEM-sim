@@ -284,6 +284,21 @@ class TaitPVT:
     def density(self, p, T):
         return 1.0 / self.specific_volume(p, T)
 
+    def specific_volume_crystallinity(self, p, T, X):
+
+        """v(p, T, X) with the relative crystallinity X of a kinetics instead of the transition: (1 - X) v_melt + X v_solid, each branch
+        extended beyond its own domain, the solid one without vt (vt is the crystallization of the slow cooling of the pvT measurement,
+        which X now carries)."""
+
+        b = self.b
+        dT = T + KELVIN_OFFSET - b['b5']
+        melt = (b['b1m'] + b['b2m'] * dT) * (1.0 - self.C * jnp.log1p(p / (b['b3m'] * jnp.exp(-b['b4m'] * dT))))
+        solid = (b['b1s'] + b['b2s'] * dT) * (1.0 - self.C * jnp.log1p(p / (b['b3s'] * jnp.exp(-b['b4s'] * dT))))
+        return (1.0 - X) * melt + X * solid
+
+    def density_crystallinity(self, p, T, X):
+        return 1.0 / self.specific_volume_crystallinity(p, T, X)
+
     def expansion(self, p, T):
 
         """Thermal expansion beta = (1/v) dv/dT of the Tait part of each domain, mixed by the transition weight without its derivative and
