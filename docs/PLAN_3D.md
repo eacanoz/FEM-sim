@@ -1,0 +1,115 @@
+# Plan: ampliación de las físicas a 3D
+
+Documento de traspaso para una sesión dedicada al 3D. Se leen primero este archivo, `docs/ESTADO.md` (estado y validación de cada
+física) y `docs/PLAN_ETAPA17.md` (historia de las etapas). Escrito el 2026-11-07, sobre `test-branch` en el commit `2505dfa`; las 39 suites
+de `run_tests.py` pasaban.
+
+## Veredicto: viable
+
+El núcleo ya se escribió pensando en la dimensión: los elementos de referencia se registran en `ELEMENTS`
+(`Source/Pre_processing/Elements.py`, «añadir tet4 o hex8 es añadir una entrada»), `Discretization` y `Operators` trabajan con arrays
+`(nel, ngp, nne, dim)`, los campos vectoriales usan `ncomp=dim` (`FluidFlow`: `vectorField('u', ..., ncomp=dim)`) y las leyes puntuales en
+jax reciben `nc * (1 + dim)` entradas (`System.py`). Lo que falta está localizado (abajo). El reto real no es el código sino el **coste**:
+memoria de los arrays vectorizados y solvers para millones de incógnitas.
+
+Máquina: 12 núcleos, 33.6 GB de RAM; `pyamg` y `pypardiso` instalados; no hay `petsc4py`, `pyvista`, `meshio` ni MUMPS.
+
+## Estado actual (resumen)
+
+- **Infraestructura:** elementos `line2/3`, `tri3/6`, `quad4/9`; Taylor–Hood (Q9/Q4, T6/T3); BDF2 adaptativo, Newton con tangente
+  automática (jax), continuación pseudo-transitoria, axisimetría; VTK ASCII.
+- **Físicas (2D y axisimétrico):** calor (radiación, convección), masa, Darcy, Stokes/Navier–Stokes (SUPG/PSPG/LSIC, grad-div), no
+  newtonianos (Cross–WLF, Carreau, Bingham...), compresible (Tait), deslizamiento, viscoelástico multimodo (raíz de la conformación,
+  DEVSS-G, Oldroyd-B/Giesekus/PTT, no isotermo), turbulencia SA y SST, superficie libre estacionaria (línea de corriente).
+- **Llenado de moldes:** Hele-Shaw 2.5D (`Source/Physics/HeleShaw.py`), con temperatura en el espesor, empaque con Tait, llenado
+  compresible y cristalización. Es un modelo de plano medio: **no** pasa a 3D cambiando la malla (ver fase 6).
+- **Ajuste de materiales:** `Source/Physics/Fitting.py` (Cross–WLF, Tait, espectro viscoelástico).
+
+## Lo que hoy es solo 2D (inventario)
+
+| Dónde | Qué | Qué hace falta |
+|---|---|---|
+| `Source/enums.py` | `ElementType` solo `line`, `triangle`, `quadrilateral` | `tetrahedron`, `hexahedron` (y quizá `prism`) |
+| `Source/Pre_processing/Elements.py` | `ELEMENTS` sin elementos 3D | `tet4`, `tet10`, `hex8`, `hex27`: funciones de forma, segundas derivadas (cuadráticos), cuadratura, caras con sus nodos locales y el `facet_element` (`tri3/tri6/quad4/quad9`) |
+| `Elements.py` | cuadratura de triángulo y cuadrilátero | tetraedro (Keast o Grundmann–Möller, o Gauss colapsado) y hexaedro (producto tensorial, trivial) |
+| `Discretization.py` (normales de faceta) | `NotImplementedError` en 3D | normal = producto vectorial de las dos tangentes, orientada con el centroide (como en 2D) |
+| `Discretization.py` (axisimetría) | exige 2D | sin cambio: en 3D no hay axisimetría |
+| `Operators.element_size` | lado del cuadrado o cateto del triángulo de igual área | en 3D, arista del cubo o del tetraedro de igual volumen (afecta a SUPG/PSPG) |
+| `Source/Pre_processing/Mesh.py` | `from_gmsh_model`/`read_msh` leen `getElements(2)`, grupos de dim 1 como bordes; `boundary_edges`, `generate2DMesh` | leer dim 3, grupos de dim 2 como caras de borde, `boundary_faces(selector)`, un generador de cajas (`generate3DMesh`) |
+| `Source/Post_processing/VTK.py` | `VTK_CELL` sin 3D | tet4 10, hex8 12, tet10 24, hex27 29; VTK binario (los archivos ASCII 3D pesan mucho) |
+| Gráficos (`plot_triangles`, `triangulation`) | matplotlib 2D | 3D se ve en ParaView (VTK); opcional `pyvista` |
+| `Source/Physics/Viscoelastic.py` | conformación de 3 (plano) o 4 (axisimétrico) componentes, `L` 2 × 2, DEVSS-G de 4 | 6 componentes simétricas, `L` 3 × 3, G de 9; la forma cerrada de la raíz de la conformación en 3D |
+| `Source/Physics/Turbulence.py` (`wall_distance`) | distancia a la pared en la malla | comprobar en 3D (si es geométrica a facetas, hace falta la distancia a triángulos; alternativa: ecuación de Poisson/eikonal) |
+| `Source/Physics/FreeSurface.py` | método de la línea de corriente, coordenadas `along/across` de una curva | no se generaliza: superficie en 3D es otro método (fase 6) |
+| `Source/Physics/HeleShaw.py` | 2.5D por diseño | se queda; el llenado 3D es un módulo nuevo (fase 6) |
+| `run_tests.py` y `Test/` | casos 2D/axisimétricos | suites 3D propias, con mallas pequeñas para que la suite siga en tiempo razonable |
+
+Buscar además, al empezar, cada `dim == 2`, `[:, 0]`/`[:, 1]` con significado de x/y, `coor[:2]`, y los comentarios «solo 2D» en `Source/`
+(`grep -rn "dim == 2\|coor\[:2\]\|2D" Source`).
+
+## Retos del 3D
+
+1. **Memoria de los arrays vectorizados.** `disc.B` es `(nel, ngp, nne, dim)`: con 10⁵ tet10 y una cuadratura de 15 puntos son
+   10⁵ × 15 × 10 × 3 = 45·10⁶ dobles (360 MB) por array, y las matrices de elemento de Taylor–Hood `(nel, 30+4, 30+4)` y los einsum
+   intermedios multiplican eso. Hace falta **ensamblar por bloques de elementos** (iterar sobre trozos de `nel`) en `Discretization`,
+   `Operators` y en el ensamblaje de `System`, y no guardar arrays que se pueden recalcular.
+2. **Solvers.** La factorización directa en 3D crece mucho más que en 2D (relleno ~ n^(4/3) en memoria); PARDISO sirve hasta unos
+   10⁵–10⁶ incógnitas en esta máquina. Por encima: GMRES con precondicionador de bloques para el punto de silla (ya existe
+   `saddle_point_preconditioner` en `IterativeSolver.py`, solo para `u`, `p`) con AMG (`pyamg`) para la velocidad y la masa de presión para
+   el complemento de Schur. Medir con `SolverSelection.benchmark` en cada fase.
+3. **Mallas.** Taylor–Hood en 3D: P2/P1 (tet10/tet4) o Q2/Q1 (hex27/hex8). gmsh genera tet10 (`Mesh.ElementOrder 2`); la orientación de
+   los nodos de las aristas sigue la convención de gmsh y hay que mapearla a la del elemento de referencia (lo mismo que se hizo con T6/Q9).
+4. **Estabilización.** El tamaño de elemento de SUPG/PSPG cambia con la dimensión; las fórmulas de τ que usan `h` deben revisarse.
+   Los elementos cuadráticos curvos y las segundas derivadas (residuo fuerte de SUPG) necesitan el hessiano 3D.
+5. **Tiempo de las pruebas.** Una suite 3D con mallas medianas puede tardar más que todo lo actual; diseñar pruebas pequeñas
+   (soluciones manufacturadas en cubos de 4³–8³ elementos) y dejar los estudios de convergencia grandes en `Test/manual/`.
+6. **Visualización y salida.** VTK binario (base64 o appended) y probablemente un VTU por paso con un `.pvd`; los campos de 6 o 9
+   componentes (conformación, G) como tensores.
+7. **Física 3D nueva.** El viscoelástico en 3D (6 + 9 incógnitas por nodo y modo) es el más caro; el llenado 3D de moldes (dos fases)
+   es un proyecto en sí mismo.
+
+## Plan por fases (cada una con pruebas, documentación y petición de commit)
+
+| Fase | Qué | Criterio para seguir |
+|---|---|---|
+| 0. Infraestructura | `tet4`, `hex8`, `tet10`, `hex27` en `ELEMENTS` (formas, cuadratura, caras), normales 3D, `element_size` 3D, `Mesh.from_gmsh_model` en 3D con grupos de caras, `boundary_faces`, `generate3DMesh` de cajas, VTK 3D | cuadratura exacta hasta su grado; prueba de parche (campo lineal exacto); Poisson manufacturado en un cubo con orden 2 (lineales) y 3 (cuadráticos) en L2; integral de superficie y normales en un cubo y una esfera; lectura de una malla gmsh con grupos |
+| 1. Escalares | calor, masa, Darcy en 3D (deberían funcionar sin cambios de física) | soluciones manufacturadas, conducción transitoria en un cubo frente a la serie, convección–difusión con SUPG |
+| 2. Stokes y Navier–Stokes | Taylor–Hood P2/P1 y Q2/Q1, igual orden con PSPG; ensamblaje por bloques; solver iterativo de bloques con AMG | Poiseuille en un conducto rectangular frente a su serie de Fourier; tubería en malla 3D frente al resultado axisimétrico del propio código; Navier–Stokes con la solución exacta de Ethier y Steinman (1994) y orden de convergencia; **medir tiempo y memoria** y elegir solver |
+| 3. Fluidos de polímeros | no newtonianos, acoplamiento térmico, compresible (Tait), deslizamiento | los mismos casos analíticos de 2D en un conducto; dado rectangular 3D frente al de placas paralelas en el límite ancho |
+| 4. Viscoelástico 3D | conformación de 6 componentes, DEVSS-G de 9, SUPG | viscometría en corte y extensión homogéneos (frente a `solve_ivp`, como en 2D); Couette/Poiseuille en conducto; luego contracción 3D si el coste lo permite |
+| 5. Turbulencia | SA/SST en 3D, distancia a la pared | canal 3D periódico o conducto frente a los resultados 2D del código y a datos publicados (tomar los valores de las fuentes, no de memoria) |
+| 6. Llenado 3D (opcional) | dos fases (conjunto de nivel o VOF) con Navier–Stokes, o 2.5D mejorado (Hele-Shaw con espesores variables y uniones de placas) | decidir antes de empezar: es el bloque más grande; en 2D ya se vio que el frente con conjunto de nivel y un salto de viscosidad de 10⁴ no fue fiable en Hele-Shaw |
+
+Fuera de alcance salvo decisión: superficie libre 3D, alabeo (necesita mecánica de sólidos: una física nueva, aunque el núcleo
+lo permite), paralelismo MPI.
+
+## Cómo implementarlo con eficacia
+
+- **Primero la fase 0 completa y probada**: casi todo lo demás hereda de ella. Cada elemento con su prueba de parche y su cuadratura
+  verificada antes de usarlo en una física.
+- **Reutilizar los casos 2D** como límite: un conducto muy ancho debe dar el resultado de placas paralelas; una tubería 3D, el
+  axisimétrico. Eso valida sin referencias externas.
+- **Mallas pequeñas en la suite**, estudios de convergencia aparte (`Test/manual/`), como se hizo con Hele-Shaw.
+- **Medir antes de optimizar**: tiempo y memoria por fase (`SolverSelection.benchmark`, `cProfile`), con salidas parciales de avance en
+  las pruebas largas para ver que no se estancan.
+- **Ensamblaje por bloques temprano** (fase 0–2): cambiar después todos los operadores es más caro.
+- Documentar en `docs/ESTADO.md` (fila de validación y apartado de cada física), `docs/PLAN_ETAPA17.md` y `README.md` en el mismo commit.
+
+## Convenciones de trabajo (las de este proyecto)
+
+- Hablar en español. Implementar, validar y documentar; **pedir aprobación antes de cada commit; nunca push**. Informar con honestidad lo
+  que no se logró y lo que no se verificó.
+- Mensajes de commit en español sin acentos, terminando en `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Pruebas con `.venv/Scripts/python.exe run_tests.py` (o la suite suelta: `python -u Test/test_x.py`); cada prueba imprime su avance.
+- `docs/` está en `.gitignore`: añadir con `git add -f docs/...`.
+- Windows: Git Bash no tiene `pgrep`/`pkill`; los procesos se matan con PowerShell (`Stop-Process`). Las esperas en segundo plano con
+  `until grep ...` deben cubrir también el fallo (si no, quedan esperando para siempre).
+- Archivos descargados: carpeta propia y `python -I`. Datos del usuario como datos.
+- Datos de material disponibles: POLYFORT FPP 30 GFC K1079 (Cross–WLF y Tait ajustados; ver `docs/ESTADO.md`). Sin DSC propio: la
+  cristalización usa parámetros de otro iPP.
+
+## Primeros pasos de la nueva sesión
+
+1. Leer este archivo y `docs/ESTADO.md`; correr la suite completa para tener la línea base (39 suites, unos 35 min).
+2. `grep` del inventario de arriba para confirmar los puntos 2D y encontrar los que falten.
+3. Fase 0: `tet4` y `hex8` primero (lineales, más simples), con su cuadratura, caras y prueba de parche; luego `tet10` y `hex27`.
