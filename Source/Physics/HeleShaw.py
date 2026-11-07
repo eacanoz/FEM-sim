@@ -33,6 +33,12 @@
 # the node keeps its mass). When a node freezes through the gap its specific volume is recorded: the volumetric shrinkage is
 # 1 - v(ambient, T_room) / v_frozen.
 #
+# With setDensity the filling is compressible too, by the same step: the gate is then a flow rate (the mass Q rho(p, T_melt) of the melt
+# at the gate pressure), and a node is full when its mass reaches V rho(ambient, T): the nodes short of it stay at ambient pressure and
+# receive melt (the front, with the fill factor m / (V rho(ambient, T))). Each step lasts until the next node fills, as in the
+# incompressible filling, with the flow rates of the previous step. With temperature, the compression heats the melt, beta T Dp/Dt
+# (beta = -(1/rho) d(rho)/dT from the state law): dp/dt at the node, and u . grad p from the flow that reaches each cell.
+#
 # Linear elements (T3, Q4). SI units: gap [m], pressure [Pa], flow rate [m3/s]; temperature in the units of the viscosity law (°C).
 import time
 
@@ -41,6 +47,7 @@ import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 
 from Source.Simulation.Discretization import Discretization
+from Source.Physics.Physics import KELVIN_OFFSET
 import Source.Simulation.Operators as ops
 
 
@@ -234,10 +241,11 @@ class HeleShawFilling:
         self.T = np.full((len(self.xy), len(edges) - 1), float(T_melt))
         return self
 
-    def setDensity(self, density, ambient=1e5):
+    def setDensity(self, density, ambient=1e5, compression_heating=True):
 
-        """Compressible melt for the packing: density(p_abs, T) [kg/m3] written with jax.numpy (TaitPVT(...).density), p_abs = the
-        pressure of the model + ambient [Pa]."""
+        """Compressible melt for the filling and the packing: density(p_abs, T) [kg/m3] written with jax.numpy (TaitPVT(...).density),
+        p_abs = the pressure of the model + ambient [Pa]. compression_heating: beta T Dp/Dt in the energy (with setThermal); beta from
+        the law, or for a TaitPVT density its own expansion without the jump of the transition."""
 
         import jax
         jax.config.update("jax_enable_x64", True)
@@ -247,13 +255,34 @@ class HeleShawFilling:
         def mean(p, T):
             return jnp.sum(dz * density(p[:, None] + ambient, T), axis=1)
 
-        self.density = dict(law=density, ambient=float(ambient),
-                            nodal=jax.jit(lambda p, T: jax.jvp(lambda q: mean(q, T), (p,), (jnp.ones_like(p),))))
+        own = getattr(getattr(density, '__self__', None), 'expansion', None)       # TaitPVT(...).density: its own beta, without the jump
+
+        def expansion(p, T):                                                       # beta = -d log(rho) / dT per cell
+            P = jnp.broadcast_to(p[:, None] + ambient, T.shape)
+            if own is not None:
+                return own(P, T)
+            return -jax.jvp(lambda TT: jnp.log(density(P, TT)), (T,), (jnp.ones_like(T),))[1]
+
+        def gate(p, T):
+            return jax.jvp(lambda q: density(q + ambient, T), (p,), (jnp.ones_like(p),))
+
+        self.density = dict(law=density, ambient=float(ambient), heating=bool(compression_heating),
+                            nodal=jax.jit(lambda p, T: jax.jvp(lambda q: mean(q, T), (p,), (jnp.ones_like(p),))),
+                            beta=jax.jit(expansion), gate=jax.jit(gate))
         return self
+
+    def full_density(self):
+
+        """The density of each node at ambient pressure: a node is full when its mass reaches V times it."""
+
+        return self.nodal_density(np.zeros(len(self.xy)))[0]
 
     def _temperature_cells(self):
         if self.thermal is not None:
-            return self.T
+            # inside a compressible step, the temperature predicted for its end (the rate of the last step): the cooling of the step and
+            # the melt that makes up for it then come in the same step, instead of a deficit left to the next, much shorter one
+            ahead, rate = getattr(self, '_ahead', 0.0), getattr(self, '_T_rate', None)
+            return self.T if (rate is None or ahead == 0.0) else self.T + ahead * rate
         return np.full((len(self.xy), 1), float(self.T_fixed if self.T_fixed is not None else 0.0))
 
     def nodal_density(self, p=None):
@@ -419,13 +448,14 @@ class HeleShawFilling:
 
     # ----- the temperature -----
 
-    def _advance_temperature(self, dt, old, new):
+    def _advance_temperature(self, dt, old, new, p_old=None):
 
         """One step of the temperature over dt: convection in the plane (implicit upwind per cell), then conduction across the gap with the
         viscous heating (implicit). old, new: the content of each node at the start and the end of the step, in the units of the fluxes of
         self._step (melt volume f V in the filling, mass in the packing)."""
 
         th, disc = self.thermal, self.disc
+        T_start = self.T.copy()
         Ke, F, active = self._step
         flow, heat, _ = self._layers
         conn, n, dz = disc.conn, len(self.xy), th['dz']
@@ -481,6 +511,15 @@ class HeleShawFilling:
         for X in mixer:
             A = A - X
         self.T = spla.spsolve(A.tocsc(), rhs).reshape(nc, n).T.copy()
+        compression = None
+        if p_old is not None and self.density is not None and self.density['heating']:
+            # Dp/Dt per cell: the change at the node, and the pressure difference of the melt that arrives (u . grad p)
+            P = np.tile(self.p, nc)
+            dp_in = np.asarray(M.sum(axis=1)).ravel() * P - M @ P                        # sum_j q_ij (p_i - p_j), mass flows
+            mass_cells = (new[None, :] * dz[:, None]).ravel()
+            DpDt = np.tile((self.p - p_old) / dt, nc) + np.where(mass_cells > 0, dp_in / np.maximum(mass_cells, 1e-300), 0.0)
+            beta = np.asarray(self.density['beta'](self.p, self.T))
+            compression = (beta * (self.T + KELVIN_OFFSET)) * DpDt.reshape(nc, n).T          # W/m3, at the start of the conduction
         # conduction across the gap, with the heating, where there is melt
         melt = self.fill_factor > 0
         b = th['b_node'][melt]
@@ -503,7 +542,10 @@ class HeleShawFilling:
             np.add.at(node_heat, conn.ravel(), ((w * scale[:, None])[:, :, None] * heat[:, None, :]).reshape(-1, nc))
             node_heat = node_heat / self.volume[:, None]
             rhs += h * node_heat[melt]
+        if compression is not None:
+            rhs += h * compression[melt]
         self.T[melt] = _tridiagonal(lower, diagz, upper, rhs)
+        self._T_rate = (self.T - T_start) / dt
 
     # ----- the filling -----
 
@@ -515,11 +557,38 @@ class HeleShawFilling:
             active = np.any(self.T[self.disc.conn].mean(axis=1) >= self.thermal['T_noflow'], axis=1)
         return active
 
-    def _pack_step(self, dt, p_gate, tol=1e-9, max_iterations=60):
+    def _gate_rates(self):
 
-        """One implicit step of the packing (gate at p_gate, or closed if None). Returns the new masses, the gate inflow per node and the
-        iterations. Newton with the tangent of the fluidity and of the compressibility, rho_e lagged."""
+        """The volumetric flow rate of the gates at each node [m3/s]."""
 
+        q = np.zeros(len(self.xy))
+        for facets, Q in self.gates:
+            q += _scatter_vector(self.disc, ops.facet_source(facets, Q / facets.detJw.sum()), facets.nodes)
+        return q
+
+    def _gate_mass(self, p):
+
+        """Mass inflow of the gates at each node, q_i rho(p_i, T_melt), and its derivative in p."""
+
+        q = self._gate_rates()
+        T_in = self.thermal['T_melt'] if self.thermal is not None else float(self.T_fixed if self.T_fixed is not None else 0.0)
+        rho, drho = self.density['gate'](p, np.full_like(p, T_in))
+        return q * np.asarray(rho), q * np.asarray(drho)
+
+    def _pack_step(self, dt, p_gate, inject=False, front=None, tol=1e-9, max_iterations=60):
+
+        """One implicit step of the compressible melt: the gate at p_gate, or injecting its flow rate (inject), or closed. Nodes short of
+        their full mass stay at ambient pressure and take what flows in. Returns the new masses, the gate inflow per node, the iterations
+        and the nodes at ambient pressure. front: the nodes taken at ambient pressure to start with (default: those short of their mass at
+        ambient pressure); the active set corrects it. Newton with the tangent of the fluidity and of the compressibility, rho_e lagged."""
+
+        self._ahead = dt
+        try:
+            return self._pack_solve(dt, p_gate, inject, front, tol, max_iterations)
+        finally:
+            self._ahead = 0.0
+
+    def _pack_solve(self, dt, p_gate, inject, front, tol, max_iterations):
         disc, n = self.disc, len(self.xy)
         gate_nodes = np.unique(np.concatenate([f.nodes.ravel() for f, _ in self.gates]))
         fixed = np.zeros(n, dtype=bool)
@@ -527,9 +596,13 @@ class HeleShawFilling:
         if p_gate is not None:
             fixed[gate_nodes] = True
             p[gate_nodes] = p_gate
-        clamped = np.zeros(n, dtype=bool)
-        open_e = self._open_elements()
         m_old = self.mass
+        if front is None:
+            front = m_old < self.volume * self.full_density()                       # short of melt: at ambient pressure
+        clamped = ~fixed & front
+        p[clamped] = 0.0
+        open_e = self._open_elements()
+        F, dF = np.zeros(n), np.zeros(n)
         for _ in range(5):                                                          # active set of the nodes at ambient pressure
             for k in range(1, max_iterations + 1):
                 gp = disc.gradient(p)
@@ -539,11 +612,13 @@ class HeleShawFilling:
                 rho_e = rho[disc.conn].mean(axis=1)
                 Ke = ops.diffusion(disc, S * (rho_e * open_e)[:, None])
                 K = _scatter(disc, Ke)
-                r = self.volume * rho - m_old + dt * (K @ p)
+                if inject:
+                    F, dF = self._gate_mass(p)
+                r = self.volume * rho - m_old + dt * (K @ p) - dt * F
                 # Newton in the fluidity too (a fixed point on S does not converge for a strongly thinning melt), rho_e lagged
                 a = np.einsum('eg,egia,ega->ei', disc.detJw, disc.B, gp) * (rho_e * open_e)[:, None]
                 c = np.einsum('eg,ega,egja->ej', dS / np.maximum(G, 1e-300), gp, disc.B)
-                J = (sp.diags(self.volume * drho) + dt * (K + _scatter(disc, np.einsum('ei,ej->eij', a, c)))).tocsr()
+                J = (sp.diags(self.volume * drho - dt * dF) + dt * (K + _scatter(disc, np.einsum('ei,ej->eij', a, c)))).tocsr()
                 free = np.flatnonzero(~fixed & ~clamped)
                 dp = np.zeros(n)
                 if len(free):
@@ -554,7 +629,7 @@ class HeleShawFilling:
                     break
             low = ~fixed & ~clamped & (p < 0.0)
             # a clamped node that its neighbours would overfill comes back
-            flux = dt * (K @ p)
+            flux = dt * (K @ p - F)
             back = clamped & (m_old - flux > self.volume * self.nodal_density(np.where(clamped, 0.0, p))[0])
             if not np.any(low) and not np.any(back):
                 break
@@ -564,12 +639,82 @@ class HeleShawFilling:
         rho, _ = self.nodal_density(p)
         rho_e = rho[disc.conn].mean(axis=1)
         Ke = ops.diffusion(disc, S * (rho_e * open_e)[:, None])
+        if inject:
+            F, _ = self._gate_mass(p)
         flux = dt * (_scatter(disc, Ke) @ p)
-        m_new = np.where(clamped, m_old - flux, self.volume * rho)
-        inflow = np.where(fixed, (m_new - m_old + flux) / dt, 0.0)
+        m_new = np.where(clamped, m_old - flux + dt * F, self.volume * rho)
+        inflow = np.where(fixed, (m_new - m_old + flux) / dt, F)
         self.p = p
         self._step = (Ke, inflow, open_e)
         return m_new, inflow, k, clamped
+
+    def _fill_compressible(self, t_end, progress, every, on_step, switchover=None):
+
+        """The filling with the compressible melt: _pack_step with the gates injecting, each step until the next node is full."""
+
+        n = len(self.xy)
+        gate_nodes = np.unique(np.concatenate([f.nodes.ravel() for f, _ in self.gates]))
+        if getattr(self, 'mass', None) is None:
+            self.mass = self.fill_factor * self.volume * self.full_density()
+        rate = getattr(self, '_fill_rate', None)
+        if rate is None:                                                           # the first step: the incompressible flow rates
+            reaction, _ = self.solve_pressure()
+            rate = reaction * self.full_density()
+        start, step, dt = time.perf_counter(), 0, np.inf
+        while self.time < t_end:
+            full = self.volume * self.full_density()
+            short = full - self.mass
+            if not np.any(np.isnan(self.fill_time)):
+                break
+            if switchover is not None and self.fill_factor @ self.volume >= switchover * self.volume.sum():
+                break
+            unfilled = np.isnan(self.fill_time)                                    # the front: nodes not filled yet (a filled node that
+            receiving = (rate > 0) & (short > 1e-3 * full) & unfilled              # cools below its mass stays filled, at ambient pressure)
+            refilling = (rate > 0) & ~unfilled                                     # filled nodes that the cooling left short: they take
+            if not np.any(receiving) and np.any(refilling) and np.isfinite(dt):   # melt first, the front waits for them
+                receiving, short, rate = refilling, np.full_like(short, dt), np.ones_like(rate)
+            if not np.any(receiving):
+                if self.thermal is not None:
+                    self.short_shot = self.time
+                    print(f"   tiro corto a t = {self.time:.4g} s: ningun nodo recibe fundido (la capa congelada cerro el paso)", flush=True)
+                    break
+                raise RuntimeError("Ningun nodo recibe fundido: la cavidad esta cerrada sin venteo o la entrada no tiene caudal.")
+            # the rates of the previous step, with the step at most 4 times the last (they miss the nodes that only start to receive)
+            dt = min(float(np.min(short[receiving] / rate[receiving])), 4.0 * dt, t_end - self.time)
+            m_old, p_old = self.mass.copy(), self.p.copy()
+            for attempt in range(10):
+                m_new, inflow, iterations, clamped = self._pack_step(dt, None, inject=True, front=unfilled)
+                # the step is redone shorter when, with its own rates, a node fills well before its end, or a node that received nothing
+                # at its start fills (the front ran over several nodes): the rates of the previous step miss the nodes that only start
+                gain = np.where(unfilled, np.maximum(m_new - m_old, 0.0) / dt, 0.0)
+                done = unfilled & (~clamped | (m_new >= (1 - 1e-3) * full))         # within 0.1 %: the rest comes at ambient pressure
+                waiting = receiving & (gain > 0) & (short > 1e-3 * full)
+                dt_fill = float(np.min(short[waiting] / gain[waiting])) if np.any(waiting) else dt
+                if attempt == 9 or (not np.any(done & ~receiving) and dt <= 1.1 * dt_fill):
+                    break
+                self.p = p_old.copy()
+                dt = min(dt_fill, 0.5 * dt)
+            # filled: out of the set at ambient pressure, or at its full mass, both at the temperature of the step (before it cools)
+            self.fill_factor[unfilled] = np.minimum(m_new[unfilled] / full[unfilled], 1.0)
+            self.fill_factor[done] = 1.0
+            rate = np.where(clamped, (m_new - m_old) / dt, 0.0)
+            if self.thermal is not None:
+                self._advance_temperature(dt, m_old, m_new, p_old)
+            self.mass = m_new
+            self.time += dt
+            step += 1
+            new = done
+            self.fill_time[new] = self.time
+            self.history.append((self.time, float(self.fill_factor @ self.volume), float(self.p[gate_nodes].mean()), iterations,
+                                 int(np.sum(self.fill_factor >= 1.0)), float(self.mass.sum())))
+            if on_step is not None:
+                on_step(self)
+            if progress and step % every == 0:
+                print(f"   llenado compresible: paso {step}, t = {self.time:.4g} s, {100 * np.mean(self.fill_factor >= 1):.1f} % de los nodos "
+                      f"llenos, p de entrada {self.history[-1][2] / 1e6:.4g} MPa, masa {self.mass.sum() * 1e3:.4g} g, {iterations} it. "
+                      f"({time.perf_counter() - start:.0f} s)", flush=True)
+        self._fill_rate = rate
+        return self.history
 
     def pack(self, p_gate, t_pack, t_cool=0.0, dt_max=0.05, dt_first=1e-3, growth=1.25, T_room=25.0, progress=True, every=20,
              on_step=None):
@@ -581,11 +726,12 @@ class HeleShawFilling:
 
         if self.density is None:
             raise ValueError("El empaque necesita setDensity (la ecuacion de estado del fundido).")
-        if not np.all(self.fill_factor >= 1.0):
-            raise ValueError("El empaque empieza con la cavidad llena: llamar fill() primero.")
+        if np.any(np.isnan(self.fill_time)) and getattr(self, 'mass', None) is None:
+            raise ValueError("El empaque empieza tras el llenado: llamar fill() primero (compresible si se cambia antes de llenar).")
         n = len(self.xy)
         if getattr(self, 'mass', None) is None:
             self.mass = self.volume * self.nodal_density()[0]
+        if getattr(self, 'pack_history', None) is None:
             self.v_frozen = np.full(n, np.nan)
             self.pack_history = []
             self.T_room = float(T_room)
@@ -601,12 +747,20 @@ class HeleShawFilling:
                 pg = float(p_gate(s)) if callable(p_gate) else float(p_gate)
             else:
                 pg = None
-            m_old = self.mass
-            m_new, inflow, iterations, clamped = self._pack_step(dt, pg)
+            m_old, p_old = self.mass, self.p.copy()
+            unfilled = np.isnan(self.fill_time)
+            full = self.volume * self.full_density()
+            m_new, inflow, iterations, clamped = self._pack_step(dt, pg, front=(m_old < full) | unfilled)
+            # the rest of the filling, after a switchover: a node that cools keeps raising its full mass, so here 99 % of it is filled (the
+            # rest is a void that the shrinkage counts)
+            done = unfilled & (~clamped | (m_new >= 0.99 * full))
+            self.fill_factor[unfilled] = np.minimum(m_new[unfilled] / full[unfilled], 1.0)
+            self.fill_factor[done] = 1.0
             if self.thermal is not None:
-                self._advance_temperature(dt, m_old, m_new)
+                self._advance_temperature(dt, m_old, m_new, p_old)
             self.mass = m_new
             self.time += dt
+            self.fill_time[done] = self.time
             step += 1
             if self.thermal is not None and self.thermal['T_noflow'] is not None:
                 frozen = np.isnan(self.v_frozen) & (self.frozen_fraction() >= 1.0 - 1e-12)
@@ -625,25 +779,36 @@ class HeleShawFilling:
 
     def shrinkage(self):
 
-        """Volumetric shrinkage of each node, 1 - v(ambient, T_room) / v_frozen; a node not yet frozen uses its specific volume now."""
+        """Volumetric shrinkage of each node, 1 - v(ambient, T_room) / v_frozen; a node not yet frozen uses its specific volume now, a node
+        never filled (a short shot) gets NaN."""
 
-        v = np.where(np.isnan(self.v_frozen), self.volume / self.mass, self.v_frozen)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            v = np.where(np.isnan(self.v_frozen), self.volume / self.mass, self.v_frozen)
         v_room = 1.0 / float(self.density['law'](self.density['ambient'], self.T_room))
-        return 1.0 - v_room / v
+        return np.where(np.isnan(self.fill_time), np.nan, 1.0 - v_room / v)
 
     def melt_volume(self):
         return float(self.fill_factor @ self.volume)
 
-    def fill(self, t_end=np.inf, progress=True, every=50, on_step=None):
+    def fill(self, t_end=np.inf, progress=True, every=50, on_step=None, compressible=None, switchover=None):
 
         """Fills node by node until t_end or until every node is filled. Keeps self.history of (t, melt volume, mean gate pressure, Newton
         iterations, filled nodes) and returns it; self.fill_time holds when each node filled; with setThermal, self.T the temperature of each
-        cell across the gap at each node. on_step(self) is called after each step (to take
+        cell across the gap at each node. compressible (default: with setDensity): the compressible filling, history then
+        (t, filled volume, gate pressure, iterations, filled nodes, mass) and self.mass the mass of each node. switchover: stop at
+        this fraction of the cavity volume filled (the velocity-to-pressure switchover, before pack(), which fills the rest; at constant
+        flow rate the last nodes of a nearly full compressible cavity only take melt as the whole cavity compresses). on_step(self) is called after each step (to take
         snapshots for an animation)."""
 
+        if compressible is None:
+            compressible = self.density is not None
+        if compressible:
+            return self._fill_compressible(t_end, progress, every, on_step, switchover)
         gate_nodes = np.unique(np.concatenate([f.nodes.ravel() for f, _ in self.gates]))
         start, step = time.perf_counter(), 0
         while self.time < t_end and not np.all(self.fill_factor >= 1.0):
+            if switchover is not None and self.fill_factor @ self.volume >= switchover * self.volume.sum():
+                break
             reaction, iterations = self.solve_pressure()
             self.history.append((self.time, self.melt_volume(), float(self.p[gate_nodes].mean()), iterations,
                                  int(np.sum(self.fill_factor >= 1.0))))

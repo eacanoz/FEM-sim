@@ -1,9 +1,11 @@
 """Filling, packing and cooling of a plate in the Hele-Shaw approximation: POLYFORT FPP 30 GFC K1079 (Cross-WLF and two-domain Tait,
 both fitted to the data of the material), the 100 x 60 x 2 mm plate with its 8 mm insert, mold at 50 °C.
 
-The plate is filled in 1 s, then packed through the gate at 80 % of the pressure at the end of the filling for 4 s and left to cool
-with the gate closed. The same filled state is also left to cool with no packing. The packing pushes in the melt that the cooling
-shrinks away: the part is heavier and its volumetric shrinkage, 1 - v(1 bar, 25 °C) / v at freezing, is smaller and more even.
+The plate is filled in 1 s with the compressible melt (the Tait law from the start, compression heating included) up to the
+velocity-to-pressure switchover at 98 % of its volume, then packed through the gate at 80 % of the pressure at the switchover for 4 s
+(which fills the rest) and left to cool with the gate closed; the same switchover state is also packed for only 0.5 s (enough to
+fill the rest, the gate then closes long before it freezes). The longer hold pushes in the melt that the cooling shrinks away: the
+part is heavier and its volumetric shrinkage, 1 - v(1 bar, 25 °C) / v at freezing, is smaller and more even.
 
 Run from the project root:  python -u Example_Packing_HeleShaw.py   (some 6 min: the filling takes most of it)
 """
@@ -56,15 +58,16 @@ def model():
 
 start = time.perf_counter()
 filled = model()
-filled.fill(progress=True, every=400)
+filled.fill(progress=True, every=400, switchover=0.98)
 p_fill = filled.history[-1][2]
-print(f"filled in {filled.time:.3f} s, gate pressure {p_fill / 1e6:.2f} MPa ({time.perf_counter() - start:.0f} s)", flush=True)
+print(f"switchover at {filled.time:.3f} s with {filled.fill_factor @ filled.volume / filled.volume.sum():.1%} of the volume, gate pressure "
+      f"{p_fill / 1e6:.2f} MPa, mass {filled.mass.sum() * 1e3:.3f} g, hottest cell {filled.T.max():.1f} °C ({time.perf_counter() - start:.0f} s)", flush=True)
 
 far = np.argmin(np.hypot(filled.xy[:, 0] - 0.09, filled.xy[:, 1] - 0.03))     # a pressure sensor near the end of the flow
 cases = {}
-for name, t_pack in (('empaque a 80 %', T_PACK), ('sin empaque', 0.0)):
+for name, t_pack in ((f'empaque {T_PACK:g} s', T_PACK), ('empaque 0.5 s', 0.5)):
     fill = model()
-    for attr in ('fill_factor', 'fill_time', 'p', 'T', 'time', 'history'):
+    for attr in ('fill_factor', 'fill_time', 'p', 'T', 'time', 'history', 'mass'):
         value = getattr(filled, attr)
         setattr(fill, attr, value.copy() if hasattr(value, 'copy') else value)
     trace = []
@@ -72,8 +75,9 @@ for name, t_pack in (('empaque a 80 %', T_PACK), ('sin empaque', 0.0)):
               on_step=lambda f: trace.append((f.time, f.p[far])))
     cases[name] = (fill, np.array(fill.pack_history), np.array(trace))
     sh = fill.shrinkage()
-    print(f"{name}: part mass {fill.mass.sum() * 1e3:.3f} g, frozen nodes {np.mean(~np.isnan(fill.v_frozen)):.0%}, "
-          f"volumetric shrinkage {sh.min():.2%} to {sh.max():.2%} (mean {sh.mean():.2%}) ({time.perf_counter() - start:.0f} s)", flush=True)
+    print(f"{name}: part mass {fill.mass.sum() * 1e3:.3f} g, nodes not filled {np.isnan(fill.fill_time).sum()}, "
+          f"frozen nodes {np.mean(~np.isnan(fill.v_frozen)):.0%}, "
+          f"volumetric shrinkage {np.nanmin(sh):.2%} to {np.nanmax(sh):.2%} (mean {np.nanmean(sh):.2%}) ({time.perf_counter() - start:.0f} s)", flush=True)
 
 fig, axs = plt.subplots(1, 2, figsize=(11, 3.8), constrained_layout=True)
 for name, (fill, hist, trace) in cases.items():
@@ -86,10 +90,10 @@ fig.savefig('empaque_historia.png', dpi=120)
 
 tri = mtri.Triangulation(filled.xy[:, 0] * 1e3, filled.xy[:, 1] * 1e3, mesh.plot_triangles())
 shrink = {name: 100 * c[0].shrinkage() for name, c in cases.items()}
-levels = np.linspace(min(s.min() for s in shrink.values()), max(s.max() for s in shrink.values()), 21)
+levels = np.linspace(min(np.nanmin(s) for s in shrink.values()), max(np.nanmax(s) for s in shrink.values()), 21)
 fig, axs = plt.subplots(1, 2, figsize=(11, 3.6), constrained_layout=True)
 for a, (name, s) in zip(axs, shrink.items()):
-    c = a.tricontourf(tri, s, levels, cmap='viridis')
+    c = a.tricontourf(tri, np.nan_to_num(s, nan=levels[-1]), levels, cmap='viridis')     # a node never filled: the top colour
     a.set_title(name); a.set_aspect('equal'); a.set_xlabel('x [mm]')
 fig.colorbar(c, ax=axs, label='contracción volumétrica [%]')
 fig.savefig('empaque_contraccion.png', dpi=120)

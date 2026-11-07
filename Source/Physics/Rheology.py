@@ -283,3 +283,24 @@ class TaitPVT:
 
     def density(self, p, T):
         return 1.0 / self.specific_volume(p, T)
+
+    def expansion(self, p, T):
+
+        """Thermal expansion beta = (1/v) dv/dT of the Tait part of each domain, mixed by the transition weight without its derivative and
+        without the term vt of the solid: the jump at the transition and vt are the volume of crystallization, not an expansion
+        (beta T Dp/Dt with them cools a freezing melt by some 30 K, while the latent heat it stands for is not modelled)."""
+
+        b = self.b
+        TK = T + KELVIN_OFFSET
+        dT = TK - b['b5']
+
+        def branch(b1, b2, b3, b4):
+            B = b3 * jnp.exp(-b4 * dT)
+            v0 = b1 + b2 * dT
+            g = 1.0 - self.C * jnp.log1p(p / B)
+            return v0 * g, b2 * g + v0 * (-self.C) * (p / B) * b4 / (1.0 + p / B)    # v and dv/dT
+
+        vm, dvm = branch(b['b1m'], b['b2m'], b['b3m'], b['b4m'])
+        vs, dvs = branch(b['b1s'], b['b2s'], b['b3s'], b['b4s'])
+        w = 0.5 * (1.0 + jnp.tanh((TK - b['b5'] - b['b6'] * p) / (2.0 * max(self.width, 1e-12))))
+        return (w * dvm + (1.0 - w) * dvs) / (w * vm + (1.0 - w) * vs)

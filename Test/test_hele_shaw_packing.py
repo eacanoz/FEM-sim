@@ -71,33 +71,36 @@ def test_pressure_diffusion():
 def test_sealed_cooling():
 
     """A sealed cavity (gate closed from the start, uniform state, one cell across the gap) cooling from 230 °C and 50 MPa through the mold
-    contact: the mass stays fixed, the pressure follows the Tait state V rho(p, T) = m until it reaches ambient and then stays there (the
-    part leaves the wall), and the shrinkage is 1 - v(ambient, T_room) / v_frozen with v_frozen = V / m, the volume at the start."""
+    contact: the mass stays fixed; the pressure follows the Tait state V rho(p, T) = m (solved with the temperature predicted for the end
+    of each step: against the temperature reached, the error falls with the step, largest at the transition) until it reaches ambient and
+    then stays there (the part leaves the wall); the shrinkage is 1 - v(ambient, T_room) / v_frozen with v_frozen = V / m, the volume at
+    the start."""
 
-    fill = strip(4, lambda g2, T: MU + 0 * g2)
-    fill.setFilled(lambda x, y: x >= 0)
-    fill.setThermal(230.0, 50.0, 970.0, 2000.0, 0.2, htc=2000.0, T_noflow=150.0, cells=1, viscous_heating=False)
-    fill.setDensity(TAIT.density)
-    fill.p[:] = 50e6
     m0 = None
-    states, previous = [], [fill.T.copy()]
+    errors = []
+    for dt_max in (0.1, 0.05):
+        fill = strip(4, lambda g2, T: MU + 0 * g2)
+        fill.setFilled(lambda x, y: x >= 0)
+        fill.setThermal(230.0, 50.0, 970.0, 2000.0, 0.2, htc=2000.0, T_noflow=150.0, cells=1, viscous_heating=False)
+        fill.setDensity(TAIT.density)
+        fill.p[:] = 50e6
+        states = []
 
-    def on_step(f):
-        # the pressure of a step is solved with the temperature at its start (the temperature follows, with the fluxes of the step)
-        rho = np.asarray(f.density['nodal'](f.p, previous[0])[0])
-        states.append((f.p.mean(), np.max(np.abs(f.volume * rho - f.mass) / f.mass), f.T[:, 0].mean(), np.mean(f.p == 0.0)))
-        previous[0] = f.T.copy()
+        def on_step(f):
+            rho = np.asarray(f.density['nodal'](f.p, f.T)[0])
+            states.append((f.p.mean(), np.max(np.abs(f.volume * rho - f.mass) / f.mass), f.T[:, 0].mean(), np.mean(f.p == 0.0)))
 
-    fill.pack(0.0, 0.0, t_cool=20.0, dt_max=0.2, progress=False, on_step=on_step)
-    m0 = fill.volume * float(TAIT.density(50e6 + 1e5, 230.0))
-    states = np.array(states)
-    state_err = np.max(np.where(states[:, 3] == 0, states[:, 1], 0.0))
-    first_floor = np.argmax(states[:, 3] > 0)
-    expected = 1 - (1 / float(TAIT.density(1e5, 25.0))) / (1 / float(TAIT.density(50e6 + 1e5, 230.0)))
-    note(f"mass against the start {np.max(np.abs(fill.mass / m0 - 1)):.1e}; Tait state while above ambient {state_err:.1e}; ambient reached at "
-         f"{states[first_floor, 2]:.1f} °C; shrinkage {fill.shrinkage().mean():.4%} (exact {expected:.4%})")
-    assert np.max(np.abs(fill.mass / m0 - 1)) < 1e-12 and state_err < 1e-9
-    assert states[-1, 3] == 1.0 and np.max(np.abs(fill.shrinkage() - expected)) < 1e-9
+        fill.pack(0.0, 0.0, t_cool=20.0, dt_max=dt_max, progress=False, on_step=on_step)
+        m0 = fill.volume * float(TAIT.density(50e6 + 1e5, 230.0))
+        states = np.array(states)
+        errors.append(np.max(np.where(states[:, 3] == 0, states[:, 1], 0.0)))
+        first_floor = np.argmax(states[:, 3] > 0)
+        expected = 1 - (1 / float(TAIT.density(1e5, 25.0))) / (1 / float(TAIT.density(50e6 + 1e5, 230.0)))
+        note(f"step {dt_max} s: mass against the start {np.max(np.abs(fill.mass / m0 - 1)):.1e}; Tait state while above ambient {errors[-1]:.1e}; "
+             f"ambient reached at {states[first_floor, 2]:.1f} °C; shrinkage {fill.shrinkage().mean():.4%} (exact {expected:.4%})")
+        assert np.max(np.abs(fill.mass / m0 - 1)) < 1e-12
+        assert states[-1, 3] == 1.0 and np.max(np.abs(fill.shrinkage() - expected)) < 1e-9
+    assert errors[1] < 5e-4 and errors[0] / errors[1] > 1.5
 
 
 def test_fill_and_pack_mass():
@@ -109,7 +112,7 @@ def test_fill_and_pack_mass():
     fill = strip(30, lambda g2, T: MU * jnp.exp(-0.02 * (T - 230.0)) + 0 * g2)
     fill.setThermal(230.0, 50.0, 970.0, 2000.0, 0.2, htc=5000.0, T_noflow=150.0)
     fill.setDensity(TAIT.density)
-    fill.fill(progress=False)
+    fill.fill(progress=False, switchover=0.98)                                    # compressible: V/P switchover at 98 %
     p_fill = fill.history[-1][2]
     history = np.array(fill.pack(0.8 * p_fill, 1.0, t_cool=1.0, progress=False))
     dt = np.diff(np.concatenate([[fill._switchover], history[:, 0]]))
@@ -123,8 +126,74 @@ def test_fill_and_pack_mass():
     assert fill.p.mean() < 0.5 * history[held][-1, 2]
 
 
+def test_compressible_fill_limit():
+
+    """A nearly incompressible melt (rho0 exp(1e-14 p)), both fillings switched over at 95 % of the volume: the compressible filling of a
+    strip takes the filled volume / Q and reaches the gate pressure of the incompressible filling (stage 1); its mass grows by the gate
+    inflow q rho(p_gate) dt to round-off."""
+
+    fill0 = strip(40, lambda g2: MU + 0 * g2)
+    fill0.fill(progress=False, switchover=0.95)
+    fill = strip(40, lambda g2: MU + 0 * g2)
+    fill.setDensity(lambda p, T: 900.0 * jnp.exp(1e-14 * (p - 1e5)))
+    acc = {'m': 0.0, 't': 0.0}
+
+    def on_step(f):
+        acc['m'] += (f.time - acc['t']) * float(f._step[1].sum())
+        acc['t'] = f.time
+
+    m0 = None
+    fill.mass = fill.fill_factor * fill.volume * fill.full_density()
+    m0 = fill.mass.sum()
+    fill.fill(progress=False, on_step=on_step, switchover=0.95)
+    balance = abs(fill.mass.sum() - m0 - acc['m']) / acc['m']
+    t_exact = (fill.fill_factor @ fill.volume - m0 / 900.0) / 1e-6
+    p0, p1 = fill0.history[-1][2], fill.history[-1][2]
+    note(f"fill time {fill.time:.6f} s (V/Q {t_exact:.6f} s), gate pressure {p1 / 1e6:.5f} MPa against {p0 / 1e6:.5f} MPa incompressible "
+         f"({p1 / p0 - 1:+.1e}); mass against the gate inflow {balance:.1e}; {len(fill.history)} steps")
+    assert abs(fill.time / t_exact - 1) < 1e-6 and abs(p1 / p0 - 1) < 1e-3 and balance < 1e-12
+
+
+def test_compression_heating():
+
+    """Adiabatic compression: a closed strip of a melt rho0 exp(kappa p - beta (T - T0)) with a low viscosity (uniform pressure), the gate
+    raised from 0 to 100 MPa in 1 s, one cell across the gap, no viscous heating. Each particle heats by dT/T = beta dp / (rho cp); the melt
+    that enters later at T_melt heats from its own entry. The mass-weighted temperature rise against an independent integration of
+    batches of particles that fill the volume V = sum m_b / rho(p, T_b)."""
+
+    kappa, beta, rho0, cp, T0 = 1e-9, 6e-4, 900.0, 2000.0, 230.0
+    rc = rho0 * cp
+    law = lambda p, T: rho0 * jnp.exp(kappa * (p - 1e5) - beta * (T - T0))
+    fill = strip(10, lambda g2, T: 1.0 + 0 * g2)
+    fill.setFilled(lambda x, y: x >= 0)
+    fill.setThermal(T0, T0, rho0, cp, 0.2, htc=0.0, cells=1, viscous_heating=False)
+    fill.setDensity(law)
+    fill.pack(lambda s: 1e8 * min(s, 1.0), 1.0, dt_first=0.01, dt_max=0.01, growth=1.0, progress=False)
+    K = 273.15
+    rise = float(np.sum(fill.mass * (fill.T[:, 0] + K)) / fill.mass.sum() - (T0 + K))
+    # independent: batches of particles, each heated by its own compression
+    V = fill.volume.sum()
+    p, steps = 0.0, 20000
+    m = [V * rho0]
+    T = [T0 + K]
+    for k in range(steps):
+        dp = 1e8 / steps
+        p += dp
+        T = [Ti * np.exp(beta * dp / rc) for Ti in T]
+        occupied = sum(mi / float(law(p + 1e5, Ti - K)) for mi, Ti in zip(m, T))
+        m.append((V - occupied) * float(law(p + 1e5, T0)))
+        T.append(T0 + K)
+        if k % 50 == 0 and len(m) > 2:                                              # merge the old batches (same law: exact up to beta^2)
+            mm = sum(m[:-1]); TT = sum(a * b for a, b in zip(m[:-1], T[:-1])) / mm
+            m, T = [mm, m[-1]], [TT, T[-1]]
+    ref = sum(a * b for a, b in zip(m, T)) / sum(m) - (T0 + K)
+    note(f"mass-weighted rise {rise:.4f} K against {ref:.4f} K ({rise / ref - 1:+.1e}); the first melt alone {(T0 + K) * (np.exp(beta * 1e8 / rc) - 1):.3f} K; "
+         f"mass {fill.mass.sum() / (V * rho0) - 1:.2%} more")
+    assert abs(rise / ref - 1) < 0.02
+
+
 if __name__ == "__main__":
-    tests = [test_pressure_diffusion, test_sealed_cooling, test_fill_and_pack_mass]
+    tests = [test_pressure_diffusion, test_sealed_cooling, test_fill_and_pack_mass, test_compressible_fill_limit, test_compression_heating]
     failed = 0
     for t in tests:
         note(f"start {t.__name__}")
