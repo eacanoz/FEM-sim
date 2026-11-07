@@ -79,7 +79,7 @@ def test_slab_cooling():
             fill.solve_pressure()
             t_end = 0.2 * b ** 2 / alpha
             for _ in range(steps):
-                fill._advance_temperature(t_end / steps, fill.fill_factor.copy())
+                fill._advance_temperature(t_end / steps, fill.volume, fill.volume)
             Bi = np.inf if htc is None else htc * b / (alpha * rhocp)
             roots = [(n + 0.5) * np.pi if htc is None else brentq(lambda m: m * np.tan(m) - Bi, n * np.pi + 1e-9, (n + 0.5) * np.pi - 1e-9)
                      for n in range(200)]
