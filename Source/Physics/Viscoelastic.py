@@ -18,6 +18,9 @@
 #
 # a is the antisymmetric matrix that keeps b symmetric (a closed form in the plane). Axisymmetric: the (r, z) block is the
 # same, and the hoop component is db_t/dt + u . grad b_t = (u_r / r) b_t + (1/2) f(c_t) / b_t.
+# In 3D (6 components xx, xy, xz, yy, yz, zz) a = [w]x solves b a + a b = b L^T - L b; with the identity b [w]x + [w]x b =
+# [(tr b I - b) w]x it is the 3 x 3 system (tr b I - b) w = axial(b L^T - L b), whose matrix has the eigenvalues l_i + l_j > 0. A plane
+# flow (b_zz = 1, b_xz = b_yz = 0) gives back w_z = (b L^T - L b)_yx / (b_xx + b_yy), the closed form of the plane.
 #
 # b is equal to a linear function in each element (System.restrict_to_linear_subspace), with SUPG on its equation:
 #
@@ -71,6 +74,52 @@ def _plane(b):
     return jnp.array([[b[0], b[1]], [b[1], b[2]]])
 
 
+_SYM3 = ((0, 1, 2), (1, 3, 4), (2, 4, 5))         # the 3 x 3 symmetric matrix of the 6 components xx, xy, xz, yy, yz, zz
+REST = {3: np.array([1.0, 0.0, 1.0]), 4: np.array([1.0, 0.0, 1.0, 1.0]), 6: np.array([1.0, 0.0, 0.0, 1.0, 0.0, 1.0])}
+
+
+def _matrix(b):
+
+    """The (plane, or 3D) symmetric matrix of the components of b: 2 x 2 for 3 or 4 components, 3 x 3 for 6."""
+
+    if b.shape[0] == 6:
+        return jnp.stack([jnp.stack([b[i] for i in row]) for row in _SYM3])
+    return _plane(b)
+
+
+def _components(M):
+
+    """The 6 components of the symmetric part of a 3 x 3 matrix."""
+
+    return jnp.array([M[0, 0], 0.5 * (M[0, 1] + M[1, 0]), 0.5 * (M[0, 2] + M[2, 0]), M[1, 1], 0.5 * (M[1, 2] + M[2, 1]), M[2, 2]])
+
+
+def nodal_matrices(b):
+
+    """b (..., nc) as numpy matrices (..., d, d): 2 x 2 (the plane block) for 3 or 4 components, 3 x 3 for 6."""
+
+    b = np.asarray(b, dtype=float)
+    if b.shape[-1] == 6:
+        return b[..., np.array(_SYM3)]
+    return np.stack([np.stack([b[..., 0], b[..., 1]], axis=-1), np.stack([b[..., 1], b[..., 2]], axis=-1)], axis=-2)
+
+
+def _conformation_rate_3d(b, L, lam, alpha, constitutive):
+
+    B = _matrix(b)
+    I = jnp.eye(3)
+    S = B @ L.T - L @ B                                                   # antisymmetric
+    w = jnp.linalg.solve(jnp.trace(B) * I - B, jnp.array([S[2, 1], S[0, 2], S[1, 0]]))
+    a = jnp.array([[0.0, -w[2], w[1]], [w[2], 0.0, -w[0]], [-w[1], w[0], 0.0]])
+    E = B @ B - I
+    if constitutive == 'giesekus':
+        relaxation = E + alpha * E @ E
+    else:
+        relaxation = _ptt_factor(jnp.trace(E), alpha, constitutive) * E
+    rate = L @ B + B @ a - 0.5 / lam * relaxation @ jnp.linalg.inv(B)
+    return _components(rate)
+
+
 CONSTITUTIVE = ('giesekus', 'ptt-linear', 'ptt-exp')
 
 
@@ -80,7 +129,11 @@ def _ptt_factor(trace, alpha, constitutive):
 
 def conformation_rate(b, L, hoop, lam, alpha, constitutive='giesekus'):
 
-    """The right-hand side of the equation of b: (xx, xy, yy) plus (tt) if b has four components. L is 2 x 2 and hoop = u_r / r."""
+    """The right-hand side of the equation of b: (xx, xy, yy) plus (tt) if b has four components, L 2 x 2 and hoop = u_r / r; in 3D
+    (6 components) L is 3 x 3 and hoop is not used."""
+
+    if b.shape[0] == 6:
+        return _conformation_rate_3d(b, L, lam, alpha, constitutive)
 
     B = _plane(b)
     I = jnp.eye(2)
@@ -110,21 +163,25 @@ def conformation_law(mu, lam, alpha, nc, devss=False, constitutive='giesekus', s
 
     """Pointwise law of a mode for GradientLawTerm.
 
-    Inputs: b (nc), grad b (nc x 2), u (2), grad u (4), with DEVSS-G also G (4) and grad G (8), with a temperature shift (or heating)
-    T (1) and grad T (2), then the data at the Gauss points: tau_s, db/dt (nc), r, kappa, a given source s (nc). Outputs: for b a
-    source (nc) and a flux (nc x 2), for u a source (2) and a flux (4), with heating for T a source (1) and a flux (2).
-    shift: a_T(T) multiplying lam; heating: the fraction of tau : grad u that goes into T.
+    Inputs: b (nc), grad b (nc x d), u (d), grad u (d^2), with DEVSS-G also G (d^2) and grad G (d^3), with a temperature shift (or
+    heating) T (1) and grad T (d), then the data at the Gauss points: tau_s, db/dt (nc), r, kappa, a given source s (nc). Outputs: for b
+    a source (nc) and a flux (nc x d), for u a source (d) and a flux (d^2), with heating for T a source (1) and a flux (d).
+    d = 3 for nc = 6 (3D), 2 otherwise. shift: a_T(T) multiplying lam; heating: the fraction of tau : grad u that goes into T.
     """
 
+    d = 3 if nc == 6 else 2
     thermal = shift is not None or heating
-    T_at = 3 * nc + 6 + (12 if devss else 0)
-    data = T_at + (3 if thermal else 0)
+    i_u = nc + nc * d                       # u
+    i_L = i_u + d                           # grad u
+    i_G = i_L + d * d                       # G (DEVSS-G)
+    T_at = i_G + ((d * d + d ** 3) if devss else 0)
+    data = T_at + ((1 + d) if thermal else 0)
 
     def law(w):
-        b, grad_b = w[:nc], w[nc:3 * nc].reshape(nc, 2)
-        u, L = w[3 * nc:3 * nc + 2], w[3 * nc + 2:3 * nc + 6].reshape(2, 2)
+        b, grad_b = w[:nc], w[nc:i_u].reshape(nc, d)
+        u, L = w[i_u:i_L], w[i_L:i_G].reshape(d, d)
         if devss:
-            L = w[3 * nc + 6:3 * nc + 10].reshape(2, 2)
+            L = w[i_G:i_G + d * d].reshape(d, d)
         tau_s, b_t, r, kappa = w[data], w[data + 1:data + 1 + nc], w[data + 1 + nc], w[data + 2 + nc]
         source = w[data + 3 + nc:data + 3 + 2 * nc]
         lam_T = lam * shift(w[T_at]) if shift is not None else lam
@@ -132,15 +189,16 @@ def conformation_law(mu, lam, alpha, nc, devss=False, constitutive='giesekus', s
         residual = grad_b @ u - conformation_rate(b, L, u[0] / r, lam_T, alpha, constitutive) - source
         supg = tau_s * jnp.outer(residual + b_t, u) + kappa * grad_b
 
-        B = _plane(b)
-        stress = mu / lam * (B @ B - jnp.eye(2))                    # G (c - I): G = mu / lam does not shift
+        B = _matrix(b)
+        stress = mu / lam * (B @ B - jnp.eye(d))                    # G (c - I): G = mu / lam does not shift
         hoop_force = mu / lam * (b[3] * b[3] - 1.0) / r if nc == 4 else 0.0
-        out = [residual, supg.ravel(), jnp.array([hoop_force, 0.0]), stress.ravel()]
+        force = jnp.zeros(d).at[0].set(hoop_force)
+        out = [residual, supg.ravel(), force, stress.ravel()]
 
         if heating:
-            grad_u = w[3 * nc + 2:3 * nc + 6].reshape(2, 2)          # the velocity gradient itself, also with DEVSS-G
+            grad_u = w[i_L:i_G].reshape(d, d)                        # the velocity gradient itself, also with DEVSS-G
             power = jnp.sum(stress * grad_u) + (mu / lam * (b[3] * b[3] - 1.0) * u[0] / r if nc == 4 else 0.0)
-            out += [jnp.array([-heating * power]), jnp.zeros(2)]     # R_T -= integral N fraction tau : grad u
+            out += [jnp.array([-heating * power]), jnp.zeros(d)]     # R_T -= integral N fraction tau : grad u
 
         return jnp.concatenate(out)
 
@@ -252,32 +310,35 @@ class PolymerTractionTerm:
     def __init__(self, system, facets, field, mu, lam):
         self.system, self.facets, self.field = system, facets, field
 
-        def traction(w):
-            b, normal = w[:-2], w[-2:]
-            B = _plane(b)
-            return mu / lam * (B @ B - jnp.eye(2)) @ normal
+        d = system.disc.dim
 
-        self.law = cached_law(('polymer traction', mu, lam), lambda: PointwiseLaw(traction))
+        def traction(w):
+            b, normal = w[:-d], w[-d:]
+            B = _matrix(b)
+            return mu / lam * (B @ B - jnp.eye(d)) @ normal
+
+        self.law = cached_law(('polymer traction', mu, lam, d), lambda: PointwiseLaw(traction))
 
     def contribution(self, x, tangent=True):
 
         layout, fs = self.system.layout, self.facets
         nc = layout.spec(self.field).ncomp
         nq, nnf = fs.N.shape
+        d = fs.normals.shape[-1]
 
         values = np.einsum('qk,fkc->fqc', fs.N, layout.split(x)[self.field][fs.nodes])
-        data = np.concatenate([values, fs.normals], axis=-1).reshape(-1, nc + 2)
+        data = np.concatenate([values, fs.normals], axis=-1).reshape(-1, nc + d)
         ru = layout.element_dofs(fs.nodes, 'u')
 
         if not tangent:
-            t = self.law.values(data).reshape(len(fs.nodes), nq, 2)
+            t = self.law.values(data).reshape(len(fs.nodes), nq, d)
             return layout.scatter_vector(-np.einsum('fq,qi,fqa->fia', fs.detJw, fs.N, t).reshape(len(fs.nodes), -1), ru), None
 
         t, dt = self.law(data)
-        t = t.reshape(len(fs.nodes), nq, 2)
-        dt = dt.reshape(len(fs.nodes), nq, 2, nc + 2)[..., :nc]
+        t = t.reshape(len(fs.nodes), nq, d)
+        dt = dt.reshape(len(fs.nodes), nq, d, nc + d)[..., :nc]
         R = layout.scatter_vector(-np.einsum('fq,qi,fqa->fia', fs.detJw, fs.N, t).reshape(len(fs.nodes), -1), ru)
-        K = -np.einsum('fq,qi,fqac,qj->fiajc', fs.detJw, fs.N, dt, fs.N).reshape(len(fs.nodes), nnf * 2, nnf * nc)
+        K = -np.einsum('fq,qi,fqac,qj->fiajc', fs.detJw, fs.N, dt, fs.N).reshape(len(fs.nodes), nnf * d, nnf * nc)
 
         return R, layout.scatter_matrix(K, ru, layout.element_dofs(fs.nodes, self.field))
 
@@ -292,7 +353,8 @@ class ve(physics):
 
         self.physics_description = 'Viscoelastic polymer modes'
         self.axisymmetric = bool(getattr(model, 'axisymmetric', False))
-        self.nc = 4 if self.axisymmetric else 3
+        self.dim = model._PD
+        self.nc = 6 if self.dim == 3 else 4 if self.axisymmetric else 3
         self.modes = []
         self.outlets = []
         self.inflows = []
@@ -304,7 +366,7 @@ class ve(physics):
         self.temperature = None          # the field T read by the shift or heated (setTemperatureShift, setViscousHeating)
         self.heating = 0.0               # fraction of tau : grad u into T (setViscousHeating)
         self.constitutive = 'giesekus'
-        self._rest = np.array([1.0, 0.0, 1.0, 1.0])[:self.nc]
+        self._rest = REST[self.nc]
 
     def setModes(self, modes, constitutive='giesekus'):
 
@@ -376,7 +438,8 @@ class ve(physics):
             self.var[f'b{m}'].initField(self._rest)
 
         if self.devss:
-            self.var['G'] = vectorField('G', 'Projected velocity gradient', '1/s', ShapeFunctionType.linear, mesh, ncomp=4)
+            self.var['G'] = vectorField('G', 'Projected velocity gradient', '1/s', ShapeFunctionType.linear, mesh,
+                                        ncomp=self.dim * self.dim)
 
         self.modelRef._layout = None
 
@@ -392,8 +455,8 @@ class ve(physics):
 
     def developed(self, L, hoop=0.0, mode=0, T=None):
 
-        """The steady b of a homogeneous flow with velocity gradient L (2 x 2) and hoop strain rate, from the rest state; at the
-        temperature T if the relaxation times shift with it."""
+        """The steady b of a homogeneous flow with velocity gradient L (2 x 2, or 3 x 3 in 3D) and hoop strain rate, from the rest
+        state; at the temperature T if the relaxation times shift with it."""
 
         mu, lam, alpha = self.modes[mode]
         if self.shift is not None and T is not None:
@@ -407,9 +470,10 @@ class ve(physics):
 
     def addBC_InflowEdges(self, edges, gradient, temperature=None):
 
-        """Values of b at an inflow: the steady state of the velocity gradient there, gradient(x, y) -> L (2 x 2). On the
-        vertices of the edges, for each mode. A function that returns zeros gives the rest state. With setTemperatureShift, the
-        relaxation times are those of `temperature` (a number or a function of x, y; by default the current T field there)."""
+        """Values of b at an inflow: the steady state of the velocity gradient there, gradient(x, y[, z]) -> L (2 x 2, or 3 x 3 in
+        3D). On the vertices of the facets, for each mode. A function that returns zeros gives the rest state. With
+        setTemperatureShift, the relaxation times are those of `temperature` (a number or a function of the coordinates; by default
+        the current T field there)."""
 
         self.inflows.append((list(edges), gradient, temperature))
         self._set_inflow(edges, gradient, temperature)
@@ -417,7 +481,10 @@ class ve(physics):
     def _set_inflow(self, edges, gradient, temperature=None):
 
         nodes = self.modelRef._mesh.NL
-        vertices = sorted({int(n) for edge in edges for n in (edge[0], edge[-1])})
+        from Source.Pre_processing.Elements import ELEMENTS, element_type_of
+        facet = ELEMENTS[ELEMENTS[element_type_of(self.modelRef._mesh)].facet_element]
+        n_vertices = facet.n_nodes - len(facet.linear_subspace) if facet.dim > 0 else 1
+        vertices = sorted({int(n) for edge in edges for n in (list(edge)[:n_vertices] if facet.dim > 1 else (edge[0], edge[-1]))})
 
         T_field = None
         if self.shift is not None and temperature is None:
@@ -425,10 +492,10 @@ class ve(physics):
 
         for m in range(len(self.modes)):
             for k in vertices:
-                x, y = nodes[k].coor[:2]
-                L = np.asarray(gradient(x, y), dtype=float)
+                coords = nodes[k].coor[:self.dim]
+                L = np.asarray(gradient(*coords), dtype=float)
                 hoop = 0.0
-                T = (temperature(x, y) if callable(temperature) else temperature) if T_field is None else T_field[k]
+                T = (temperature(*coords) if callable(temperature) else temperature) if T_field is None else T_field[k]
                 nodes[k].BC[f'b{m}'] = self.setDirichletBC(list(self.developed(L, hoop, m, T)))
 
     def addBC_OutletEdges(self, edges):
@@ -439,10 +506,16 @@ class ve(physics):
 
     def stress(self, mode=0, values=None):
 
-        """Nodal polymer stress of a mode: (xx, xy, yy[, tt])."""
+        """Nodal polymer stress of a mode: (xx, xy, yy[, tt]), or (xx, xy, xz, yy, yz, zz) in 3D."""
 
         mu, lam, _ = self.modes[mode]
         b = self.var[f'b{mode}'].values if values is None else np.asarray(values, dtype=float)
+
+        if self.nc == 6:
+            B = nodal_matrices(b)
+            C = B @ B
+            c = np.stack([C[:, i, j] for i, j in ((0, 0), (0, 1), (0, 2), (1, 1), (1, 2), (2, 2))], axis=1)
+            return mu / lam * (c - REST[6])
 
         c = np.stack([b[:, 0] ** 2 + b[:, 1] ** 2, b[:, 1] * (b[:, 0] + b[:, 2]), b[:, 1] ** 2 + b[:, 2] ** 2]
                      + ([b[:, 3] ** 2] if self.nc == 4 else []), axis=1)
@@ -473,6 +546,9 @@ class ve(physics):
         b = disc.interpolate(np.asarray(self.var[f'b{mode}'].values, dtype=float))
         L = disc.gradient(U)
         u = disc.interpolate(U)
+
+        if self.nc == 6:
+            return self._energy_balance_3d(mode, b, L, u, disc)
 
         def psi_of(xx, xy, yy, tt=None):
             det = xx * yy - xy * xy
@@ -514,6 +590,26 @@ class ve(physics):
 
         return abs(total - np.sum(w * dissipation) - np.sum(w * flux)) / max(abs(total), 1e-30)
 
+    def _energy_balance_3d(self, mode, b, L, u, disc):
+
+        mu, lam, alpha = self.modes[mode]
+        B = nodal_matrices(b)
+        C = B @ B
+        I = np.eye(3)
+        E = C - I
+        if self.constitutive == 'giesekus':
+            f = -(E + alpha * E @ E) / lam
+        else:
+            f = -np.asarray(_ptt_factor(np.trace(E, axis1=-2, axis2=-1), alpha, self.constitutive))[..., None, None] * E / lam
+        power = np.einsum('egab,egab->eg', mu / lam * E, L)
+        dissipation = -mu / (2.0 * lam) * np.einsum('egab,egba->eg', I - np.linalg.inv(C), f)
+        Bn = nodal_matrices(np.asarray(self.var[f'b{mode}'].values, dtype=float))
+        psi = mu / (2.0 * lam) * (np.trace(Bn @ Bn, axis1=-2, axis2=-1) - 2.0 * np.log(np.linalg.det(Bn)) - 3.0)
+        flux = np.einsum('ega,ega->eg', u, disc.gradient(psi))
+        w = disc.detJw
+        total = np.sum(w * power)
+        return abs(total - np.sum(w * dissipation) - np.sum(w * flux)) / max(abs(total), 1e-30)
+
     def derived_fields(self, model):
 
         return {'polymer_stress': sum(self.stress(m) for m in range(len(self.modes)))} if self.modes else {}
@@ -522,7 +618,8 @@ class ve(physics):
 
         """The linear terms of DEVSS-G: the projection and the term in the momentum equation."""
 
-        nel, _, nne, _ = disc.B.shape
+        nel, _, nne, d = disc.B.shape
+        dd = d * d
         w = disc.detJw
         ru, rG = layout.element_dofs(disc.conn, 'u'), layout.element_dofs(disc.conn, 'G')
 
@@ -530,33 +627,35 @@ class ve(physics):
         system.require_constraint(layout.dofs('G').ravel())
 
         # G_ab = du_a / dx_b, stored row by row
-        mass = np.einsum('eg,gi,gj,ac->eiajc', w, disc.N, disc.N, np.eye(4)).reshape(nel, nne * 4, nne * 4)
-        D = np.zeros((nel, nne, 4, nne, 2))                                  # integral N_i dN_j/dx_b on the row (a, b), column (j, a)
+        mass = np.einsum('eg,gi,gj,ac->eiajc', w, disc.N, disc.N, np.eye(dd)).reshape(nel, nne * dd, nne * dd)
+        D = np.zeros((nel, nne, dd, nne, d))                                 # integral N_i dN_j/dx_b on the row (a, b), column (j, a)
         block = np.einsum('eg,gi,egjb->eijb', w, disc.N, disc.B)
-        for a in range(2):
-            for b in range(2):
-                D[:, :, 2 * a + b, :, a] = block[..., b]
+        for a in range(d):
+            for b in range(d):
+                D[:, :, d * a + b, :, a] = block[..., b]
 
-        A = layout.scatter_matrix(mass, rG, rG) - layout.scatter_matrix(D.reshape(nel, nne * 4, nne * 2), rG, ru)
+        A = layout.scatter_matrix(mass, rG, rG) - layout.scatter_matrix(D.reshape(nel, nne * dd, nne * d), rG, ru)
 
         # mu_a (grad u + grad u^T - G - G^T) : grad v, tested by dN_i/dx_b on the component a
-        K = np.einsum('eg,egib,egjb,ac->eiajc', w, disc.B, disc.B, np.eye(2)) + np.einsum('eg,egic,egja->eiajc', w, disc.B, disc.B)
-        A = A + self.devss * layout.scatter_matrix(K.reshape(nel, nne * 2, nne * 2), ru, ru)
+        K = np.einsum('eg,egib,egjb,ac->eiajc', w, disc.B, disc.B, np.eye(d)) + np.einsum('eg,egic,egja->eiajc', w, disc.B, disc.B)
+        A = A + self.devss * layout.scatter_matrix(K.reshape(nel, nne * d, nne * d), ru, ru)
 
-        C = np.zeros((nel, nne, 2, nne, 4))
+        C = np.zeros((nel, nne, d, nne, dd))
         cross = np.einsum('eg,egib,gj->eibj', w, disc.B, disc.N)
-        for a in range(2):
-            for b in range(2):
-                C[:, :, a, :, 2 * a + b] += cross[:, :, b, :]                # G_ab tested by dv_a/dx_b
-                C[:, :, b, :, 2 * a + b] += cross[:, :, a, :]                # G_ab tested by dv_b/dx_a (the transpose)
+        for a in range(d):
+            for b in range(d):
+                C[:, :, a, :, d * a + b] += cross[:, :, b, :]                # G_ab tested by dv_a/dx_b
+                C[:, :, b, :, d * a + b] += cross[:, :, a, :]                # G_ab tested by dv_b/dx_a (the transpose)
 
-        system.add_matrix(A - self.devss * layout.scatter_matrix(C.reshape(nel, nne * 2, nne * 4), ru, rG))
+        system.add_matrix(A - self.devss * layout.scatter_matrix(C.reshape(nel, nne * d, nne * dd), ru, rG))
 
     def _positive_definite(self, layout, field):
 
         d = layout.dofs(field)
 
         def check(x):
+            if self.nc == 6:                         # b positive definite: its smallest eigenvalue at every node
+                return bool(np.all(np.linalg.eigvalsh(nodal_matrices(x[d])) > 0.0))
             xx, xy, yy = x[d[:, 0]], x[d[:, 1]], x[d[:, 2]]
             hoop = x[d[:, 3]] if self.nc == 4 else 1.0
             return bool(np.all(xx + yy > 0.0) and np.all(xx * yy - xy * xy > 0.0) and np.all(hoop > 0.0))

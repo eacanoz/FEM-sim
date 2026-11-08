@@ -167,8 +167,19 @@ lo permite), paralelismo MPI.
   refactoriza sin emparejamiento por encima de 1e-6, usando esa factorización solo si da un residuo bueno; con una matriz casi singular
   conserva la respuesta de PARDISO (cambiarla alteraba el Newton de casos viscoelásticos validados). Prueba de regresión en
   `Test/test_3d_flow.py`.
-- **Fase 4, lo siguiente:** viscoelástico 3D: conformación de 6 componentes y su raíz en forma cerrada, DEVSS-G de 9, el `coor[:2]` de
-  `Viscoelastic.py`; empezar por la viscometría homogénea (corte y extensión) frente a `solve_ivp`, como en 2D.
+- **Fase 4 hecha (2026-11-08).** Raíz de la conformación con 6 componentes: la antisimétrica a = [ω]× sale de
+  (tr b I − b) ω = axial(b Lᵀ − L b) (identidad b [ω]× + [ω]× b = [(tr b I − b) ω]×; matriz definida positiva para b definida positiva),
+  que en flujo plano es la forma cerrada 2D. DEVSS-G de 9 componentes, entrada con gradiente 3 × 3, tracción de salida, energía y esfuerzo
+  en 3D; definición positiva por autovalores. `Test/test_3d_viscoelastic.py` (5 pruebas, ~4 min): ecuación de b frente a la de c (1e-15)
+  y frente a la plana; flujos homogéneos 3D con BDF2 de orden 2 frente a `solve_ivp`; tangente 3D completa (2e-8); Couette y canal 3D
+  iguales al 2D (1e-14, 3e-9: la losa con el grosor que iguala el h de SUPG de b, que en 2D es √área y en 3D ∛volumen); conducto
+  rectangular: Oldroyd-B (N2 = 0) rectilíneo con la velocidad newtoniana de μ_s + μ_p, su flujo secundario cae con orden 3 al refinar,
+  y el de Giesekus converge a ~2e-3 de u_máx (14 veces mayor en la malla fina).
+- **Sin hacer en la fase 4:** contracción 3D (el plan la dejaba para «si el coste lo permite»: 19 incógnitas por nodo, 21 k incógnitas
+  ya son 36 s por solución estacionaria con PARDISO), viscoelástico no isotermo en un flujo 3D, difusión artificial, varios modos y PTT en flujo 3D, y el
+  solver de bloques con los campos b y G (los trataría con ILU, sin medir).
+- **Fase 5, lo siguiente:** turbulencia SA/SST en 3D; revisar `Turbulence.wall_distance` (usa `coor[:2]`: distancia geométrica a
+  aristas, en 3D hace falta a caras triangulares/cuadriláteras o una ecuación de Poisson/eikonal).
 
 ## Primeros pasos de la nueva sesión
 

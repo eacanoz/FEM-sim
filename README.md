@@ -50,6 +50,7 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | 3D, fase 0 (`docs/PLAN_3D.md`): tetraedros y hexaedros lineales y cuadráticos (tet4, tet10, hex8, hex27), `Mesh.generate3DMesh`, gmsh 3D con grupos de caras, normales de cara, VTK 3D binario | Base validada (Poisson de orden 2 y 3, parche, normales en cubo y esfera) |
 | 3D, fase 1: calor (`ht`), especies (`mt`) y Darcy en tetraedros y hexaedros, con condiciones en caras (`addBC_*Edges(mesh.boundary_faces(...))`) | Operativo: soluciones manufacturadas de orden 2 y 3, enfriamiento de un cubo frente a la serie de Fourier, SUPG nodalmente exacto en hexaedros (no monótono en tetraedros), Darcy anisótropo exacto; `Method=auto` usa CG + AMG desde 10 000 incógnitas en 3D. Flujo, viscoelástico y turbulencia en 3D: pendientes |
 | 3D, fase 2: Stokes y Navier–Stokes (`ff`) con Taylor–Hood P2/P1 (tet10) y Q2/Q1 (hex27) o igual orden con PSPG (tet4, hex8) | Operativo: Poiseuille exacto, conducto rectangular frente a su serie (orden 3 / 2), tubería en tet10 curvos igual al modelo axisimétrico, Navier–Stokes de Ethier–Steinman (u orden 3, p orden 2); Navier–Stokes transitorio (BDF2, orden 2.5 en Ethier–Steinman) y SUPG/PSPG de Taylor–Hood; GMRES con bloques en 3D (iteraciones casi constantes en Stokes, crecientes con la convección), elegido por `Method=auto` desde 120 000 incógnitas. Fluidos de polímeros en 3D en la fila siguiente |
+| 3D, fase 4: viscoelástico (`ve`) con la raíz de la conformación de 6 componentes y DEVSS-G de 9, en hex27 y tet10 | Operativo: flujos homogéneos 3D frente a `solve_ivp` (orden 2), Couette y canal 3D iguales al 2D, conducto rectangular con Oldroyd-B rectilíneo y el flujo secundario de Giesekus; tangente 3D completa |
 | 3D, fase 3: fluidos de polímeros (leyes de viscosidad, Cross–WLF con presión, calentamiento viscoso, compresible con Tait, deslizamiento de Navier y de potencia) | Operativo: el mismo canal en 2D y en 3D coincide a 1e-11 en todas las físicas; tangente 3D completa frente a diferencias finitas; dado rectangular ancho → placas paralelas (newtoniano a la serie); el deslizamiento en 3D es isótropo en la pared. Las soluciones de PARDISO comprueban su residuo: refinan y, si siguen mal, refactorizan sin el emparejamiento ponderado |
 | `rho Cp(T)`, elementos de orden superior a 2 | No implementado |
 
@@ -145,8 +146,8 @@ caras = mesh.boundary_faces(lambda x, y, z: z > 0.2 - 1e-12)   # o el nombre de 
 ```
 
 Calor, especies, Darcy, flujo newtoniano y fluidos de polímeros (no newtonianos, térmicos, compresibles, con deslizamiento) funcionan en
-3D con las mismas llamadas que en 2D (las condiciones `...Edges` reciben caras); viscoelástico y turbulencia todavía no están validados en
-3D (fases 4 y 5 de `docs/PLAN_3D.md`). Los resultados se ven en ParaView
+3D con las mismas llamadas que en 2D (las condiciones `...Edges` reciben caras), y el viscoelástico también (el gradiente de entrada de
+`addBC_InflowEdges` es 3 × 3); la turbulencia todavía no está validada en 3D (fase 5 de `docs/PLAN_3D.md`). Los resultados se ven en ParaView
 (`write_vtu`, binario por omisión en 3D). En 3D conviene `Method='auto'`: PARDISO necesita ~18 KB por nodo en calor y se queda en unos 10⁵–10⁶ incógnitas de flujo; CG + AMG y
 GMRES con `Preconditioners.SaddlePoint` usan 5 a 15 veces menos memoria.
 
@@ -289,6 +290,7 @@ python Test/test_transient_flow.py        # Etapa 14: Taylor–Green, arranque, 
 python Test/test_buoyancy.py              # Etapa 15: de Vahl Davis, estratificación estable, especies y flotación solutal, tangente, flujo de calor (5)
 python Test/test_3d_foundation.py        # 3D fase 0: tet4/tet10/hex8/hex27, cuadratura, caras, cajas, parche, Poisson, normales, gmsh, VTK (13)
 python Test/test_3d_scalars.py           # 3D fase 1: calor, especies y Darcy: parche, manufacturadas, serie del cubo, SUPG, solver automatico (9)
+python Test/test_3d_viscoelastic.py      # 3D fase 4: ecuacion de b en 3D, homogeneos frente a solve_ivp, tangente, 3D = 2D, conducto (5)
 python Test/test_3d_polymer.py           # 3D fase 3: leyes, Cross-WLF + calor, compresible, deslizamiento (3D = 2D), tangente, dado ancho (7)
 python Test/test_3d_flow.py              # 3D fase 2: Poiseuille, conducto frente a la serie, tuberia frente al axisimetrico, Ethier-Steinman estacionario y transitorio, SUPG/PSPG, bloques (9)
 python Test/test_turbulence.py            # Etapa 16: distancia a la pared, canal turbulento Re_τ 180/395, límite laminar, tangente, viscosidad turbulenta (5)
