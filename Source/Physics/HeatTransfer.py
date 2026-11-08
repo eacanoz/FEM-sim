@@ -117,11 +117,11 @@ class ht(physics):
 
         self.modelRef._mesh.NL[id].BC['T'] = self.setNeumannBC(q_flux)
 
-    ## ---------- Boundary conditions on edges (2D) ---------- ##
+    ## ---------- Boundary conditions on facets: edges (2D) or faces (3D, mesh.boundary_faces) ---------- ##
 
     def addBC_TemperatureEdges(self, edges, T):
 
-        """Dirichlet temperature on every node of the given edges. edges: [(node_a, node_b), ...].
+        """Dirichlet temperature on every node of the given edges (2D) or faces (3D): tuples of node ids.
 
         T is a number or a function T(x, y) evaluated at each node.
         """
@@ -130,7 +130,7 @@ class ht(physics):
 
         for edge in edges:
             for node_id in edge:
-                value = T(*nodes[node_id].coor[:2]) if callable(T) else T
+                value = T(*nodes[node_id].coor) if callable(T) else T
                 nodes[node_id].BC['T'] = self.setDirichletBC(value)
 
     def addBC_HeatFluxEdges(self, edges, q_flux: float):
@@ -171,6 +171,6 @@ class ht(physics):
 
     def addBC_RadiationEdges(self, edges, epsilon: float, T_ext: float):
 
-        """Radiation to the surroundings at T_ext through the edges (2D), nonlinear in the temperature."""
+        """Radiation to the surroundings at T_ext through the edges (2D) or faces (3D), nonlinear in the temperature."""
 
         self.addBC_ConvectionEdges(edges, self._radiation_coefficient(epsilon, T_ext), T_ext)

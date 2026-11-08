@@ -346,7 +346,10 @@ class Discretization:
             flip = np.sign(np.sum(normals * outward, axis=-1, keepdims=True))
             normals = normals * flip
         else:
-            raise NotImplementedError("Las normales de faceta solo estan implementadas en 1D y 2D.")
+            normals = np.cross(tangent[..., 0], tangent[..., 1])         # face: product of the two tangents
+            normals /= np.linalg.norm(normals, axis=-1, keepdims=True)
+            flip = np.sign(np.sum(normals * outward, axis=-1, keepdims=True))
+            normals = normals * flip
 
         detJw = measure * weights[None, :]
         if self.axisymmetric:

@@ -69,11 +69,18 @@ CANDIDATES = {
 SMALL_SYSTEM = 20_000          # below it SuperLU beats PARDISO (its start-up cost dominates) in scalar problems
 ITERATIVE_SCALAR = 400_000     # scalar systems: PARDISO and CG+AMG tie at 360 k unknowns in 2D; beyond it memory decides
 ITERATIVE_FLOW = 500_000       # velocity-pressure systems: the block preconditioner has not overtaken the direct solver yet
+# 3D symmetric scalar systems (Test/manual/heat_3d_scaling.py, docs/PLAN_3D.md): the fill of the factorization grows much faster than
+# in 2D, and CG+AMG already beat PARDISO from 9 k nodes on (hex8 and tet10, 0.33 s against 0.61 s; 4.8 s against 7.6 s at 118 k,
+# and at 330 k tet10 nodes 0.8 GB against 5.9 GB). Non-symmetric and flow systems keep the 2D thresholds: not measured in 3D yet.
+ITERATIVE_SCALAR_3D = 10_000
 
 
-def choose_options(free_unknowns, symmetric, flow):
+def choose_options(free_unknowns, symmetric, flow, dim=2):
 
     """Linear solver for a system of that size and kind: the keywords of Candidate.options (Method, Solver, prec)."""
+
+    if dim == 3 and symmetric and not flow and free_unknowns >= ITERATIVE_SCALAR_3D:
+        return dict(Method=SolverType.iterative, Solver=IterativeSolvers.CG, prec=Preconditioners.AMG)
 
     if flow:
         if free_unknowns >= ITERATIVE_FLOW:

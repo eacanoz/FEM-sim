@@ -274,13 +274,17 @@ def grad_div(disc, gamma):
 
 def element_size(disc):
 
-    """h of each element: the length of the line, the side of the square of the same area (quadrilaterals) or the
-    leg of the right isosceles triangle of the same area (triangles), (nel,). Uses the plane area (also axisymmetric)."""
+    """h of each element: the length of the line, the side of the square (cube) of the same area (volume) for
+    quadrilaterals and hexahedra, or the leg of the right isosceles triangle (the corner tetrahedron of a cube, volume
+    h^3 / 6) of the same measure for triangles and tetrahedra, (nel,). A cell of a structured mesh split into simplices
+    then gets the side of the cell, as with quadrilaterals. Uses the plane area (also axisymmetric)."""
 
     measure = disc.area.sum(axis=1)
 
     if disc.element.name.startswith('tri'):
         measure = 2.0 * measure
+    elif disc.element.name.startswith('tet'):
+        measure = 6.0 * measure
 
     return measure ** (1.0 / disc.dim)
 

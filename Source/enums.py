@@ -4,6 +4,8 @@ class ElementType(Enum):
     line = 1
     triangle = 2
     quadrilateral = 3
+    tetrahedron = 4
+    hexahedron = 5
 
 class ShapeFunctionType(Enum):
     linear = 'Linear'

@@ -67,7 +67,7 @@ class modelSolver():
             A_ff = A.tocsr()[free][:, free]
             symmetric = abs(A_ff - A_ff.T).max() <= 1e-10 * abs(A_ff).max() if A_ff.nnz else True
             flow = 'u' in self.model.layout.names and 'p' in self.model.layout.names
-            chosen = choose_options(int(free.sum()), bool(symmetric), flow)
+            chosen = choose_options(int(free.sum()), bool(symmetric), flow, dim=getattr(self.model.mesh, 'PD', 2))
 
             self._auto_options = {**self.solverOptions, 'Method': chosen['Method'], 'Solver': chosen['Solver'],
                                   'Preconditioner': chosen.get('prec')}

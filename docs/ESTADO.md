@@ -151,6 +151,8 @@
 | Empaque Hele-Shaw con Tait | difusión de la presión en una tira cerrada (ρ = ρ0 e^{κp}: ρ obedece una difusión lineal exacta) frente a su serie; cavidad sellada que se enfría a masa constante (estado de Tait, piso a presión ambiente, contracción exacta); masa de llenado y empaque no isotermos | `Test/test_hele_shaw_packing.py` | densidad frente a la serie 3.7e-3 y 1.9e-3 del aumento (orden 1 en paso y malla juntos); masa frente al caudal de la entrada 1e-12; contracción 9.6872 % exacta a 1e-9; masa del empaque 1e-13 |
 | Llenado Hele-Shaw compresible y calentamiento por compresión | límite casi incompresible frente a la etapa 1 con cambio V/P al 95 %; compresión adiabática uniforme de 0 a 100 MPa frente a una integración independiente por lotes de partículas | `Test/test_hele_shaw_packing.py` | tiempo de llenado exacto, presión de entrada 9e-10, masa frente al caudal de la entrada 4e-16; subida de temperatura 16.307 K frente a 16.303 K (3e-4) |
 | Cristalización en el llenado Hele-Shaw | tasa de Nakamura / Hoffman–Lauritzen frente a la fórmula; Avrami isotermo; cristalización adiabática con calor latente frente a la conservación de la energía y a `solve_ivp`; fluidez con piel cristalizada; pvT con X; llenado y empaque cristalizando | `Test/test_hele_shaw_crystallization.py` | tasa 3e-15; Avrami 1e-16; energía 2e-15 de L, X frente a `solve_ivp` 2.4e-5 y 5.9e-6 (orden 2); fluidez exacta; pvT exacto en sus ramas; masa del empaque 8e-15 |
+| 3D, fase 0: elementos y mallas | tet4, tet10, hex8, hex27: cuadratura exacta hasta su grado (tetraedro 1, 4, 14 y n³ puntos: grados 1, 2, 5 y 2n − 1), delta de Kronecker, derivadas y hessianos frente a diferencias finitas, caras en el orden de su elemento de faceta; cajas (`generate3DMesh`); prueba de parche en mallas distorsionadas; Poisson manufacturado en un cubo; superficie, normales y teorema de la divergencia en un cubo distorsionado y una esfera; gmsh 3D con grupos; VTK 3D ASCII y binario | `Test/test_3d_foundation.py` | pasa (13); orden L2 2.00 (hex8), 1.95 (tet4), 2.97 (hex27), 3.02 (tet10); esfera de gmsh con tamaño 0.3: área a 1.6e-2 (tet4) y 7.3e-5 (tet10 curvo) |
+| 3D, fase 1: calor, especies y Darcy | parche T = 2x + 1 con flujo y convección en caras; Poisson manufacturado por `ht`; enfriamiento de un cubo frente a la serie de Fourier (BDF2); capa límite con SUPG frente a la exacta 1D; convección–difusión manufacturada con SUPG; difusión–reacción = 1D; flujo de especies en una cara; Darcy con permeabilidad 3 × 3 y gravedad, hidrostática, inyección que transporta calor; solver automático en 3D | `Test/test_3d_scalars.py` | pasa (9); parche 1e-10 en los 4 elementos; L2 orden 2.00/1.95/2.97/3.02; centro del cubo a 1.7e-3 de la serie con hex27 6³ y dt = 0.0025 (5.0e-4 con dt/2); SUPG en hex8 nodalmente exacto (3e-16), en tet4 0.33 (Galerkin 1.23; T3 en 2D, 0.19); SUPG manufacturado orden 2.8 (hex8), 2.1 (tet4), 3.4 (hex27), 3.6 (tet10); Darcy exacto a 1e-10 |
 | Ecuación de estado (Tait de dos dominios) y su ajuste | ramas fundido y sólido; ajuste de datos sintéticos con 0.02 % de dispersión; ajuste de medidas reales (PP con 30 % de fibra de vidrio, 560 puntos de 0.1 a 200 MPa y 20 a 280 °C) | `Test/test_compressible.py`; `Fitting.fit_tait` | ramas 1e-12; sintético: error 0.058 %, transición a 0.37 K; medidas: rms 0.036 % (fundido 0.017, sólido 0.013, transición 0.08 %), máximo 0.43 %, T_t = 180.7 °C + 0.17 K/MPa |
 | Flujo compresible (`ff.setDensityLaw`) | tangente (también la parte temporal sola, y con Cross y Cross–WLF); densidad constante = grad-div con γ = −2/3 μ; canal estacionario frente a lubricación (ρ +27 %); empaque frente a la serie de la difusión de presión; calentamiento por compresión | `Test/test_compressible.py` | tangente ≤ 3.2e-9; grad-div 1e-14; canal 1.4e-4 de p_in, caudal másico entrada = salida a 1e-6; empaque 1.2e-3 a 1.2e-4 (Q9 y T6); calentamiento 4e-5 |
 | Superficie libre: hinchamiento newtoniano | método de la línea de corriente; plano frente a 1.190 ± 0.002 (Tanner 2002, en arXiv:1408.5167; publicados 1.184–1.200); axisimétrico frente a ≈ 1.127 (fuente secundaria); flujo tapón | `Test/test_free_surface.py`, `Test/manual/die_swell.py` | plano 1.19112, 1.18907, 1.18786 (borde 0.025 a 0.00625 H), orden ≈ 0.8, extrapolado ≈ 1.186 (el elemento singular de Georgiou y Boudouvis da 1.1863); axisimétrico 1.13356, 1.13063, 1.12883; tapón 1e-13; 11–13 iteraciones |
@@ -523,9 +525,24 @@ Lo que sigue pendiente:
   - GMRES de bloques con más campos (ILU en los demás): igual que PARDISO, pero las iteraciones crecen con la malla (Ra = 1e4: 95, 98 y 144; SST en Q9: 211). No se midió el tiempo frente a PARDISO.
   - Gráficos: `Mesh.triangulation()` en cualquier elemento, usado por `postProcess2D` y 5 ejemplos, ya ejecutados sin error (el cilindro repite sus valores).
   - Paso adaptativo: un problema lineal ensambla una sola tangente (pulso de calor: 24 → 1) y dt no cambia si crecería menos de 20 %. No lineal, poca mejora: cavidad Re = 400, 17 → 14 tangentes, pero 362 → 406 iteraciones.
-- Mallas de gmsh: `Mesh.read_msh` / `Mesh.from_gmsh_model` admiten un solo tipo de elemento 2D (T3, Q4, T6 o Q9); las mallas mixtas se rechazan.
+- Mallas de gmsh: `Mesh.read_msh` / `Mesh.from_gmsh_model` admiten un solo tipo de elemento de la dimensión de la malla (T3, Q4, T6 o Q9 en 2D; tet4, tet10, hex8 o hex27 en 3D); las mallas mixtas (p. ej. prismas) se rechazan.
   En T3 y Q4 los arcos se aproximan por polígonos (error geométrico O(h²)); T6 y Q9 de gmsh son curvos.
-- Sin tetraedros/hexaedros ni 3D. `Model.region_field` asigna coeficientes por región física (`mesh.regions`, índices de
+- **3D (fase 0 de [PLAN_3D.md](PLAN_3D.md)):** tet4, tet10, hex8 y hex27 con el orden de nodos de gmsh; cuadratura de tetraedro de
+  1, 4 y 14 puntos (grados 1, 2 y 5, pesos positivos) y de Gauss–Jacobi colapsada por encima; `Mesh.generate3DMesh` (cajas de hexaedros
+  o de 6 tetraedros de Kuhn por celda), `Mesh.from_gmsh_model`/`read_msh` en 3D (grupos de caras y regiones de volumen),
+  `boundary_faces`, normales de cara y `element_size` en 3D (lado del cubo de igual volumen; en tetraedros, el del tetraedro de esquina
+  de volumen h³/6, de modo que la celda partida da su lado, como en triángulos), VTK 3D con la permutación de nodos de VTK para tet10
+  y hex27 (comprobada por coordenadas, sin abrirla en ParaView). Calor estacionario ya resuelve en hex8 y tet10 sin cambios de física
+  (prueba manual, sin suite). **Fase 1 (calor, especies, Darcy) hecha** sin cambios de física salvo las condiciones dadas como
+  función, que tomaban `coor[:2]`; ver la fila de `Test/test_3d_scalars.py`. **Coste medido** (`Test/manual/heat_3d_scaling.py`,
+  Poisson en el cubo): con PARDISO, ~18 KB por nodo (hex8 358 k nodos: 36 s y 6.4 GB; tet10 329 k: 37 s y 5.9 GB), casi todo de la
+  factorización: la discretización ocupa 1.4 GB en el caso tet10 y CG + AMG lo resuelve en 14 s con 0.8 GB. CG + AMG gana a PARDISO
+  desde 9 k nodos en 3D, de modo que `Method=auto` elige CG + AMG en sistemas escalares simétricos 3D desde 10 000 incógnitas
+  (`ITERATIVE_SCALAR_3D`); los no simétricos y los de flujo conservan los umbrales 2D, sin medir en 3D. El ensamblaje por bloques
+  no hace falta todavía en escalares. **Falta:** ensamblaje por bloques de elementos (todos los arrays siguen enteros en memoria), las físicas en
+  3D (fases 1–5) y la reorientación de hexaedros de gmsh con jacobiano negativo (los tetraedros sí se reorientan; la integración usa
+  |det J| y no se ha visto un caso que la necesite).
+- `Model.region_field` asigna coeficientes por región física (`mesh.regions`, índices de
   elemento); no leyes de viscosidad distintas por región. Con igual orden, un salto de viscosidad no se ha probado (el esfuerzo
   recuperado de la PSPG lo promedia); con Taylor–Hood, Couette de dos capas es exacto.
 - SUPG sobre triángulos reduce mucho las oscilaciones pero no las elimina (no es monótono con flujo oblicuo a la malla).
@@ -535,7 +552,7 @@ Lo que sigue pendiente:
   son las iteraciones casi constantes y la memoria, que importan en mallas mayores.
 - AMG (aglomeración suavizada) está pensado para difusión simétrica; con convección fuerte o varios campos acoplados puede
   necesitar más iteraciones o GMRES/BiCGSTAB. El precondicionador de bloques solo sirve para el flujo solo.
-- La salida es VTK XML en ASCII (grande en mallas muy finas); no hay XDMF/HDF5 ni VTK binario ni datos por celda.
+- La salida es VTK XML, en ASCII o binario base64 (`write_vtu(..., binary=True)`, por omisión en mallas 3D); no hay XDMF/HDF5 ni datos por celda.
 - La factorización se reutiliza si la matriz es idéntica. En transitorio no lineal se conserva entre iteraciones y pasos
   (`reuseTangent=True`); en estacionario no lineal cada iteración de Newton refactoriza.
 

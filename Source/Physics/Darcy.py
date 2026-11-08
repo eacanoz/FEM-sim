@@ -156,7 +156,7 @@ class darcy(physics):
 
         for edge in edges:
             for node_id in edge:
-                value = p(*nodes[node_id].coor[:2]) if callable(p) else p
+                value = p(*nodes[node_id].coor) if callable(p) else p
                 nodes[node_id].BC['p'] = self.setDirichletBC(value)
 
     def addBC_NormalVelocity(self, id: int, u_n: float):

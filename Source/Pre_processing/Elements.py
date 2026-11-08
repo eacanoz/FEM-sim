@@ -2,8 +2,8 @@
 
 Each ReferenceElement knows its nodes on the reference domain, how to evaluate N and dN/dxi at
 points, a Gauss rule and the local node indices of its facets (the boundary entities: points for
-lines, edges for triangles and quadrilaterals, faces for hexahedra). Adding an element (tet4, hex8,
-...) means adding one entry to ELEMENTS; the discretization and the operators are generic in the
+lines, edges for triangles and quadrilaterals, faces for tetrahedra and hexahedra). Adding an element means adding one
+entry to ELEMENTS; the discretization and the operators are generic in the
 dimension.
 
 Shapes: N (npts, nne); dN (npts, nne, dim) with dN[..., a] = dN / dxi_a.
@@ -205,6 +205,166 @@ def _tri6_second(points):
     return np.broadcast_to(H, (len(points),) + H.shape).copy()
 
 
+# ----- 3D: node orders of gmsh (also its reference coordinates: [0, 1] tetrahedra, [-1, 1] hexahedra) -----
+
+TET4_NODES = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+TET10_EDGES = ((0, 1), (1, 2), (2, 0), (0, 3), (2, 3), (1, 3))          # vertices of the nodes 4..9
+TET10_NODES = np.vstack([TET4_NODES] + [0.5 * (TET4_NODES[a] + TET4_NODES[b]) for a, b in TET10_EDGES])
+TET_FACES = ((0, 2, 1), (0, 1, 3), (0, 3, 2), (1, 2, 3))                 # vertices of each face
+
+HEX8_NODES = np.array([[-1.0, -1.0, -1.0], [1.0, -1.0, -1.0], [1.0, 1.0, -1.0], [-1.0, 1.0, -1.0],
+                       [-1.0, -1.0, 1.0], [1.0, -1.0, 1.0], [1.0, 1.0, 1.0], [-1.0, 1.0, 1.0]])
+HEX27_NODES = np.array([[-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1], [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
+                        [0, -1, -1], [-1, 0, -1], [-1, -1, 0], [1, 0, -1], [1, -1, 0], [0, 1, -1], [1, 1, 0], [-1, 1, 0],
+                        [0, -1, 1], [-1, 0, 1], [1, 0, 1], [0, 1, 1],
+                        [0, 0, -1], [0, -1, 0], [-1, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 0]], dtype=float)
+HEX_FACES = ((0, 3, 2, 1), (0, 1, 5, 4), (0, 4, 7, 3), (1, 2, 6, 5), (2, 3, 7, 6), (4, 5, 6, 7))
+
+
+def _find_node(nodes, point):
+    hit = np.flatnonzero(np.all(np.abs(nodes - point) < 1e-12, axis=1))
+    if len(hit) != 1:
+        raise ValueError(f"No hay un nodo en {point}.")
+    return int(hit[0])
+
+
+def _quadratic_facets(nodes, faces):
+
+    """Local nodes of the faces of a quadratic element in the order of their facet element (tri6: the vertices, then the
+    midpoints of the edges v0v1, v1v2, v2v0; quad9: the same and the centre), found by their reference coordinates."""
+
+    facets = []
+    for face in faces:
+        v = list(face)
+        n = len(v)
+        mids = [_find_node(nodes, 0.5 * (nodes[v[k]] + nodes[v[(k + 1) % n]])) for k in range(n)]
+        centre = [_find_node(nodes, nodes[v].mean(axis=0))] if n == 4 else []
+        facets.append(tuple(v + mids + centre))
+    return tuple(facets)
+
+
+def _linear_subspace(nodes, n_vertices, linear_shape):
+
+    """Each non-vertex node of a quadratic element as the combination of the vertices that a linear field takes there."""
+
+    N, _ = linear_shape(nodes[n_vertices:])
+    return tuple((n_vertices + i, tuple((k, float(w)) for k, w in enumerate(row) if abs(w) > 1e-14))
+                 for i, row in enumerate(N))
+
+
+# ----- tetrahedra -----
+
+def _tet4_shape(points):
+    x, y, z = points[:, 0], points[:, 1], points[:, 2]
+    N = np.stack([1.0 - x - y - z, x, y, z], axis=1)
+    dN = np.broadcast_to(_TET_DL, (len(points), 4, 3)).copy()
+    return N, dN
+
+
+_TET_DL = np.array([[-1.0, -1.0, -1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])   # d(barycentric)/dxi
+
+
+def _tet10_shape(points):
+    L, _ = _tet4_shape(points)                                           # barycentric coordinates (npts, 4)
+    N = [L[:, k] * (2 * L[:, k] - 1) for k in range(4)] + [4 * L[:, a] * L[:, b] for a, b in TET10_EDGES]
+    dN = [(4 * L[:, k] - 1)[:, None] * _TET_DL[k] for k in range(4)]
+    dN += [4 * (L[:, b][:, None] * _TET_DL[a] + L[:, a][:, None] * _TET_DL[b]) for a, b in TET10_EDGES]
+    return np.stack(N, axis=1), np.stack(dN, axis=1)
+
+
+def _tet10_second(points):
+    H = [4 * np.outer(_TET_DL[k], _TET_DL[k]) for k in range(4)]
+    H += [4 * (np.outer(_TET_DL[a], _TET_DL[b]) + np.outer(_TET_DL[b], _TET_DL[a])) for a, b in TET10_EDGES]
+    H = np.stack(H)
+    return np.broadcast_to(H, (len(points),) + H.shape).copy()
+
+
+# 14-point rule of degree 5 with positive weights (Walkington): orbits of 4 + 4 points (a, a, a, 1 - 3a) and of 6 points
+# (c, c, 1/2 - c, 1/2 - c), solved to machine precision; Test/test_3d_foundation.py checks it against the exact moments.
+_TET14 = (0.31088591926330078, 0.092735250310892053, 0.45449629587434925,
+          0.0187813209530025, 0.01224884051939377, 0.0070910034628469199)
+
+
+def _tet_orbit_4(a):
+    L = np.array([[a, a, a, 1 - 3 * a], [a, a, 1 - 3 * a, a], [a, 1 - 3 * a, a, a], [1 - 3 * a, a, a, a]])
+    return L[:, 1:]
+
+
+def _tet_quadrature(order):
+
+    """Gauss rules on the reference tetrahedron (volume 1/6): 1 point (degree 1) for order 1, 4 points (degree 2) for order 2,
+    14 points (degree 5) for order 3, and a collapsed Gauss-Jacobi product of order**3 points (degree 2 order - 1) above."""
+
+    if order <= 1:
+        return np.array([[0.25, 0.25, 0.25]]), np.array([1.0 / 6.0])
+
+    if order == 2:
+        return _tet_orbit_4((5.0 - np.sqrt(5.0)) / 20.0), np.full(4, 1.0 / 24.0)
+
+    if order == 3:
+        a, b, c, wa, wb, wc = _TET14
+        d = 0.5 - c
+        edges = np.array([[c, c, d, d], [c, d, c, d], [c, d, d, c], [d, c, c, d], [d, c, d, c], [d, d, c, c]])[:, 1:]
+        points = np.vstack([_tet_orbit_4(a), _tet_orbit_4(b), edges])
+        return points, np.concatenate([np.full(4, wa), np.full(4, wb), np.full(6, wc)])
+
+    from scipy.special import roots_jacobi
+
+    # x = u, y = v (1 - u), z = w (1 - u)(1 - v): the Jacobian (1 - u)^2 (1 - v) goes into Gauss-Jacobi weights
+    tu, wu = roots_jacobi(order, 2.0, 0.0)
+    tv, wv = roots_jacobi(order, 1.0, 0.0)
+    tw, ww = leggauss(order)
+    u, v, w = (tu + 1) / 2, (tv + 1) / 2, (tw + 1) / 2
+    U, V, W = np.meshgrid(u, v, w, indexing='ij')
+    x, y, z = U, V * (1 - U), W * (1 - U) * (1 - V)
+    weights = np.einsum('i,j,k->ijk', wu / 8.0, wv / 4.0, ww / 2.0)
+    return np.stack([x.ravel(), y.ravel(), z.ravel()], axis=1), weights.ravel()
+
+
+# ----- hexahedra -----
+
+def _hex_shape(nodes):
+
+    """Tensor-product Lagrange shape functions (and second derivatives) of a hexahedron whose nodes sit on the 1D nodes
+    -1, (0,) 1."""
+
+    nodes_1d = np.unique(nodes[:, 0])
+    index = np.searchsorted(nodes_1d, nodes)                              # (nne, 3) position on the 1D nodes
+
+    def factors(points):
+        values = [lagrange_1d(nodes_1d, points[:, a]) for a in range(3)]
+        return [v[0][:, index[:, a]] for a, v in enumerate(values)], [v[1][:, index[:, a]] for a, v in enumerate(values)]
+
+    def shape(points):
+        Ns, dNs = factors(points)
+        N = Ns[0] * Ns[1] * Ns[2]
+        dN = np.stack([dNs[0] * Ns[1] * Ns[2], Ns[0] * dNs[1] * Ns[2], Ns[0] * Ns[1] * dNs[2]], axis=-1)
+        return N, dN
+
+    def second(points):
+        Ns, dNs = factors(points)
+        d2 = np.array([1.0, -2.0, 1.0])                                   # of a parabola on -1, 0, 1: constant
+        d2Ns = [np.broadcast_to(d2[index[:, a]], Ns[a].shape) for a in range(3)]
+        H = np.empty(Ns[0].shape + (3, 3))
+        for a in range(3):
+            for b in range(3):
+                f = [(Ns, dNs, d2Ns)[(c == a) + (c == b)][c] for c in range(3)]
+                H[..., a, b] = f[0] * f[1] * f[2]
+        return H
+
+    return shape, second
+
+
+def _hex_quadrature(order):
+    x, w = leggauss(order)
+    X, Y, Z = np.meshgrid(x, x, x, indexing='ij')
+    return np.stack([X.ravel(), Y.ravel(), Z.ravel()], axis=1), np.einsum('i,j,k->ijk', w, w, w).ravel()
+
+
+_hex8_shape, _ = _hex_shape(HEX8_NODES)
+_hex27_shape, _hex27_second = _hex_shape(HEX27_NODES)
+
+
 ELEMENTS = {
     'point': ReferenceElement('point', 0, np.zeros((1, 0)), (), 'point', _point_shape, _point_quadrature),
     'line2': ReferenceElement('line2', 1, np.array([[-1.0], [1.0]]), ((0,), (1,)), 'point',
@@ -224,6 +384,14 @@ ELEMENTS = {
                               linear_subspace=((4, ((0, 0.5), (1, 0.5))), (5, ((1, 0.5), (2, 0.5))), (6, ((2, 0.5), (3, 0.5))),
                                                (7, ((3, 0.5), (0, 0.5))), (8, ((0, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)))),
                               _second=_quad9_second),
+    'tet4': ReferenceElement('tet4', 3, TET4_NODES.copy(), TET_FACES, 'tri3', _tet4_shape, _tet_quadrature),
+    'tet10': ReferenceElement('tet10', 3, TET10_NODES.copy(), _quadratic_facets(TET10_NODES, TET_FACES), 'tri6',
+                              _tet10_shape, _tet_quadrature, default_order=3,
+                              linear_subspace=_linear_subspace(TET10_NODES, 4, _tet4_shape), _second=_tet10_second),
+    'hex8': ReferenceElement('hex8', 3, HEX8_NODES.copy(), HEX_FACES, 'quad4', _hex8_shape, _hex_quadrature),
+    'hex27': ReferenceElement('hex27', 3, HEX27_NODES.copy(), _quadratic_facets(HEX27_NODES, HEX_FACES), 'quad9',
+                              _hex27_shape, _hex_quadrature, default_order=3,
+                              linear_subspace=_linear_subspace(HEX27_NODES, 8, _hex8_shape), _second=_hex27_second),
 }
 
 
@@ -234,6 +402,6 @@ def element_type_of(mesh):
     name = getattr(mesh, 'element_type', None)
 
     if name is None:
-        name = {1: 'line2', 2: 'quad4'}[mesh.PD]
+        name = {1: 'line2', 2: 'quad4', 3: 'hex8'}[mesh.PD]
 
     return name

@@ -108,6 +108,29 @@ lo permite), paralelismo MPI.
 - Datos de material disponibles: POLYFORT FPP 30 GFC K1079 (Cross–WLF y Tait ajustados; ver `docs/ESTADO.md`). Sin DSC propio: la
   cristalización usa parámetros de otro iPP.
 
+## Avance
+
+- **Fase 0 hecha (2026-11-07).** `tet4`, `tet10`, `hex8`, `hex27` en `ELEMENTS` (orden de nodos de gmsh, comprobado con
+  `getElementProperties`); cuadratura de tetraedro de 1, 4 y 14 puntos (grados 1, 2, 5; la de 14 puntos es la de Walkington, con los
+  orbitales resueltos a precisión de máquina) y Gauss–Jacobi colapsada de n³ puntos por encima; normales de cara; `element_size` 3D;
+  `generate3DMesh` (hexaedros o 6 tetraedros de Kuhn por celda); gmsh 3D con grupos de caras y regiones; `boundary_faces`; VTK 3D con la
+  permutación de tet10/hex27 y salida binaria base64. `Test/test_3d_foundation.py` (13 pruebas, ~4 s): Poisson en el cubo con orden 2.00
+  (hex8), 1.95 (tet4), 2.97 (hex27) y 3.02 (tet10); esfera de gmsh con área a 7.3e-5 en tet10.
+- **Quedó para después:** el ensamblaje por bloques (se hará al medir en la fase 1–2, con el primer caso que lo necesite); los VTU 3D no
+  se abrieron en ParaView (el orden de VTK se comprobó por coordenadas); hexaedros de gmsh con jacobiano negativo no se reorientan.
+- **Fase 1 hecha (2026-11-07).** Calor, especies y Darcy en 3D sin cambios de física, salvo `coor[:2]` en las condiciones dadas como
+  función (`Darcy.py`, `HeatTransfer.py`, `MassTransfer.py`; queda el de `Viscoelastic.py` para la fase 4). `Test/test_3d_scalars.py`
+  (9 pruebas, ~27 s): parche con flujo y convección en caras, Poisson de orden 2/3, cubo frente a la serie de Fourier (BDF2, centro a
+  1.7e-3; el error baja 3.4 veces con dt/2), capa límite con SUPG (hex8 exacto; tet4 0.33, no monótono como T3), SUPG manufacturado,
+  difusión–reacción = 1D, Darcy anisótropo exacto e hidrostático, inyección que transporta calor.
+- **Coste (`Test/manual/heat_3d_scaling.py`):** con PARDISO ~18 KB por nodo (358 k nodos hex8: 36 s, 6.4 GB), casi todo de la
+  factorización (la discretización tet10 de 329 k nodos ocupa 1.4 GB). CG + AMG gana desde 9 k nodos (329 k tet10: 14 s y 0.8 GB frente
+  a 37 s y 5.9 GB); `SolverSelection.ITERATIVE_SCALAR_3D = 10 000` lo aplica en `Method=auto` (solo escalares simétricos). El
+  ensamblaje por bloques no hace falta en escalares; volver a medir en la fase 2, donde las matrices de Taylor–Hood son 3–4 veces mayores
+  por elemento y el solver es de punto de silla.
+- **Fase 2, lo siguiente:** `FluidFlow` ya cuenta los vértices de Taylor–Hood desde `linear_subspace`; medir Stokes P2/P1 en un conducto
+  con PARDISO frente a GMRES + `SaddlePoint` antes de tocar el ensamblaje.
+
 ## Primeros pasos de la nueva sesión
 
 1. Leer este archivo y `docs/ESTADO.md`; correr la suite completa para tener la línea base (39 suites, unos 35 min).

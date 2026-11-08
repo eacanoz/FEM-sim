@@ -119,11 +119,77 @@ class Mesh:
         self.NoN = len(self.NL)
         self.NoE = len(self.EL)
 
+    def generate3DMesh(self, dim: tuple, div: tuple, element_type=ElementType.hexahedron, order=1):
+
+        """Box mesh of hexahedra (hex8; hex27 with order=2) or tetrahedra (tet4; tet10 with order=2).
+
+        dim = (Lx, Ly, Lz) size of the box, div = (nx, ny, nz) number of cells in each direction. Nodes run along x, then y,
+        then z, on a grid of order * n + 1 points per direction. Each element lists its nodes in the order of gmsh (see
+        Elements.py). Tetrahedra split every cell into the 6 tetrahedra around its main diagonal (Kuhn), which match across
+        the cells; all of them have positive volume.
+        """
+
+        Lx, Ly, Lz = dim
+        nx, ny, nz = div
+
+        if order not in (1, 2):
+            raise ValueError(f"Orden de malla no disponible: {order} (use 1 o 2).")
+        if element_type not in (ElementType.hexahedron, ElementType.tetrahedron):
+            raise ValueError("generate3DMesh necesita ElementType.hexahedron o ElementType.tetrahedron.")
+
+        from Source.Pre_processing.Elements import ELEMENTS, TET10_EDGES
+
+        tet = element_type == ElementType.tetrahedron
+        self.PD = 3
+        self.meshType = element_type
+        self.element_type = {(False, 1): 'hex8', (False, 2): 'hex27', (True, 1): 'tet4', (True, 2): 'tet10'}[(tet, order)]
+
+        m = order
+        gx, gy, gz = m * nx + 1, m * ny + 1, m * nz + 1
+
+        self.NL = []
+        for k in range(gz):
+            for j in range(gy):
+                for i in range(gx):
+                    self.NL.append(Node(id=len(self.NL), coor=(i * Lx / (gx - 1), j * Ly / (gy - 1), k * Lz / (gz - 1))))
+
+        def at(p):
+            return self.NL[int(p[0]) + gx * (int(p[1]) + gy * int(p[2]))]
+
+        # Kuhn split of the unit cell: vertices 0, e_a, e_a + e_b, (1, 1, 1) for each permutation (a, b, c) of the axes
+        eye = np.eye(3, dtype=int)
+        kuhn = []
+        for a, b in ((0, 1), (0, 2), (1, 0), (1, 2), (2, 0), (2, 1)):
+            v = [np.zeros(3, dtype=int), eye[a], eye[a] + eye[b], np.ones(3, dtype=int)]
+            if np.linalg.det(np.array(v[1:]) - v[0]) < 0:
+                v[1], v[2] = v[2], v[1]
+            kuhn.append(v)
+
+        hex_offsets = ((ELEMENTS[self.element_type].nodes + 1.0) / 2.0 * m).astype(int) if not tet else None
+
+        self.EL = []
+        for k in range(nz):
+            for j in range(ny):
+                for i in range(nx):
+                    origin = m * np.array([i, j, k])
+                    if not tet:
+                        self.EL.append(Element(id=len(self.EL), nodes=[at(origin + o) for o in hex_offsets]))
+                        continue
+                    for v in kuhn:
+                        corners = [origin + m * c for c in v]
+                        nodes = [at(c) for c in corners]
+                        if order == 2:
+                            nodes += [at((corners[a] + corners[b]) // 2) for a, b in TET10_EDGES]
+                        self.EL.append(Element(id=len(self.EL), nodes=nodes))
+
+        self.NoN = len(self.NL)
+        self.NoE = len(self.EL)
+
     def boundary_facets(self, selector=None):
 
-        """Outer-boundary facets (points in 1D, edges in 2D) whose midpoint satisfies selector(*coords).
+        """Outer-boundary facets (points in 1D, edges in 2D, faces in 3D) whose midpoint satisfies selector(*coords).
 
-        Returns a list of node-id tuples, one per facet. selector(x) in 1D, selector(x, y) in 2D;
+        Returns a list of node-id tuples, one per facet. selector(x) in 1D, selector(x, y) in 2D, selector(x, y, z) in 3D;
         None selects the whole boundary. A string selects a named group of an imported mesh
         (the physical groups of a gmsh file, see `read_msh`).
         """
@@ -140,11 +206,12 @@ class Mesh:
     @classmethod
     def read_msh(cls, path):
 
-        """Reads a 2D gmsh mesh (.msh) made of triangles (T3, T6) or quadrilaterals (Q4, Q9).
+        """Reads a gmsh mesh (.msh): 2D of triangles (T3, T6) or quadrilaterals (Q4, Q9), or 3D of tetrahedra (tet4, tet10) or
+        hexahedra (hex8, hex27); a mesh with 3D elements is read as 3D.
 
-        The physical groups of dimension 1 become named boundary groups, available as
-        `mesh.boundary_edges('name')` and in `mesh.groups`; the 2D ones are kept in `mesh.regions`
-        (name -> indices in mesh.EL, for Model.region_field). Needs the gmsh package.
+        The physical groups of the dimension of the boundary (1 in 2D, 2 in 3D) become named boundary groups, available as
+        `mesh.boundary_edges('name')` / `mesh.boundary_faces('name')` and in `mesh.groups`; the groups of the dimension of
+        the mesh are kept in `mesh.regions` (name -> indices in mesh.EL, for Model.region_field). Needs the gmsh package.
         """
 
         import gmsh
@@ -161,41 +228,52 @@ class Mesh:
     @classmethod
     def from_gmsh_model(cls):
 
-        """Mesh from the gmsh model that is currently open (mesh it first with gmsh.model.mesh.generate(2); for quadratic
-        elements, also gmsh.model.mesh.setOrder(2))."""
+        """Mesh from the gmsh model that is currently open (mesh it first with gmsh.model.mesh.generate(2), or generate(3) for a
+        3D mesh; for quadratic elements, also gmsh.model.mesh.setOrder(2))."""
 
         import gmsh
 
-        types, element_tags, node_lists = gmsh.model.mesh.getElements(2)
-        # gmsh type -> (element, nodes, vertices, the node order after reversing the orientation)
-        supported = {2: ('tri3', 3, 3, [2, 1, 0]), 3: ('quad4', 4, 4, [3, 2, 1, 0]),
-                     9: ('tri6', 6, 3, [0, 2, 1, 5, 4, 3]), 10: ('quad9', 9, 4, [0, 3, 2, 1, 7, 6, 5, 4, 8])}
+        mesh_dim = 3 if len(gmsh.model.mesh.getElements(3)[0]) else 2
+        types, element_tags, node_lists = gmsh.model.mesh.getElements(mesh_dim)
+        # gmsh type -> (element, nodes, vertices, the node order after reversing the orientation). The node order of gmsh is
+        # the one of the reference elements (Elements.py); tetrahedra are reversed by swapping the vertices 1 and 2.
+        if mesh_dim == 2:
+            supported = {2: ('tri3', 3, 3, [2, 1, 0]), 3: ('quad4', 4, 4, [3, 2, 1, 0]),
+                         9: ('tri6', 6, 3, [0, 2, 1, 5, 4, 3]), 10: ('quad9', 9, 4, [0, 3, 2, 1, 7, 6, 5, 4, 8])}
+        else:
+            supported = {4: ('tet4', 4, 4, [0, 2, 1, 3]), 11: ('tet10', 10, 4, [0, 2, 1, 3, 6, 5, 4, 7, 9, 8]),
+                         5: ('hex8', 8, 8, None), 12: ('hex27', 27, 8, None)}
 
         if len(types) != 1 or types[0] not in supported:
-            raise ValueError("La malla debe tener un solo tipo de elemento 2D (triangulos o cuadrilateros).")
+            raise ValueError("La malla debe tener un solo tipo de elemento de su dimension (triangulos o cuadrilateros en 2D, "
+                             "tetraedros o hexaedros en 3D).")
 
         element_type, nne, n_vertices, reversed_order = supported[types[0]]
 
         tags = np.array(node_lists[0], dtype=int).reshape(-1, nne)
         all_tags, all_xyz, _ = gmsh.model.mesh.getNodes()
-        coords = dict(zip((int(t) for t in all_tags), np.asarray(all_xyz).reshape(-1, 3)[:, :2]))
+        coords = dict(zip((int(t) for t in all_tags), np.asarray(all_xyz).reshape(-1, 3)[:, :mesh_dim]))
 
         used = sorted(set(tags.ravel().tolist()))
         index = {tag: i for i, tag in enumerate(used)}
 
         mesh = cls()
-        mesh.PD = 2
+        mesh.PD = mesh_dim
         mesh.element_type = element_type
-        mesh.meshType = ElementType.triangle if element_type.startswith('tri') else ElementType.quadrilateral
+        mesh.meshType = {'tri': ElementType.triangle, 'qua': ElementType.quadrilateral, 'tet': ElementType.tetrahedron,
+                         'hex': ElementType.hexahedron}[element_type[:3]]
         mesh.NL = [Node(id=i, coor=tuple(float(c) for c in coords[tag])) for i, tag in enumerate(used)]
         mesh.EL = []
 
         for row in tags:
             nodes = [mesh.NL[index[int(t)]] for t in row]
             xy = np.array([n.coor for n in nodes[:n_vertices]])
-            twice_area = np.sum(xy[:, 0] * np.roll(xy[:, 1], -1) - np.roll(xy[:, 0], -1) * xy[:, 1])
-            if twice_area < 0:
-                nodes = [nodes[k] for k in reversed_order]   # counter-clockwise
+            if mesh_dim == 2:
+                negative = np.sum(xy[:, 0] * np.roll(xy[:, 1], -1) - np.roll(xy[:, 0], -1) * xy[:, 1]) < 0
+            else:
+                negative = reversed_order is not None and np.linalg.det(xy[1:4] - xy[0]) < 0
+            if negative:
+                nodes = [nodes[k] for k in reversed_order]   # counter-clockwise (2D), positive volume (tetrahedra)
             mesh.EL.append(Element(id=len(mesh.EL), nodes=nodes))
 
         mesh.NoN, mesh.NoE = len(mesh.NL), len(mesh.EL)
@@ -205,7 +283,26 @@ class Mesh:
         for dim, tag in gmsh.model.getPhysicalGroups():
             name = gmsh.model.getPhysicalName(dim, tag) or f"group_{dim}_{tag}"
 
-            if dim == 1:
+            if mesh_dim == 3 and dim == 2:           # faces of the boundary, in any node order (the facets sort them)
+                faces = []
+                for entity in gmsh.model.getEntitiesForPhysicalGroup(dim, tag):
+                    etypes, _, enodes = gmsh.model.mesh.getElements(2, entity)
+                    for et, nl in zip(etypes, enodes):
+                        n = gmsh.model.mesh.getElementProperties(et)[3]
+                        faces += [tuple(index[int(t)] for t in face) for face in np.asarray(nl).reshape(-1, n)]
+                mesh.groups[name] = faces
+
+            elif mesh_dim == 3 and dim == 3:
+                ids = []
+                for entity in gmsh.model.getEntitiesForPhysicalGroup(dim, tag):
+                    _, etags, _ = gmsh.model.mesh.getElements(3, entity)
+                    ids += [position[int(t)] for chunk in etags for t in chunk]
+                mesh.regions[name] = ids
+
+            elif mesh_dim == 3:
+                continue
+
+            elif dim == 1:
                 edges = []
                 for entity in gmsh.model.getEntitiesForPhysicalGroup(dim, tag):
                     etypes, _, enodes = gmsh.model.mesh.getElements(1, entity)
@@ -232,9 +329,18 @@ class Mesh:
 
         return self.boundary_facets(selector)
 
+    def boundary_faces(self, selector=None):
+
+        """Same as boundary_facets (name used for 3D meshes): selector(x, y, z) or the name of a group of faces."""
+
+        return self.boundary_facets(selector)
+
     def plot_triangles(self):
 
         """Triangles of nodes that cover the mesh, to draw a nodal field: every node is used, so a T6 gives 4 and a Q9 gives 8. Q4 gives 2, T3 itself."""
+
+        if getattr(self, 'PD', 2) == 3:
+            raise ValueError("Los graficos de matplotlib son solo 2D: una malla 3D se ve en ParaView (Post_processing/VTK.py).")
 
         pattern = {3: [(0, 1, 2)], 4: [(0, 1, 2), (0, 2, 3)],
                    6: [(0, 3, 5), (3, 1, 4), (5, 4, 2), (3, 4, 5)],

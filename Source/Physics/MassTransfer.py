@@ -225,7 +225,7 @@ class mt(physics):
 
         self.modelRef._mesh.NL[id].BC[chemSpec] = self.setNeumannBC(0.0)
 
-    ## ---------- Boundary conditions on edges (2D) ---------- ##
+    ## ---------- Boundary conditions on facets: edges (2D) or faces (3D, mesh.boundary_faces) ---------- ##
 
     def addBC_ConcentrationEdges(self, edges, chemSpec: str, C0):
 
@@ -236,7 +236,7 @@ class mt(physics):
 
         for edge in edges:
             for node_id in edge:
-                value = C0(*nodes[node_id].coor[:2]) if callable(C0) else C0
+                value = C0(*nodes[node_id].coor) if callable(C0) else C0
                 nodes[node_id].BC[chemSpec] = self.setDirichletBC(value)
 
     def addBC_FluxEdges(self, edges, chemSpec: str, flux: float):

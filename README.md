@@ -47,7 +47,9 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Convección natural (`ff.setBoussinesq`, térmica y solutal) y especies arrastradas por el flujo; flujos de contorno por reacciones (`boundaryFlux`, Nusselt) | Operativo: cavidad de de Vahl Davis Ra = 1e3–1e6 (Nusselt < 0.2 %), estratificación estable en reposo, especies = calor con Le = 1 |
 | Turbulencia RANS Spalart–Allmaras (`Model(psc=[ff, sa])`, SA-neg, distancia geométrica a la pared, sin funciones de pared) | Operativo: canal Re_τ = 180–590 (U_c⁺ a 1–2 % de la DNS, ley de pared), límite laminar, jacobiano acoplado |
 | Turbulencia k-ω SST (`Model(psc=[ff, sst])`, variable ln ω, requiere `globalization='pseudo-transient'`) | Parcial: canal Re_τ = 180–590 (U_c⁺ a 2.5–4.3 % de la DNS, igual que un resolvedor 1D independiente, ley de pared); placa plana en Q4 (C_f −11 a −6 %); escalón de Driver–Seegmiller en Q4 (x_r/H 6.40, experimento 6.26 ± 0.10). En Q9/T6, solo el canal |
-| `rho Cp(T)`, elementos de orden superior, 3D | No implementado |
+| 3D, fase 0 (`docs/PLAN_3D.md`): tetraedros y hexaedros lineales y cuadráticos (tet4, tet10, hex8, hex27), `Mesh.generate3DMesh`, gmsh 3D con grupos de caras, normales de cara, VTK 3D binario | Base validada (Poisson de orden 2 y 3, parche, normales en cubo y esfera) |
+| 3D, fase 1: calor (`ht`), especies (`mt`) y Darcy en tetraedros y hexaedros, con condiciones en caras (`addBC_*Edges(mesh.boundary_faces(...))`) | Operativo: soluciones manufacturadas de orden 2 y 3, enfriamiento de un cubo frente a la serie de Fourier, SUPG nodalmente exacto en hexaedros (no monótono en tetraedros), Darcy anisótropo exacto; `Method=auto` usa CG + AMG desde 10 000 incógnitas en 3D. Flujo, viscoelástico y turbulencia en 3D: pendientes |
+| `rho Cp(T)`, elementos de orden superior a 2 | No implementado |
 
 ## Requisitos
 
@@ -129,7 +131,20 @@ mesh = Mesh.from_gmsh_model()                # modelo de gmsh abierto y ya malla
 physics.addBC_TemperatureEdges(mesh.boundary_edges('inner'), 100.0)     # grupo físico de dimensión 1, por nombre
 ```
 
-La malla debe tener un solo tipo de elemento 2D. Ver `Example_Gmsh_Geometry.py`.
+La malla debe tener un solo tipo de elemento de su dimensión. Ver `Example_Gmsh_Geometry.py`.
+
+### Mallas 3D
+
+```python
+mesh = Mesh(); mesh.generate3DMesh((1.0, 0.5, 0.2), (10, 5, 2), ElementType.hexahedron)            # hex8
+mesh = Mesh(); mesh.generate3DMesh((1.0, 0.5, 0.2), (10, 5, 2), ElementType.tetrahedron, order=2)  # tet10
+mesh = Mesh.from_gmsh_model()                # tras gmsh.model.mesh.generate(3) (y setOrder(2) para tet10/hex27)
+caras = mesh.boundary_faces(lambda x, y, z: z > 0.2 - 1e-12)   # o el nombre de un grupo físico de dimensión 2
+```
+
+Calor, especies y Darcy funcionan en 3D con las mismas llamadas que en 2D (las condiciones `...Edges` reciben caras); flujo,
+viscoelástico y turbulencia todavía no están validados en 3D (fases 2 a 5 de `docs/PLAN_3D.md`). Los resultados se ven en ParaView
+(`write_vtu`, binario por omisión en 3D). En 3D conviene `Method='auto'` o CG + AMG: PARDISO necesita ~18 KB por nodo.
 
 ### Calor y especies acopladas
 
@@ -268,6 +283,8 @@ python Test/test_non_newtonian.py         # Etapa 12: leyes de viscosidad, ley d
 python Test/test_axisymmetric.py          # Etapa 13: medidas r-z, conducción radial, Hagen–Poiseuille, extensión uniaxial, tubo de ley de potencia, jacobiano (6)
 python Test/test_transient_flow.py        # Etapa 14: Taylor–Green, arranque, límite estacionario, tangente con dt, calor transitorio, fuerzas (7)
 python Test/test_buoyancy.py              # Etapa 15: de Vahl Davis, estratificación estable, especies y flotación solutal, tangente, flujo de calor (5)
+python Test/test_3d_foundation.py        # 3D fase 0: tet4/tet10/hex8/hex27, cuadratura, caras, cajas, parche, Poisson, normales, gmsh, VTK (13)
+python Test/test_3d_scalars.py           # 3D fase 1: calor, especies y Darcy: parche, manufacturadas, serie del cubo, SUPG, solver automatico (9)
 python Test/test_turbulence.py            # Etapa 16: distancia a la pared, canal turbulento Re_τ 180/395, límite laminar, tangente, viscosidad turbulenta (5)
 ```
 

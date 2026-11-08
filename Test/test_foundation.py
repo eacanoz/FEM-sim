@@ -48,7 +48,7 @@ def test_reference_elements_partition_of_unity():
         assert np.allclose(dN.sum(axis=1), 0.0), name
 
         if element.dim > 0:
-            measure = 0.5 if name.startswith('tri') else 2.0 ** element.dim
+            measure = 0.5 if name.startswith('tri') else 1.0 / 6.0 if name.startswith('tet') else 2.0 ** element.dim
             assert np.isclose(weights.sum(), measure), name  # measure of the reference domain
 
 

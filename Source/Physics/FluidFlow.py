@@ -264,7 +264,8 @@ class ff(physics):
         if not self.taylor_hood:
             return list(range(mesh.getNoN()))
 
-        n_vertices = 3 if element_type_of(mesh).startswith('tri') else 4
+        element = ELEMENTS[element_type_of(mesh)]
+        n_vertices = element.n_nodes - len(element.linear_subspace)
         return sorted({n for element in mesh.EL for n in element.getNodesId()[:n_vertices]})
 
     # ----- weak form -----
