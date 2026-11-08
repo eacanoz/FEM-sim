@@ -538,15 +538,15 @@ class ff(physics):
     def addBC_SlipLawEdges(self, edges, law):
 
         """Wall that slips, aligned with the axes: no flow through it, and a shear stress given by the slip velocity (NavierSlip, PowerSlip of
-        Source.Physics.Rheology). The problem becomes nonlinear if the law is: use ProblemType.nonlinear always."""
+        Source.Physics.Rheology). In 3D the law acts on the magnitude of the tangential velocity, along it: tau = tau(|u_s|) u_s / |u_s|.
+        The problem becomes nonlinear if the law is: use ProblemType.nonlinear always."""
 
-        if self.dim != 2:
-            raise NotImplementedError("El deslizamiento con ley en pared solo esta implementado en 2D (fase 3 de docs/PLAN_3D.md).")
         normal = self._normal_component(edges)
         values = [None] * self.dim
         values[normal] = 0.0
         self.addBC_VelocityEdges(edges, values)
-        self.slip_walls.append((list(edges), 1 - normal, law))
+        tangential = [c for c in range(self.dim) if c != normal]        # one component in 2D, two in 3D
+        self.slip_walls.append((list(edges), tangential[0] if self.dim == 2 else tuple(tangential), law))
 
     def addBC_OutletEdges(self, edges, p=0.0, fully_developed=True):
 
@@ -574,32 +574,36 @@ class ff(physics):
 
 
 
-def compressible_law(density, ambient, rho_ref, thermal, T_fixed, heating):
+def compressible_law(density, ambient, rho_ref, thermal, T_fixed, heating, dim=2):
 
-    """Pointwise law of the compressible terms for GradientLawTerm. Inputs: p, grad p (2), u (2), grad u (4) [, T, grad T (2)], then the data
-    p_t, T_t, mu. Outputs: for p a source (1) and a flux (2); for u a source (2) and a flux (4); with heating, for T a source and a flux (2)."""
+    """Pointwise law of the compressible terms for GradientLawTerm. Inputs: p, grad p (d), u (d), grad u (d^2) [, T, grad T (d)], then the
+    data p_t, T_t, mu. Outputs: for p a source (1) and a flux (d); for u a source (d) and a flux (d^2); with heating, for T a source and a
+    flux (d). d = dim (2 or 3)."""
 
     import jax
     import jax.numpy as jnp
     rho_of = density.density if hasattr(density, 'density') else density
 
+    d = int(dim)
+    i_u, i_L, i_T = 1 + d, 1 + 2 * d, 1 + 2 * d + d * d
+
     def law(w):
-        p, gp, u, L = w[0], w[1:3], w[3:5], w[5:9].reshape(2, 2)
+        p, gp, u, L = w[0], w[1:i_u], w[i_u:i_L], w[i_L:i_T].reshape(d, d)
         if thermal:
-            T, gT, data = w[9], w[10:12], w[12:]
+            T, gT, data = w[i_T], w[i_T + 1:i_T + 1 + d], w[i_T + 1 + d:]
         else:
-            T, gT, data = T_fixed, jnp.zeros(2), w[9:]
+            T, gT, data = T_fixed, jnp.zeros(d), w[i_T:]
         p_t, T_t, mu = data[0], data[1], data[2]
         P = p + ambient
         rho = rho_of(P, T)
         rho_p = jax.grad(rho_of, 0)(P, T)
         rho_T = jax.grad(rho_of, 1)(P, T) if thermal else 0.0
-        div = L[0, 0] + L[1, 1]
+        div = jnp.trace(L)
         source = (rho_p * (p_t + u @ gp) + rho_T * (T_t + u @ gT) + (rho - rho_ref) * div) / rho_ref
-        out = [jnp.array([source]), jnp.zeros(2), jnp.zeros(2), (-2.0 / 3.0 * mu * div * jnp.eye(2)).ravel()]
+        out = [jnp.array([source]), jnp.zeros(d), jnp.zeros(d), (-2.0 / 3.0 * mu * div * jnp.eye(d)).ravel()]
         if heating:
             beta = -rho_T / rho
-            out += [jnp.array([-beta * (T + 273.15) * (p_t + u @ gp)]), jnp.zeros(2)]
+            out += [jnp.array([-beta * (T + 273.15) * (p_t + u @ gp)]), jnp.zeros(d)]
         return jnp.concatenate(out)
 
     return law
@@ -624,9 +628,10 @@ class CompressibleTerm:
         rho_ref = float(np.mean(np.asarray(flow.rho, dtype=float)))
         if not rho_ref > 0:
             raise ValueError("El flujo compresible necesita la densidad de referencia del material (rho).")
-        key = ('compressible', flow.density_law, options['ambient'], rho_ref, thermal, options['T'], heating)
+        dim = system.disc.dim
+        key = ('compressible', flow.density_law, options['ambient'], rho_ref, thermal, options['T'], heating, dim)
         law = cached_law(key, lambda: PointwiseLaw(compressible_law(flow.density_law, options['ambient'], rho_ref, thermal,
-                                                                    0.0 if options['T'] is None else float(options['T']), heating)))
+                                                                    0.0 if options['T'] is None else float(options['T']), heating, dim)))
         inputs = ['p', 'u'] + ([self.temperature] if thermal else [])
         outputs = ['p', 'u'] + ([self.temperature] if heating else [])
         self.term = GradientLawTerm(system, law, inputs, outputs)
@@ -702,13 +707,20 @@ class CompressibleTerm:
 
 class WallSlipTerm:
 
-    """Wall that slips: R_u += boundary integral of tau(u_s) v_s, with u_s the tangential velocity, tau from a slip law (Source.Physics.Rheology)."""
+    """Wall that slips: R_u += boundary integral of tau(u_s) v_s, with u_s the tangential velocity, tau from a slip law (Source.Physics.Rheology).
+    tangential: the tangential component (2D) or the two of them (3D, isotropic in the wall: tau = tau(|u_s|) u_s / |u_s|)."""
 
     def __init__(self, system, facets, tangential, law):
         self.system, self.facets, self.tangential = system, facets, tangential
-        self.law = cached_law(('slip', law), lambda: PointwiseLaw(lambda w: law(w[0])))
+        if np.ndim(tangential) == 0:
+            self.law = cached_law(('slip', law), lambda: PointwiseLaw(lambda w: law(w[0])))
+        else:
+            self.law = cached_law(('slip-3d', law), lambda: PointwiseLaw(_isotropic_slip(law)))
 
     def contribution(self, x, tangent=True):
+
+        if np.ndim(self.tangential) != 0:
+            return self._contribution_3d(x, tangent)
 
         layout, fs = self.system.layout, self.facets
         nf, nnf = fs.nodes.shape
@@ -725,6 +737,39 @@ class WallSlipTerm:
         K = np.einsum('fq,qi,fq,qj->fij', fs.detJw, fs.N, dtau, fs.N)
 
         return R, layout.scatter_matrix(K, rows, rows)
+
+    def _contribution_3d(self, x, tangent):
+
+        layout, fs = self.system.layout, self.facets
+        nf, nnf = fs.nodes.shape
+        rows = layout.node_dofs('u', fs.nodes)[..., list(self.tangential)]           # (nf, nnf, 2)
+        slip = np.einsum('qk,fkc->fqc', fs.N, x[rows])                                 # (nf, nq, 2)
+        flat_rows = rows.reshape(nf, nnf * 2)
+
+        if not tangent:
+            tau = self.law.values(slip.reshape(-1, 2)).reshape(slip.shape)
+            return layout.scatter_vector(np.einsum('fq,qi,fqc->fic', fs.detJw, fs.N, tau).reshape(nf, -1), flat_rows), None
+
+        tau, dtau = self.law(slip.reshape(-1, 2))
+        tau, dtau = tau.reshape(slip.shape), dtau.reshape(slip.shape + (2,))
+        R = layout.scatter_vector(np.einsum('fq,qi,fqc->fic', fs.detJw, fs.N, tau).reshape(nf, -1), flat_rows)
+        K = np.einsum('fq,qi,fqcd,qj->ficjd', fs.detJw, fs.N, dtau, fs.N).reshape(nf, nnf * 2, nnf * 2)
+
+        return R, layout.scatter_matrix(K, flat_rows, flat_rows)
+
+
+def _isotropic_slip(law):
+
+    """Vector slip law of a wall in 3D from a scalar one: tau = tau(s) u_s / s with s = |u_s| (regularized by 1e-300 under the root so
+    that u_s = 0 stays smooth for jax). A linear law gives beta u_s; with u_s along one direction it is the 2D law."""
+
+    import jax.numpy as jnp
+
+    def vector(w):
+        s = jnp.sqrt(w[0] * w[0] + w[1] * w[1] + 1e-300)
+        return law(s) / s * w
+
+    return vector
 
 
 def _pointwise_viscosity(law, n_fields):

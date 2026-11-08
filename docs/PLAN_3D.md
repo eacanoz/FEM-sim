@@ -156,8 +156,19 @@ lo permite), paralelismo MPI.
     `Discretization` (malla de 1.09 M: 24 → 5.6 s), AMG `jacobi` en 3D (−35 % de pico con 332 k), acoplamiento de presiones sin LIL,
     `scatter_matrix` por tramos. Con 1.09 M incógnitas sigue en ~140 s y ~9 GB: la siguiente palanca es no guardar a la vez la matriz de
     `System`, la restringida, la de Dirichlet y la libre del solver.
-- **Fase 3, lo siguiente:** `compressible_law` está escrita para 2D (`gp = w[1:3]`, `L` 2 × 2) y `addBC_SlipLawEdges` (una sola
-  componente tangencial) rechaza el 3D; las leyes de viscosidad usan γ̇ de `_strain`, que ya es genérico.
+- **Fase 3 hecha (2026-11-08).** `compressible_law` en cualquier dimensión; deslizamiento con ley en 3D, isótropo en el plano de la
+  pared (τ = τ(|u_s|) u_s/|u_s|, liso en u_s = 0). `Test/test_3d_polymer.py` (7 pruebas, ~60 s): el mismo canal plano en 2D y como losa
+  3D coincide a 1e-11 o mejor con ley de potencia, Carreau, Cross–WLF con D3 + calentamiento viscoso + calor convectado, densidad
+  exponencial, Tait térmico con calentamiento por compresión (transitorio) y deslizamiento de Navier y de potencia (también frente a su
+  perfil exacto); tangente 3D con todos los términos frente a diferencias finitas (3e-8); dado rectangular de W/H = 4, 8, 16 frente a
+  placas paralelas: newtoniano a 6e-4 de la serie del conducto, ley de potencia con un déficit de caudal ∝ H/W.
+- **Defecto de PARDISO (fase 3):** el emparejamiento ponderado por omisión arruinaba algunos puntos de silla de Taylor–Hood 3D
+  (residuo 1e3 en el dado W/H = 16). `DirectSolver.checked_pardiso` comprueba el residuo de cada solución: refina por encima de 1e-10 y
+  refactoriza sin emparejamiento por encima de 1e-6, usando esa factorización solo si da un residuo bueno; con una matriz casi singular
+  conserva la respuesta de PARDISO (cambiarla alteraba el Newton de casos viscoelásticos validados). Prueba de regresión en
+  `Test/test_3d_flow.py`.
+- **Fase 4, lo siguiente:** viscoelástico 3D: conformación de 6 componentes y su raíz en forma cerrada, DEVSS-G de 9, el `coor[:2]` de
+  `Viscoelastic.py`; empezar por la viscometría homogénea (corte y extensión) frente a `solve_ivp`, como en 2D.
 
 ## Primeros pasos de la nueva sesión
 

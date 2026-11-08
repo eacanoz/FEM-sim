@@ -382,6 +382,34 @@ def test_ethier_steinman_transient_bdf2():
     assert rates[-1] > 1.8, rates
 
 
+def test_pardiso_residual_is_checked():
+    """A wide die (W/H = 16, hex27, a single cell along the flow): PARDISO with its default weighted matching left a relative residual of
+    1e3 here (28 perturbed pivots). The checked solve must return the SuperLU-accurate solution: residual below 1e-9, no cross flow."""
+
+    import scipy.sparse.linalg as spla
+    from Source.Simulation.DirectSolver import FactorizedSolver, checked_pardiso
+    from Source.enums import DirectSolvers
+
+    H, W = 1.0, 16.0
+    mesh = box('hex27', (1, 4, 16), (1.0, H, W / 2))
+    model = Model(name='die', dim=3, mesh=mesh, mat=material('X', miu=1.0), psc=ff)
+    flow = model.physics
+    flow.addBC_NoSlipEdges(mesh.boundary_faces(lambda x, y, z: y < 1e-9 or y > H - 1e-9 or z < 1e-9))
+    flow.addBC_SymmetryEdges(mesh.boundary_faces(lambda x, y, z: z > W / 2 - 1e-9))
+    flow.addBC_OutletEdges(mesh.boundary_faces(lambda x, y, z: x < 1e-9), 2.0)
+    flow.addBC_OutletEdges(mesh.boundary_faces(lambda x, y, z: x > 1 - 1e-9), 0.0)
+    model.solverConfiguration(Study=StudyType.steady_state, Type=ProblemType.linear)
+    A, b = model.assembleGlobalSystem()
+    A = A.tocsr()
+    reference = spla.spsolve(A.tocsc(), b)
+    import pypardiso
+    for x in (checked_pardiso(A, b, pypardiso.PyPardisoSolver(), factorized=False)[0], FactorizedSolver(DirectSolvers.PARDISO).solve(A, b)):
+        residual = np.linalg.norm(A @ x - b) / np.linalg.norm(b)
+        assert residual < 1e-9 and np.max(np.abs(x - reference)) < 1e-9 * np.max(np.abs(reference)), residual
+    model.solve()
+    assert np.max(np.abs(np.asarray(model.sol['u'])[:, 1:])) < 1e-9
+
+
 def test_block_preconditioner_in_3d():
     """GMRES with the block preconditioner (AMG on the velocity with the 6 rigid modes of 3D, pressure mass for the Schur complement)
     solves the duct to the PARDISO solution in a number of iterations that hardly grows with the mesh."""
