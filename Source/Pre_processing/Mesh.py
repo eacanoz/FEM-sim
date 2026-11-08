@@ -200,7 +200,20 @@ class Mesh:
                 raise KeyError(f"El grupo '{selector}' no existe en la malla (grupos: {sorted(self.groups)}).")
             return list(self.groups[selector])
 
-        return Discretization(self).boundary_facet_nodes(selector)
+        # Topology of the boundary, kept while the elements are the same (the coordinates may move: midpoints are recomputed)
+        from Source.Pre_processing.Elements import ELEMENTS, element_type_of
+        from Source.Simulation.Discretization import outer_facets, select_facets
+
+        key = (id(self.EL), len(self.EL), element_type_of(self))
+        cached = getattr(self, '_outer_facets', None)
+        if cached is None or cached[0] != key:
+            conn = np.array([e.getNodesId() for e in self.EL], dtype=int)
+            cached = (key, outer_facets(conn, ELEMENTS[key[2]]))
+            self._outer_facets = cached
+
+        dim = ELEMENTS[key[2]].dim
+        node_xy = np.array([node.coor[:dim] for node in self.NL], dtype=float)
+        return select_facets(cached[1], node_xy, selector)
 
     # ----- meshes from gmsh -----
 

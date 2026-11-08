@@ -31,8 +31,11 @@
 #
 # Taylor-Hood (Q2/Q1, P2/P1), chosen by the mesh: Galerkin without PSPG, SUPG or a recovered stress, third order in u and
 # second in p. The pressure keeps a value at every node, tied to the vertices (System.restrict_to_linear_subspace).
-# setStabilization('SUPG') adds SUPG for layers that the mesh does not resolve at high Re, with the exact viscous force of the
-# quadratic element in the residual (for a law of viscosity: without it, a small inconsistency).
+# setStabilization('SUPG') adds SUPG and PSPG (Tezduyar's SUPG/PSPG) for layers that the mesh does not resolve at high Re, with the
+# exact viscous force of the quadratic element in the residual (for a law of viscosity: without it, a small inconsistency). PSPG
+# is needed with it: an element with every vertex on a Dirichlet wall (corners of T6 and tet10 meshes) leaves the pressure of its
+# vertex to the momentum equation of a single interior node, where the SUPG term nearly cancels the Galerkin coupling (cavity at
+# Re = 5000 with T6: pressure error 0.7 at that corner; tet10: 10 on a pressure range of 6). PSPG gives each vertex its own row.
 #
 # Boundary conditions: velocity (any component, None leaves it free), no slip, symmetry/slip on walls aligned
 # with the axes (normal component fixed), outlet (normal traction -p n, optionally fully developed: tangential
@@ -201,7 +204,8 @@ class ff(physics):
     def setStabilization(self, method='PSPG'):
 
         """'PSPG' (default of equal order) or None (only stable with inf-sup elements, not with equal order). With Taylor-Hood, no
-        stabilization of the pressure is needed: None, or 'SUPG' for convection-dominated flows on coarse meshes."""
+        stabilization of the pressure is needed: None, or 'SUPG' for convection-dominated flows on coarse meshes (SUPG/PSPG on the
+        momentum residual)."""
 
         if method not in (None, 'PSPG', 'SUPG'):
             raise ValueError(f"Estabilizacion desconocida: {method!r} (use 'PSPG', 'SUPG' o None).")
@@ -761,7 +765,7 @@ class FlowTerm:
         self.f = f
         self.inertia = flow.inertia
         self.newton = flow.linearization == 'newton'
-        self.pspg = flow.Stab == 'PSPG'
+        self.pspg = flow.Stab == 'PSPG' or flow.taylor_hood_supg     # SUPG of Taylor-Hood carries PSPG (see the header)
         self.supg = flow.inertia and (not flow.taylor_hood or flow.taylor_hood_supg)
         self.tau_scale = 0.5 if flow.taylor_hood else 1.0            # the spacing of the nodes of a quadratic element
         self.fields = list(flow.viscosity_fields)       # fields read by the viscosity law

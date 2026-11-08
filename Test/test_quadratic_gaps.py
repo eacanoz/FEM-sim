@@ -171,7 +171,8 @@ def cavity(n, Re, supg, element=QUAD):
 def test_taylor_hood_with_supg_at_high_reynolds():
 
     """A cavity at Re = 5000 on a coarse mesh: from rest, the pseudo-transient march does not finish without SUPG, and it does
-    with it. On a fine mesh both reach the same solution. Measured: SUPG buys robustness, not accuracy."""
+    with it. On a fine mesh both reach the same solution. With SUPG/PSPG the 16^2 cavity is also closer to Ghia (0.085 against 0.188
+    of Galerkin; SUPG alone, before PSPG was added to it, gave 0.243)."""
 
     plain, stabilized = cavity(16, 5000.0, False), cavity(16, 5000.0, True)
     print(f"   16^2: {plain.newton_iterations} iterations, converged {plain.nonlinear_converged} without SUPG; "
@@ -185,6 +186,41 @@ def test_taylor_hood_with_supg_at_high_reynolds():
     difference = np.max(np.abs(plain.sol['u'][centre, 0] - stabilized.sol['u'][centre, 0]))
     print(f"   Re 1000, 32^2: difference on the centreline {difference:.1e}")
     assert plain.nonlinear_converged and stabilized.nonlinear_converged and difference < 0.02
+
+
+def test_taylor_hood_supg_keeps_the_pressure_of_corner_elements():
+    """Kovasznay at Re = 1000 on T6 with the exact velocity on the whole boundary: the outflow corner (1, -0.5) belongs to one triangle
+    with its three vertices on the wall. SUPG alone left its pressure 0.73 off (Galerkin 6e-4); with the PSPG of SUPG/PSPG the
+    boundary pressure is as good as Galerkin's, and the interior one too."""
+
+    Re = 1000.0
+    lam = Re / 2 - np.sqrt(Re ** 2 / 4 + 4 * np.pi ** 2)
+    U = lambda x, y: np.stack(np.broadcast_arrays(1 - np.exp(lam * x) * np.cos(2 * np.pi * y),
+                                                  lam / (2 * np.pi) * np.exp(lam * x) * np.sin(2 * np.pi * y)), axis=-1)
+    P = lambda x, y: 0.5 * (1 - np.exp(2 * lam * x))
+
+    errors = {}
+    for supg in (False, True):
+        mesh = rect((1.5, 2.0), (12, 16), TRI)
+        for node in mesh.NL:
+            node.coor = (node.coor[0] - 0.5, node.coor[1] - 0.5)
+        model = Model(name='kovasznay', dim=2, mesh=mesh, mat=material('X', miu=1.0 / Re, rho=1.0), psc=ff)
+        flow = model.physics
+        flow.setInertia(True)
+        if supg:
+            flow.setStabilization('SUPG')
+        flow.addBC_VelocityEdges(mesh.boundary_edges(), lambda x, y: tuple(U(x, y)))
+        flow.setPressureReference((1.0, 0.0), float(P(1.0, 0.0)))
+        model.solverConfiguration(Study=StudyType.steady_state, Type=ProblemType.nonlinear)
+        model.solve()
+        xy = xy_of(mesh)
+        d = np.asarray(model.sol['p']) - P(xy[:, 0], xy[:, 1])
+        d -= np.median(d)
+        errors[supg] = (np.max(np.abs(model.sol['u'] - U(xy[:, 0], xy[:, 1]))), np.max(np.abs(d)))
+    print(f"   T6 Kovasznay Re = 1000: Galerkin u {errors[False][0]:.1e} p {errors[False][1]:.1e}; "
+          f"SUPG/PSPG u {errors[True][0]:.1e} p {errors[True][1]:.1e}")
+    assert errors[True][1] < 3 * errors[False][1] and errors[True][1] < 1e-3
+    assert errors[True][0] < 2 * errors[False][0]
 
 
 def junction(element, n, order=2, gamma=None):
@@ -562,7 +598,8 @@ def test_adaptive_step_keeps_dt_for_a_small_growth():
 if __name__ == "__main__":
     tests = [test_second_derivatives_on_curved_elements, test_supg_of_a_scalar_on_quadratic_elements,
              test_crank_nicolson_keeps_the_steady_state_with_supg_on_quadratic_elements,
-             test_taylor_hood_with_supg_at_high_reynolds, test_pseudo_transient_starts_taylor_hood_from_rest,
+             test_taylor_hood_with_supg_at_high_reynolds, test_taylor_hood_supg_keeps_the_pressure_of_corner_elements,
+             test_pseudo_transient_starts_taylor_hood_from_rest,
              test_grad_div_is_consistent_and_lowers_the_divergence,
              test_stabilization_is_refused_where_it_does_not_belong,
              test_turbulence_on_quadratic_elements, test_sst_flat_plate_closes_its_residual, test_species_on_quadratic_elements,

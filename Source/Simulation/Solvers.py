@@ -173,7 +173,7 @@ class modelSolver():
         rest = np.concatenate([model.layout.dofs(name).ravel() for name in model.layout.names if name not in ('u', 'p')] or [[]]).astype(int)
 
         return saddle_point_preconditioner(A_ff, number[u[free[u]]], number[p[free[p]]], schur[free[p]], modes[free[u]],
-                                           number[rest[free[rest]]])
+                                           number[rest[free[rest]]], smooth='jacobi' if dim == 3 else 'energy')
 
     def construcProblem(self):
 

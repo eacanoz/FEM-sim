@@ -49,7 +49,7 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Turbulencia k-ω SST (`Model(psc=[ff, sst])`, variable ln ω, requiere `globalization='pseudo-transient'`) | Parcial: canal Re_τ = 180–590 (U_c⁺ a 2.5–4.3 % de la DNS, igual que un resolvedor 1D independiente, ley de pared); placa plana en Q4 (C_f −11 a −6 %); escalón de Driver–Seegmiller en Q4 (x_r/H 6.40, experimento 6.26 ± 0.10). En Q9/T6, solo el canal |
 | 3D, fase 0 (`docs/PLAN_3D.md`): tetraedros y hexaedros lineales y cuadráticos (tet4, tet10, hex8, hex27), `Mesh.generate3DMesh`, gmsh 3D con grupos de caras, normales de cara, VTK 3D binario | Base validada (Poisson de orden 2 y 3, parche, normales en cubo y esfera) |
 | 3D, fase 1: calor (`ht`), especies (`mt`) y Darcy en tetraedros y hexaedros, con condiciones en caras (`addBC_*Edges(mesh.boundary_faces(...))`) | Operativo: soluciones manufacturadas de orden 2 y 3, enfriamiento de un cubo frente a la serie de Fourier, SUPG nodalmente exacto en hexaedros (no monótono en tetraedros), Darcy anisótropo exacto; `Method=auto` usa CG + AMG desde 10 000 incógnitas en 3D. Flujo, viscoelástico y turbulencia en 3D: pendientes |
-| 3D, fase 2: Stokes y Navier–Stokes (`ff`) con Taylor–Hood P2/P1 (tet10) y Q2/Q1 (hex27) o igual orden con PSPG (tet4, hex8) | Operativo: Poiseuille exacto, conducto rectangular frente a su serie (orden 3 / 2), tubería en tet10 curvos igual al modelo axisimétrico, Navier–Stokes de Ethier–Steinman (u orden 3, p orden 2); GMRES con bloques en 3D (iteraciones casi constantes), elegido por `Method=auto` desde 120 000 incógnitas. Deslizamiento con ley, compresible, no newtoniano y acoplamientos: sin validar en 3D |
+| 3D, fase 2: Stokes y Navier–Stokes (`ff`) con Taylor–Hood P2/P1 (tet10) y Q2/Q1 (hex27) o igual orden con PSPG (tet4, hex8) | Operativo: Poiseuille exacto, conducto rectangular frente a su serie (orden 3 / 2), tubería en tet10 curvos igual al modelo axisimétrico, Navier–Stokes de Ethier–Steinman (u orden 3, p orden 2); Navier–Stokes transitorio (BDF2, orden 2.5 en Ethier–Steinman) y SUPG/PSPG de Taylor–Hood; GMRES con bloques en 3D (iteraciones casi constantes en Stokes, crecientes con la convección), elegido por `Method=auto` desde 120 000 incógnitas. Deslizamiento con ley, compresible, no newtoniano y acoplamientos: sin validar en 3D |
 | `rho Cp(T)`, elementos de orden superior a 2 | No implementado |
 
 ## Requisitos
@@ -288,7 +288,7 @@ python Test/test_transient_flow.py        # Etapa 14: Taylor–Green, arranque, 
 python Test/test_buoyancy.py              # Etapa 15: de Vahl Davis, estratificación estable, especies y flotación solutal, tangente, flujo de calor (5)
 python Test/test_3d_foundation.py        # 3D fase 0: tet4/tet10/hex8/hex27, cuadratura, caras, cajas, parche, Poisson, normales, gmsh, VTK (13)
 python Test/test_3d_scalars.py           # 3D fase 1: calor, especies y Darcy: parche, manufacturadas, serie del cubo, SUPG, solver automatico (9)
-python Test/test_3d_flow.py              # 3D fase 2: Poiseuille, conducto frente a la serie, tuberia frente al axisimetrico, Ethier-Steinman, bloques (7)
+python Test/test_3d_flow.py              # 3D fase 2: Poiseuille, conducto frente a la serie, tuberia frente al axisimetrico, Ethier-Steinman estacionario y transitorio, SUPG/PSPG, bloques (9)
 python Test/test_turbulence.py            # Etapa 16: distancia a la pared, canal turbulento Re_τ 180/395, límite laminar, tangente, viscosidad turbulenta (5)
 ```
 

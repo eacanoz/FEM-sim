@@ -37,7 +37,7 @@ def build_preconditioner(A, kind):
     raise ValueError(f"Precondicionador no implementado: {kind}")
 
 
-def saddle_point_preconditioner(A, velocity, pressure, schur, modes=None, others=None):
+def saddle_point_preconditioner(A, velocity, pressure, schur, modes=None, others=None, smooth='energy'):
 
     """Upper triangular block preconditioner of a velocity-pressure system with GMRES.
 
@@ -49,24 +49,29 @@ def saddle_point_preconditioner(A, velocity, pressure, schur, modes=None, others
 
     others: indices of the remaining fields (temperature, species, turbulence). They go first, with an incomplete LU of their
     own block, and what they do to the flow enters the velocity through A_uo; what the flow does to them is left out.
+
+    smooth: prolongation smoother of the AMG (pyamg). 'energy' (2D default) gives the fewest iterations; 'jacobi' (used in 3D)
+    takes 1.6 times less memory for the same time (Stokes with 332 k unknowns: 2.0 GB and 100 iterations against 3.1 GB and 79).
     """
 
     import pyamg
 
     A = A.tocsr()
-    A_uu = A[velocity][:, velocity]
-    A_up = A[velocity][:, pressure]
-    coupling = A[pressure][:, pressure].tolil()
-    coupling.setdiag(0.0)
-    coupling = coupling.tocsr()
+    A_v = A[velocity]                               # rows of the velocity, sliced once (large 3D systems)
+    A_uu = A_v[:, velocity]
+    A_up = A_v[:, pressure]
+    coupling = A[pressure][:, pressure].tocsr()
+    coupling = (coupling - sp.diags(coupling.diagonal())).tocsr()       # without the diagonal (no LIL: slow and heavy in 3D)
+    coupling.eliminate_zeros()
     has_row = np.diff(coupling.indptr) > 0          # a row with its own relation: it does not take part in the mass
 
-    amg = pyamg.smoothed_aggregation_solver(A_uu, B=modes, smooth='energy',
-                                            max_coarse=500).aspreconditioner(cycle='V')
-
     if others is not None and len(others):
-        A_uo = A[velocity][:, others]
+        A_uo = A_v[:, others]
         ilu = spla.spilu(A[others][:, others].tocsc())
+    del A_v                                         # free the slice before the AMG setup, the peak of the memory
+
+    amg = pyamg.smoothed_aggregation_solver(A_uu, B=modes, smooth=smooth,
+                                            max_coarse=500).aspreconditioner(cycle='V')
 
     def apply(r):
         p = r[pressure] / schur

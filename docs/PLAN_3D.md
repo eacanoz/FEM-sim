@@ -141,8 +141,21 @@ lo permite), paralelismo MPI.
   (194 k tet10) en 139 s y 8.9 GB, siempre en 83 iteraciones; la generación de la malla ya tarda 24 s (objetos `Node` de Python). La
   memoria por incógnita sube de 4.5 a 8 KB al crecer: ahí sí pesan los arrays del ensamblaje, de modo que con 33 GB el techo práctico es de
   unos 3–4 millones de incógnitas sin ensamblaje por bloques; es la palanca siguiente si hiciera falta más.
-- **Sin hacer en la fase 2:** Navier–Stokes transitorio en 3D (BDF2 de Ethier–Steinman en el tiempo), SUPG de Taylor–Hood en 3D, el
-  ensamblaje por bloques de elementos (no hace falta con el solver iterativo a estos tamaños) y el solver de bloques con inercia en 3D.
+- **Pendientes de la fase 2, cerrados (2026-11-08):**
+  - Navier–Stokes transitorio: Ethier–Steinman con BDF2 y la velocidad de contorno escalada con `setBCTime`; a t = 1 el error es el
+    espacial (u 3.0e-3 relativo en hex27 4³) y el temporal converge con orden 2.5. El Newton modificado usa 2 tangentes en 20 pasos.
+  - SUPG de Taylor–Hood: **defecto encontrado y corregido, también en 2D**. SUPG solo dejaba la presión del vértice de un elemento con
+    todos sus vértices en una pared de Dirichlet en manos de la ecuación de momento de un único nodo interior, donde el término SUPG casi
+    anula el de Galerkin: T6 (Kovasznay Re = 1000) 0.73 de error en esa esquina, tet10 10. Ahora es SUPG/PSPG (Tezduyar): 1.3e-4 y 0.27,
+    y la cavidad a Re = 5000 queda más cerca de Ghia que con Galerkin (0.085 frente a 0.188 en 16²). En tetraedros a Re moderado cuesta
+    precisión (constante 3 veces la de Galerkin); sirve para Re alto, donde tet10 sin estabilizar no converge.
+  - Bloques con inercia: mismos pasos de Newton y misma solución que PARDISO; las iteraciones crecen con la convección (ν = 0.1: ~160;
+    ν = 0.01: hasta 1000), de modo que con convección fuerte PARDISO es el doble de rápido con 144 k incógnitas, aunque usa 2.5 veces más
+    memoria. El umbral de `Method=auto` (120 k) queda igual.
+  - Memoria: medida por fases, dominan las copias de la matriz global y el AMG, no los arrays de elemento. `boundary_faces` sin
+    `Discretization` (malla de 1.09 M: 24 → 5.6 s), AMG `jacobi` en 3D (−35 % de pico con 332 k), acoplamiento de presiones sin LIL,
+    `scatter_matrix` por tramos. Con 1.09 M incógnitas sigue en ~140 s y ~9 GB: la siguiente palanca es no guardar a la vez la matriz de
+    `System`, la restringida, la de Dirichlet y la libre del solver.
 - **Fase 3, lo siguiente:** `compressible_law` está escrita para 2D (`gp = w[1:3]`, `L` 2 × 2) y `addBC_SlipLawEdges` (una sola
   componente tangencial) rechaza el 3D; las leyes de viscosidad usan γ̇ de `_strain`, que ya es genérico.
 

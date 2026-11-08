@@ -296,6 +296,92 @@ def test_ethier_steinman_navier_stokes_orders():
         assert rates_u[-1] > ru - 0.25 and rates_p[-1] > rp - 0.3, (name, rates_u, rates_p)
 
 
+def test_taylor_hood_supg_in_3d():
+    """Ethier-Steinman at nu = 0.002 (convection dominated on these meshes): SUPG/PSPG of Taylor-Hood is consistent (at nu = 0.1 it
+    converges with order 3, measured apart: tet10 u 3.5e-1, 1.4e-1, 1.6e-2 for n = 2, 4, 8, with a constant 3 times that of Galerkin
+    on tetrahedra and close to it on hex27) and on the coarse hex27 mesh it lowers the velocity error several times; on tet10 Newton does not
+    converge without it at nu = 0.002, and with it the pressure of the elements with every vertex on the wall stays bounded (SUPG
+    alone gave an error of 10 there)."""
+
+    def run(name, n, nu, supg):
+        mesh = box(name, n, (2.0, 2.0, 2.0), (-1.0, -1.0, -1.0))
+        model = Model(name='es', dim=3, mesh=mesh, mat=material('X', miu=nu, rho=1.0), psc=ff)
+        flow = model.physics
+        flow.setInertia(True)
+        if supg:
+            flow.setStabilization('SUPG')
+        flow.setBodyForce(lambda x, y, z: tuple(np.moveaxis(nu * ES_D ** 2 * es_velocity(x, y, z), -1, 0)))
+        flow.addBC_VelocityEdges(mesh.boundary_faces(), lambda x, y, z: tuple(es_velocity(x, y, z)))
+        flow.setPressureReference((0.0, 0.0, 0.0), float(es_pressure(0.0, 0.0, 0.0)))
+        steady(model, ProblemType.nonlinear)
+        if not model.nonlinear_converged:
+            return None
+        xyz = xyz_of(mesh)
+        dp = np.asarray(model.sol['p']) - es_pressure(*xyz.T)
+        return (l2(mesh, model.sol['u'], es_velocity), l2(mesh, model.sol['p'], es_pressure, mean_free=True),
+                np.max(np.abs(dp - np.median(dp))))
+
+    # Galerkin on tet10 at nu = 0.002 is left out: Newton does not converge there (measured: ~100 s of iterations)
+    e = {(name, nu, supg): run(name, n, nu, supg) for name, n in (('hex27', 4), ('tet10', 4))
+         for nu in (0.1, 0.002) for supg in (False, True) if (name, nu, supg) != ('tet10', 0.002, False)}
+    for key, value in e.items():
+        label = f"   {key[0]} nu = {key[1]} {'SUPG/PSPG' if key[2] else 'Galerkin'}"
+        print(label + (": Newton did not converge" if value is None else
+                       f": u L2 {value[0]:.2e}, p L2 {value[1]:.2e}, p max {value[2]:.2e}"))
+
+    assert all(e[(name, nu, True)] is not None for name in ('hex27', 'tet10') for nu in (0.1, 0.002))
+    assert e[('hex27', 0.1, True)][0] < 1.5 * e[('hex27', 0.1, False)][0]
+    assert e[('tet10', 0.1, True)][0] < 3.5 * e[('tet10', 0.1, False)][0]           # the PSPG term costs accuracy on tetrahedra
+    assert e[('hex27', 0.002, True)][0] < e[('hex27', 0.002, False)][0] / 1.5
+    assert e[('hex27', 0.002, True)][2] < 2 * e[('hex27', 0.002, False)][2]
+    assert e[('tet10', 0.002, True)][2] < 2.0      # pressure range 6 (SUPG alone: 10 at the corners on 8^3; SUPG/PSPG there: 0.27)
+
+
+def ethier_steinman_transient(name, n, dt, T, nu=0.1):
+
+    """Unsteady Navier-Stokes in [-1, 1]^3 from the Ethier-Steinman field: u = u0 exp(-nu d^2 t), p = p0 exp(-2 nu d^2 t), no body
+    force; the boundary velocity follows exp(-nu d^2 t) (setBCTime). BDF2. Returns (model, nodes)."""
+
+    mesh = box(name, n, (2.0, 2.0, 2.0), (-1.0, -1.0, -1.0))
+    model = Model(name='es-t', dim=3, mesh=mesh, mat=material('X', miu=nu, rho=1.0), psc=ff)
+    flow = model.physics
+    flow.setInertia(True)
+    faces = mesh.boundary_faces()
+    flow.addBC_VelocityEdges(faces, lambda x, y, z: tuple(es_velocity(x, y, z)))
+    flow.setBCTime('u', faces, lambda t: np.exp(-nu * ES_D ** 2 * t))
+    flow.setPressureReference((0.0, 0.0, 0.0), 0.0)
+    flow.initField('u', lambda x, y, z: tuple(es_velocity(x, y, z)))
+    model.solverConfiguration(Study=StudyType.transient, Type=ProblemType.nonlinear, Method=SolverType.direct,
+                              Solver=DirectSolvers.PARDISO, timeScheme='BDF2', timeStep=dt, totalTime=T)
+    model.solve()
+    return model, mesh
+
+
+def test_ethier_steinman_transient_bdf2():
+    """The unsteady Ethier-Steinman flow (nu = 0.1) with BDF2 on hex27: at t = 1 the error is that of the steady field on the same
+    mesh (u L2 and the mean-free p), and the temporal error against a small-step reference on a coarse mesh falls with order 2."""
+
+    nu, T = 0.1, 1.0
+    model, mesh = ethier_steinman_transient('hex27', 4, 0.05, T, nu)
+    decay = np.exp(-nu * ES_D ** 2 * T)
+    e_u = l2(mesh, np.asarray(model.sol['u'])[..., -1], lambda x, y, z: decay * es_velocity(x, y, z))
+    e_p = l2(mesh, np.asarray(model.sol['p'])[:, -1], lambda x, y, z: decay ** 2 * es_pressure(x, y, z), mean_free=True)
+    scale_u = l2(mesh, 0 * np.asarray(model.sol['u'])[..., -1], lambda x, y, z: decay * es_velocity(x, y, z))
+    print(f"   hex27 4^3, dt = 0.05, t = 1: u L2 {e_u:.2e} ({e_u / scale_u:.1e} relative), p L2 {e_p:.2e}, "
+          f"Newton per step {np.mean(model.step_iterations):.1f} (max {max(model.step_iterations)}), "
+          f"{model.tangent_assemblies} tangents")
+    # the modified Newton keeps the tangent of the first steps (2 tangents for 20 steps, 4-7 iterations each); rebuilding it every
+    # iteration gives 3 per step with 75 tangents
+    assert e_u / scale_u < 1e-2 and e_p < 0.1 and max(model.step_iterations) <= 8
+
+    reference = np.asarray(ethier_steinman_transient('hex27', 2, 0.0125, T, nu)[0].sol['u'])[..., -1]
+    errors = [np.max(np.abs(np.asarray(ethier_steinman_transient('hex27', 2, dt, T, nu)[0].sol['u'])[..., -1] - reference))
+              for dt in (0.2, 0.1, 0.05)]
+    rates = rates_of(errors)
+    print(f"   BDF2 temporal errors {['%.1e' % e for e in errors]}, rates {['%.2f' % r for r in rates]}")
+    assert rates[-1] > 1.8, rates
+
+
 def test_block_preconditioner_in_3d():
     """GMRES with the block preconditioner (AMG on the velocity with the 6 rigid modes of 3D, pressure mass for the Schur complement)
     solves the duct to the PARDISO solution in a number of iterations that hardly grows with the mesh."""

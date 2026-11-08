@@ -43,6 +43,34 @@ class FacetSet:
         return len(self.nodes)
 
 
+def outer_facets(conn, element):
+
+    """Facets of the outer boundary, [(element, node ids in element order)] sorted by element and ids: the facets that belong to
+    a single element. Vectorized (sorted node ids of every facet and np.unique); depends only on the topology."""
+
+    local = np.array(element.facets, dtype=int)                       # (nf, nnf)
+    conn = np.asarray(conn, dtype=int)
+    if local.size == 0 or len(conn) == 0:
+        return []
+
+    ids = conn[:, local].reshape(-1, local.shape[1])                  # (nel * nf, nnf)
+    _, inverse, counts = np.unique(np.sort(ids, axis=1), axis=0, return_inverse=True, return_counts=True)
+    single = np.flatnonzero(counts[np.ravel(inverse)] == 1)
+    elems = single // len(local)
+
+    return sorted((int(e), tuple(int(k) for k in row)) for e, row in zip(elems, ids[single]))
+
+
+def select_facets(facets, node_xy, selector=None):
+
+    """Node tuples of the facets [(element, ids)] whose midpoint satisfies selector(*coords) (None: all)."""
+
+    if selector is None:
+        return [ids for _, ids in facets]
+
+    return [ids for _, ids in facets if selector(*node_xy[list(ids)].mean(axis=0))]
+
+
 class _MassCG:
 
     """solve(rhs (n, k)) of a consistent mass matrix by CG with the Jacobi preconditioner, column by column (to rtol 1e-13)."""
@@ -295,12 +323,7 @@ class Discretization:
         """Maps the sorted node ids of every element facet to its [(element, node ids in element order)]."""
 
         if self._facet_owner is None:
-            owners = {}
-            for e, conn in enumerate(self.conn):
-                for local in self.element.facets:
-                    ids = tuple(int(conn[k]) for k in local)
-                    owners.setdefault(tuple(sorted(ids)), []).append((e, ids))
-            self._facet_owner = owners
+            self._facet_owner = {tuple(sorted(ids)): [(e, ids)] for e, ids in outer_facets(self.conn, self.element)}
 
         return self._facet_owner
 
@@ -308,19 +331,7 @@ class Discretization:
 
         """Node tuples of the outer-boundary facets whose midpoint satisfies selector(*coords)."""
 
-        found = []
-
-        for key, owners in self._owners().items():
-            if len(owners) != 1:
-                continue
-
-            e, ids = owners[0]
-            mid = self.node_xy[list(ids)].mean(axis=0)
-
-            if selector is None or selector(*mid):
-                found.append((e, ids))
-
-        return [ids for _, ids in sorted(found)]
+        return select_facets(outer_facets(self.conn, self.element), self.node_xy, selector)
 
     def facets(self, node_tuples):
 

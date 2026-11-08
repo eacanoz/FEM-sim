@@ -10,6 +10,8 @@ from dataclasses import dataclass
 import numpy as np
 import scipy.sparse as sp
 
+CHUNK_ENTRIES = 20_000_000     # element-matrix entries per chunk of scatter_matrix (~0.4 GB of values and int32 indices)
+
 
 @dataclass(frozen=True)
 class FieldSpec:
@@ -109,12 +111,21 @@ class DofLayout:
         so blocks that couple two different fields use the same call.
         """
 
-        nr, nc = rows.shape[1], cols.shape[1]
+        ne, nr, nc = len(rows), rows.shape[1], cols.shape[1]
+        index = np.int32 if self.ndof < 2 ** 31 - 1 else np.int64
 
-        r = np.repeat(rows[:, :, None], nc, axis=2).ravel()
-        c = np.repeat(cols[:, None, :], nr, axis=1).ravel()
+        # By chunks of elements: the COO indices of all the elements at once cost twice the element blocks (int64) and their
+        # conversion copies them again, which dominated the peak memory of 3D meshes (1.4 GB of viscous blocks with 194 k tet10).
+        chunk = max(1, CHUNK_ENTRIES // max(1, nr * nc))
+        total = None
+        for start in range(0, ne, chunk):
+            stop = min(ne, start + chunk)
+            r = np.repeat(rows[start:stop, :, None].astype(index), nc, axis=2).ravel()
+            c = np.repeat(cols[start:stop, None, :].astype(index), nr, axis=1).ravel()
+            part = sp.coo_matrix((Ke[start:stop].ravel(), (r, c)), shape=(self.ndof, self.ndof)).tocsr()
+            total = part if total is None else total + part
 
-        return sp.coo_matrix((Ke.ravel(), (r, c)), shape=(self.ndof, self.ndof)).tocsr()
+        return total if total is not None else sp.csr_matrix((self.ndof, self.ndof))
 
     def scatter_vector(self, fe, rows):
 
