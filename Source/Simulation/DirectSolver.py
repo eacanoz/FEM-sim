@@ -65,7 +65,9 @@ def checked_pardiso(A, b, solver, retry=None, factorized=True):
     retry = retry if retry is not None else no_matching_pardiso()
     retry.factorize(A)
     y, second = _refined(retry, A, b, retry.solve(A, b))
-    if not second > BROKEN_ABOVE:
+    # The retry is used if it is good, or if the PARDISO answer is worse than x = 0 (relative residual above 1: a planar contraction of
+    # hex27 gave 1.5e3 there, and 2e-6 without the matching)
+    if not second > BROKEN_ABOVE or (residual > 1.0 and second < residual):
         sim_logger.info(f"PARDISO: residual {residual:.1e}; refactorized without the weighted matching ({second:.1e}).")
         return y, 'retry', retry
 

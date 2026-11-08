@@ -280,6 +280,66 @@ def test_couette_and_channel_match_2d():
         assert du < 1e-8 and dp < 1e-7 and dt < 1e-8, (label, du, dp, dt)
 
 
+def test_nonisothermal_diffusion_and_modes_match_2d():
+    """More of the physics on the channel, 3D slab against 2D: a non-isothermal Giesekus melt (WLF shift of lam and mu, polymer and
+    solvent heating, heat convected by the flow, cold walls), the artificial diffusion of b kept near the outlet corner, and two PTT
+    modes (linear and exponential in two separate runs)."""
+
+    H, Q, L = 1.0, 1.0, 2.0
+
+    def channel(dim, mesh, modes, constitutive='giesekus', thermal=False, diffusion=None):
+        psc = [ff, ht, ve] if thermal else [ff, ve]
+        mat = material('X', miu=0.2, rho=1.0, k=0.05, Cp=1.0)
+        model = Model(name='channel', dim=dim, mesh=mesh, mat=mat, psc=psc)
+        flow, polymer = model.physics.fluid, model.physics.viscoelastic
+        polymer.setModes(modes, constitutive)
+        polymer.setDEVSS(sum(m[0] for m in modes))
+        if thermal:
+            polymer.setTemperatureShift(wlf_shift(8.86, 101.6, 200.0))
+            polymer.setViscousHeating(True)
+            flow.setViscousHeating(True)
+            model.physics.setVelocity('u')
+        if diffusion:
+            polymer.setDiffusion(diffusion, lambda *c: np.exp(-((c[0] - L) ** 2 + (c[1] - H) ** 2) / 0.1))
+        walls = mesh.boundary_facets(lambda *c: c[1] < 1e-9 or c[1] > H - 1e-9)
+        flow.addBC_NoSlipEdges(walls)
+        inlet = mesh.boundary_facets(lambda *c: c[0] < 1e-9)
+        flow.addBC_VelocityEdges(inlet, lambda *c: [6 * Q * c[1] * (H - c[1]) / H ** 3] + [0.0] * (dim - 1))
+
+        def gradient(*c):
+            g = np.zeros((dim, dim))
+            g[0, 1] = 6 * Q * (H - 2 * c[1]) / H ** 3
+            return g
+
+        if thermal:
+            model.physics.heat.addBC_TemperatureEdges(inlet, 200.0)
+            model.physics.heat.addBC_TemperatureEdges(walls, 195.0)
+            model.physics.initField('T', 200.0)
+        polymer.addBC_InflowEdges(inlet, gradient, temperature=200.0 if thermal else None)
+        outlet = mesh.boundary_facets(lambda *c: c[0] > L - 1e-9)
+        flow.addBC_OutletEdges(outlet, 0.0)
+        polymer.addBC_OutletEdges(outlet)
+        return model
+
+    cases = (('non-isothermal Giesekus', dict(modes=[(0.8, 0.5, 0.2)], thermal=True)),
+             ('artificial diffusion', dict(modes=[(0.8, 0.8, 0.2)], diffusion=0.5)),
+             ('two PTT-linear modes', dict(modes=[(0.5, 0.2, 0.1), (0.3, 1.0, 0.25)], constitutive='ptt-linear')),
+             ('two PTT-exp modes', dict(modes=[(0.5, 0.2, 0.1), (0.3, 1.0, 0.25)], constitutive='ptt-exp')))
+    for label, options in cases:
+        du, dp, dt, solved = slab_and_plane(lambda dim, mesh: channel(dim, mesh, **options), 4, 4, L=L)
+        extra = ''
+        if options.get('thermal'):
+            (m2, mesh2), (m3, mesh3) = solved[2], solved[3]
+            lookup = {tuple(np.round(n.coor[:2], 9)): k for k, n in enumerate(mesh2.NL)}
+            index = np.array([lookup[tuple(np.round(n.coor[:2], 9))] for n in mesh3.NL])
+            T2, T3 = np.asarray(m2.sol['T']), np.asarray(m3.sol['T'])
+            dT = np.max(np.abs(T3 - T2[index])) / np.max(np.abs(T2 - 195.0))
+            extra = f", T {dT:.1e} (heating to {T3.max():.3f})"
+            assert dT < 1e-8 and T3.max() > 200.0, (dT, T3.max())
+        print(f"   {label}: 3D - 2D, u {du:.1e}, p {dp:.1e}, polymer stress (mode 0) {dt:.1e}{extra}")
+        assert du < 1e-8 and dp < 1e-7 and dt < 1e-8, (label, du, dp, dt)
+
+
 # ----- a genuinely 3D flow -----
 
 def duct_series(y, z, a, b, G, mu, terms=200):
@@ -345,6 +405,30 @@ def test_duct_oldroyd_b_is_newtonian_and_giesekus_has_a_secondary_flow():
     assert a_f < a_c and a_f < 5e-3 and s_f < s_c / 4                 # Oldroyd-B: Newtonian and rectilinear in the limit
     g_c, g_f = results[(4, 0.3)][1], results[(8, 0.3)][1]
     assert abs(g_f - g_c) < 0.5 * g_f and g_f > 5 * s_f              # Giesekus: a secondary flow that converges
+
+
+def test_block_preconditioner_with_viscoelastic_fields():
+    """GMRES with the block preconditioner on the Giesekus duct (b and G through an ILU of their own block): the PARDISO solution in the
+    same Newton steps (measured: 105-120 Krylov iterations here, 200-290 on the section of 8 x 6; Test/manual/viscoelastic_3d_cost.py)."""
+
+    from Source.enums import SolverType, IterativeSolvers, Preconditioners
+
+    solutions, steps = {}, {}
+    original = Model.solverConfiguration
+    for method in ('direct', 'block'):
+        extra = {} if method == 'direct' else dict(Method=SolverType.iterative, Solver=IterativeSolvers.GMRES,
+                                                   prec=Preconditioners.SaddlePoint, tol=1e-9, maxiter=2000)
+        Model.solverConfiguration = lambda self, _extra=extra, **kw: original(self, **{**kw, **_extra})
+        try:
+            model, _, _ = duct(0.3, n=(2, 4, 3), L=1.0)
+        finally:
+            Model.solverConfiguration = original
+        assert model.nonlinear_converged and model.solver_unconverged == 0
+        solutions[method], steps[method] = np.asarray(model.sol['u']), model.newton_iterations
+        if method == 'block':
+            print(f"   Krylov iterations per Newton step: {model.solver_iterations}")
+    assert steps['direct'] == steps['block']
+    assert np.max(np.abs(solutions['block'] - solutions['direct'])) < 1e-8 * np.max(np.abs(solutions['direct']))
 
 
 def main():

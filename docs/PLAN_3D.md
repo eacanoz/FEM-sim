@@ -175,9 +175,14 @@ lo permite), paralelismo MPI.
   iguales al 2D (1e-14, 3e-9: la losa con el grosor que iguala el h de SUPG de b, que en 2D es √área y en 3D ∛volumen); conducto
   rectangular: Oldroyd-B (N2 = 0) rectilíneo con la velocidad newtoniana de μ_s + μ_p, su flujo secundario cae con orden 3 al refinar,
   y el de Giesekus converge a ~2e-3 de u_máx (14 veces mayor en la malla fina).
-- **Sin hacer en la fase 4:** contracción 3D (el plan la dejaba para «si el coste lo permite»: 19 incógnitas por nodo, 21 k incógnitas
-  ya son 36 s por solución estacionaria con PARDISO), viscoelástico no isotermo en un flujo 3D, difusión artificial, varios modos y PTT en flujo 3D, y el
-  solver de bloques con los campos b y G (los trataría con ILU, sin medir).
+- **Pendientes de la fase 4, hechos (2026-11-08):** no isotermo (WLF, calentamiento), difusión artificial y dos modos PTT lineal y
+  exponencial en el canal 3D, iguales al 2D (3e-9 o mejor); el solver de bloques con b y G da la solución de PARDISO en los mismos pasos de
+  Newton (105–120 iteraciones de Krylov; 200–290 en la sección fina); contracción plana 4:1 en losa 3D (`Test/manual/contraction_3d.py
+  slab`, 72 k incógnitas, 2 a 5 min por De) con la C del 2D a 1.7e-4 en De = 0.1; contracción cuadrada 4:1 (`... square`, un cuarto,
+  149 k incógnitas, 630 s, 6.2 GB, bloques) como estudio de coste: pérdida en exceso un 22 % menor que la newtoniana, la tendencia del 2D,
+  en una malla demasiado gruesa para validar y sin datos de referencia. Validarla exigiría millones de incógnitas y los datos publicados
+  tomados de la fuente: queda fuera de lo que esta máquina hace en tiempo razonable con el solver actual (las iteraciones de los bloques
+  crecen con De).
 - **Fase 5, lo siguiente:** turbulencia SA/SST en 3D; revisar `Turbulence.wall_distance` (usa `coor[:2]`: distancia geométrica a
   aristas, en 3D hace falta a caras triangulares/cuadriláteras o una ecuación de Poisson/eikonal).
 
