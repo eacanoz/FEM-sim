@@ -315,7 +315,8 @@ def test_darcy_injection_convects_heat_3d():
 
 def test_auto_solver_in_3d():
     """Method auto: a symmetric 3D scalar system above ITERATIVE_SCALAR_3D free unknowns goes to CG + AMG (iterations counted,
-    same solution as PARDISO); a small one stays direct; non-symmetric and flow systems keep the 2D thresholds."""
+    same solution as PARDISO); a small one stays direct; non-symmetric scalars keep the 2D threshold, flow systems go to the block
+    preconditioner from ITERATIVE_FLOW_3D."""
 
     from Source.Simulation import SolverSelection as selection
     from Source.enums import IterativeSolvers, Preconditioners
@@ -325,6 +326,10 @@ def test_auto_solver_in_3d():
     assert selection.choose_options(big - 1, True, False, dim=3)['Method'] == SolverType.direct
     assert selection.choose_options(big, False, False, dim=3) == selection.choose_options(big, False, False)
     assert selection.choose_options(big, True, True, dim=3) == selection.choose_options(big, True, True)
+    flow = selection.ITERATIVE_FLOW_3D
+    assert selection.choose_options(flow, False, True, dim=3)['prec'] == Preconditioners.SaddlePoint
+    assert selection.choose_options(flow - 1, False, True, dim=3)['Method'] == SolverType.direct
+    assert selection.choose_options(flow, False, True)['Method'] == SolverType.direct                 # 2D: 500 k
     assert selection.choose_options(big, True, False)['Method'] == SolverType.direct          # 2D unchanged
 
     solutions = {}

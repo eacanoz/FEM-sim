@@ -52,6 +52,7 @@ SUITES = [
     "Test/test_hele_shaw_crystallization.py",
     "Test/test_3d_foundation.py",
     "Test/test_3d_scalars.py",
+    "Test/test_3d_flow.py",
 ]
 
 

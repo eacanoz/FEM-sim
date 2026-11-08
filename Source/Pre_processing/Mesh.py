@@ -119,11 +119,11 @@ class Mesh:
         self.NoN = len(self.NL)
         self.NoE = len(self.EL)
 
-    def generate3DMesh(self, dim: tuple, div: tuple, element_type=ElementType.hexahedron, order=1):
+    def generate3DMesh(self, dim: tuple, div: tuple, element_type=ElementType.hexahedron, order=1, origin=(0.0, 0.0, 0.0)):
 
         """Box mesh of hexahedra (hex8; hex27 with order=2) or tetrahedra (tet4; tet10 with order=2).
 
-        dim = (Lx, Ly, Lz) size of the box, div = (nx, ny, nz) number of cells in each direction. Nodes run along x, then y,
+        dim = (Lx, Ly, Lz) size of the box, div = (nx, ny, nz) number of cells in each direction, origin its lowest corner. Nodes run along x, then y,
         then z, on a grid of order * n + 1 points per direction. Each element lists its nodes in the order of gmsh (see
         Elements.py). Tetrahedra split every cell into the 6 tetrahedra around its main diagonal (Kuhn), which match across
         the cells; all of them have positive volume.
@@ -151,7 +151,8 @@ class Mesh:
         for k in range(gz):
             for j in range(gy):
                 for i in range(gx):
-                    self.NL.append(Node(id=len(self.NL), coor=(i * Lx / (gx - 1), j * Ly / (gy - 1), k * Lz / (gz - 1))))
+                    self.NL.append(Node(id=len(self.NL), coor=(origin[0] + i * Lx / (gx - 1), origin[1] + j * Ly / (gy - 1),
+                                                               origin[2] + k * Lz / (gz - 1))))
 
         def at(p):
             return self.NL[int(p[0]) + gx * (int(p[1]) + gy * int(p[2]))]

@@ -159,11 +159,16 @@ class modelSolver():
         schur = flow.schur_diagonal(model._system(), model._state())
 
         # Near-null space of the viscous block: the rigid motions of the velocity
+        # (translations along each axis and rotations about each pair of axes; node-major like layout.dofs('u').ravel())
         xy = model.geometry.node_xy
-        
-        modes = np.zeros((2 * len(xy), 3))
-        modes[0::2, 0], modes[1::2, 1] = 1.0, 1.0
-        modes[0::2, 2], modes[1::2, 2] = -xy[:, 1], xy[:, 0]
+        n_nodes, dim = xy.shape
+        pairs = [(a, b) for a in range(dim) for b in range(a + 1, dim)]
+        modes = np.zeros((n_nodes, dim, dim + len(pairs)))
+        for a in range(dim):
+            modes[:, a, a] = 1.0
+        for k, (a, b) in enumerate(pairs):
+            modes[:, a, dim + k], modes[:, b, dim + k] = -xy[:, b], xy[:, a]
+        modes = modes.reshape(n_nodes * dim, -1)
 
         rest = np.concatenate([model.layout.dofs(name).ravel() for name in model.layout.names if name not in ('u', 'p')] or [[]]).astype(int)
 

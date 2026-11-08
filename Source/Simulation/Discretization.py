@@ -43,6 +43,29 @@ class FacetSet:
         return len(self.nodes)
 
 
+class _MassCG:
+
+    """solve(rhs (n, k)) of a consistent mass matrix by CG with the Jacobi preconditioner, column by column (to rtol 1e-13)."""
+
+    def __init__(self, M):
+        import scipy.sparse.linalg as spla
+        self.M = M.tocsr()
+        inverse_diagonal = 1.0 / self.M.diagonal()
+        self.P = spla.LinearOperator(self.M.shape, matvec=lambda r: inverse_diagonal * r)
+
+    def solve(self, rhs):
+        import scipy.sparse.linalg as spla
+        rhs = np.asarray(rhs, dtype=float)
+        columns = rhs.reshape(rhs.shape[0], -1)
+        out = np.empty_like(columns)
+        for k in range(columns.shape[1]):
+            x, info = spla.cg(self.M, columns[:, k], M=self.P, rtol=1e-13, atol=0.0, maxiter=1000)
+            if info != 0:
+                raise RuntimeError("La proyeccion L2 (CG sobre la matriz de masa) no convergio.")
+            out[:, k] = x
+        return out.reshape(rhs.shape)
+
+
 class Discretization:
 
     """axisymmetric=True: the 2D mesh is a meridian plane (x = r, y = z, axis at x = 0). Every integral is then
@@ -204,7 +227,9 @@ class Discretization:
             rows = np.repeat(self.conn, nne, axis=1).ravel()
             cols = np.tile(self.conn, (1, nne)).ravel()
             M = sp.coo_matrix((Me.ravel(), (rows, cols)), shape=(self.n_nodes, self.n_nodes)).tocsc()
-            self._mass_lu = spla.splu(M)
+            # 3D: the LU of the mass matrix fills in (12 s of a 32 s Stokes solve with 31 k tet10); the mass matrix scaled by its
+            # diagonal has a condition number independent of h, so CG + Jacobi converges in a few tens of iterations.
+            self._mass_lu = _MassCG(M) if self.dim == 3 else spla.splu(M)
 
         return self._mass_lu
 

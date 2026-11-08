@@ -73,6 +73,10 @@ ITERATIVE_FLOW = 500_000       # velocity-pressure systems: the block preconditi
 # in 2D, and CG+AMG already beat PARDISO from 9 k nodes on (hex8 and tet10, 0.33 s against 0.61 s; 4.8 s against 7.6 s at 118 k,
 # and at 330 k tet10 nodes 0.8 GB against 5.9 GB). Non-symmetric and flow systems keep the 2D thresholds: not measured in 3D yet.
 ITERATIVE_SCALAR_3D = 10_000
+# 3D velocity-pressure systems (Test/manual/stokes_3d_scaling.py, duct with tet10 and hex27): GMRES + block preconditioner ties with
+# PARDISO near 120 k unknowns (73 k: 9.3 s against 6.8 s; 180 k: 19.9 s against 27.0 s and 0.8 GB against 4.7 GB; 332 k: PARDISO
+# 11.6 GB). Measured in Stokes only.
+ITERATIVE_FLOW_3D = 120_000
 
 
 def choose_options(free_unknowns, symmetric, flow, dim=2):
@@ -83,7 +87,7 @@ def choose_options(free_unknowns, symmetric, flow, dim=2):
         return dict(Method=SolverType.iterative, Solver=IterativeSolvers.CG, prec=Preconditioners.AMG)
 
     if flow:
-        if free_unknowns >= ITERATIVE_FLOW:
+        if free_unknowns >= (ITERATIVE_FLOW_3D if dim == 3 else ITERATIVE_FLOW):
             return dict(Method=SolverType.iterative, Solver=IterativeSolvers.GMRES, prec=Preconditioners.SaddlePoint)
         return dict(Method=SolverType.direct, Solver=DirectSolvers.PARDISO)
 

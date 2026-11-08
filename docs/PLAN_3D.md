@@ -128,8 +128,23 @@ lo permite), paralelismo MPI.
   a 37 s y 5.9 GB); `SolverSelection.ITERATIVE_SCALAR_3D = 10 000` lo aplica en `Method=auto` (solo escalares simétricos). El
   ensamblaje por bloques no hace falta en escalares; volver a medir en la fase 2, donde las matrices de Taylor–Hood son 3–4 veces mayores
   por elemento y el solver es de punto de silla.
-- **Fase 2, lo siguiente:** `FluidFlow` ya cuenta los vértices de Taylor–Hood desde `linear_subspace`; medir Stokes P2/P1 en un conducto
-  con PARDISO frente a GMRES + `SaddlePoint` antes de tocar el ensamblaje.
+- **Fase 2 hecha (2026-11-08).** Stokes y Navier–Stokes en 3D. `Test/test_3d_flow.py` (7 pruebas): Poiseuille plano exacto en
+  Taylor–Hood y en hex8 con PSPG (tet4 no, como T3); conducto 1 × 0.6 frente a la serie de Fourier con orden L2 3 (hex27, tet10) y 2 (hex8);
+  tubería de gmsh en tet10 curvos igual al modelo axisimétrico (caudal a 4e-5); Navier–Stokes estacionario con la solución de Ethier y
+  Steinman (1994) y la fuerza ν d² u que la hace estacionaria: u de orden 3 y p de orden 2 en Taylor–Hood, u y p de orden 2 en hex8; GMRES
+  + bloques igual a PARDISO en 75–95 iteraciones. Las dos soluciones exactas se comprueban en la propia suite (ecuación, paredes, caudal;
+  diferencias finitas) porque se escribieron a partir de su forma, no se copiaron de una tabla.
+- **Cambios de código de la fase 2:** normal de simetría/salida por el eje en que la faceta es plana; modos rígidos 3D del precondicionador
+  de bloques; proyección L2 por CG + Jacobi en 3D (la LU de la masa consistente se llenaba: 12 de 32 s); `origin` en `generate3DMesh`;
+  `ITERATIVE_FLOW_3D = 120 000` en `Method=auto`.
+- **Coste:** con 180 k incógnitas PARDISO 27 s y 4.7 GB, bloques 19.9 s y 0.8 GB; con 332 k PARDISO 129 s y 11.6 GB. Con bloques, 551 k incógnitas en 67 s y 5.1 GB, y 1.09 millones
+  (194 k tet10) en 139 s y 8.9 GB, siempre en 83 iteraciones; la generación de la malla ya tarda 24 s (objetos `Node` de Python). La
+  memoria por incógnita sube de 4.5 a 8 KB al crecer: ahí sí pesan los arrays del ensamblaje, de modo que con 33 GB el techo práctico es de
+  unos 3–4 millones de incógnitas sin ensamblaje por bloques; es la palanca siguiente si hiciera falta más.
+- **Sin hacer en la fase 2:** Navier–Stokes transitorio en 3D (BDF2 de Ethier–Steinman en el tiempo), SUPG de Taylor–Hood en 3D, el
+  ensamblaje por bloques de elementos (no hace falta con el solver iterativo a estos tamaños) y el solver de bloques con inercia en 3D.
+- **Fase 3, lo siguiente:** `compressible_law` está escrita para 2D (`gp = w[1:3]`, `L` 2 × 2) y `addBC_SlipLawEdges` (una sola
+  componente tangencial) rechaza el 3D; las leyes de viscosidad usan γ̇ de `_strain`, que ya es genérico.
 
 ## Primeros pasos de la nueva sesión
 

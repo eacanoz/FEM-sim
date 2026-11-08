@@ -475,23 +475,23 @@ class ff(physics):
 
     def _normal_component(self, edges):
 
-        """Index of the axis normal to edges that are all aligned with one axis."""
+        """Index of the axis normal to facets (edges in 2D, faces in 3D) that all lie on planes normal to one axis: the axis along
+        which every node of a facet has the same coordinate."""
 
         xy = np.array([n.coor[:self.dim] for n in self.modelRef.mesh.NL], dtype=float)
         components = set()
 
         for edge in edges:
-            t = xy[edge[-1]] - xy[edge[0]]
-            t = t / np.linalg.norm(t)
-            if abs(t[1]) < 1e-9:
-                components.add(1)      # horizontal edge: normal along y
-            elif abs(t[0]) < 1e-9:
-                components.add(0)      # vertical edge: normal along x
-            else:
-                raise ValueError("La condicion de simetria/deslizamiento solo admite aristas alineadas con los ejes.")
+            points = xy[list(edge)]
+            spread = points.max(axis=0) - points.min(axis=0)
+            flat = np.flatnonzero(spread < 1e-9 * max(spread.max(), 1e-300))
+            if len(flat) != 1:
+                raise ValueError("La condicion de simetria/deslizamiento solo admite facetas alineadas con los ejes.")
+            components.add(int(flat[0]))
 
         if len(components) != 1:
-            raise ValueError("Las aristas de una condicion de simetria deben ser todas horizontales o todas verticales.")
+            raise ValueError("Las facetas de una condicion de simetria deben ser todas horizontales o todas verticales "
+                             "(en 3D, normales todas al mismo eje).")
 
         return components.pop()
 
@@ -536,6 +536,8 @@ class ff(physics):
         """Wall that slips, aligned with the axes: no flow through it, and a shear stress given by the slip velocity (NavierSlip, PowerSlip of
         Source.Physics.Rheology). The problem becomes nonlinear if the law is: use ProblemType.nonlinear always."""
 
+        if self.dim != 2:
+            raise NotImplementedError("El deslizamiento con ley en pared solo esta implementado en 2D (fase 3 de docs/PLAN_3D.md).")
         normal = self._normal_component(edges)
         values = [None] * self.dim
         values[normal] = 0.0
