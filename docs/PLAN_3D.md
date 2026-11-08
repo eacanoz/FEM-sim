@@ -183,8 +183,16 @@ lo permite), paralelismo MPI.
   en una malla demasiado gruesa para validar y sin datos de referencia. Validarla exigiría millones de incógnitas y los datos publicados
   tomados de la fuente: queda fuera de lo que esta máquina hace en tiempo razonable con el solver actual (las iteraciones de los bloques
   crecen con De).
-- **Fase 5, lo siguiente:** turbulencia SA/SST en 3D; revisar `Turbulence.wall_distance` (usa `coor[:2]`: distancia geométrica a
-  aristas, en 3D hace falta a caras triangulares/cuadriláteras o una ecuación de Poisson/eikonal).
+- **Fase 5 hecha (2026-11-08).** `wall_distance` a caras en 3D (exacta punto–triángulo; las caras de cuadriláteros y cuadráticas se
+  parten en triángulos por todos sus nodos); leyes de SA (vorticidad √(2 W:W)) y SST en cualquier dimensión. `Test/test_3d_turbulence.py`
+  (4 pruebas, ~70 s): distancia exacta en un cubo y con el error de las cuerdas en una esfera (tet10 4 veces mejor que tet4); canal
+  Re_τ = 180 en losa 3D con el U_c⁺ del 2D (18.491 SA, 17.645 SST; DNS 18.3); tangente 3D acoplada; conducto cuadrado con SA en hex27:
+  sin flujo secundario (2e-16, como debe un modelo lineal de Boussinesq) y reacciones de pared iguales a la fuerza de volumen (1e-8).
+  El orden igual deja en el conducto 4e-5 de secundario espurio y 0.4 % en el equilibrio: para flujos 3D turbulentos, mejor Taylor–Hood.
+- **Sin hacer en la fase 5:** SST en el conducto, flujos 3D con desprendimiento (el escalón de Driver–Seegmiller 2D tardaba 33 min; en
+  3D sería mucho más) y comparación con datos 3D publicados; un modelo con anisotropía (p. ej. QCR) para el flujo secundario de
+  segunda especie, que SA y SST lineales no predicen.
+- **Fase 6 (opcional), lo siguiente si se decide:** llenado 3D de moldes; ver la tabla de fases (decidir antes el método).
 
 ## Primeros pasos de la nueva sesión
 

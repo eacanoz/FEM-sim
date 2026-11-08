@@ -55,6 +55,7 @@ SUITES = [
     "Test/test_3d_flow.py",
     "Test/test_3d_polymer.py",
     "Test/test_3d_viscoelastic.py",
+    "Test/test_3d_turbulence.py",
 ]
 
 
