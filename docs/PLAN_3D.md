@@ -192,7 +192,14 @@ lo permite), paralelismo MPI.
 - **Sin hacer en la fase 5:** SST en el conducto, flujos 3D con desprendimiento (el escalón de Driver–Seegmiller 2D tardaba 33 min; en
   3D sería mucho más) y comparación con datos 3D publicados; un modelo con anisotropía (p. ej. QCR) para el flujo secundario de
   segunda especie, que SA y SST lineales no predicen.
-- **Fase 6 (opcional), lo siguiente si se decide:** llenado 3D de moldes; ver la tabla de fases (decidir antes el método).
+- **Fase 6 hecha (2026-11-09), con Hele-Shaw sobre la superficie media** (decidido frente a Navier–Stokes de dos fases y frente a
+  quedarse en el plano). `Discretization` de superficies en el espacio (métrica JᵀJ, gradiente tangencial, normales de arista en el
+  plano del elemento), mallas de gmsh con `surface=True`, y `HeleShawFilling` con espesor y regiones en (x, y, z): todo lo validado de
+  Hele-Shaw (térmico, empaque, compresible, cristalización) vale en piezas plegadas. `Test/test_hele_shaw_surface.py` (5 pruebas, ~15 s):
+  tira plegada igual a la plana a 2e-14 (1.6e-7 con empaque, la tolerancia de su Newton), unión en T de 3, 2 y 1 mm frente al reparto
+  exacto x_i = h_i s(t) (relación de volúmenes 4.067 con 1 mm, orden 1), caja de gmsh. `Example_Filling_Box_3D.py`: caja con nervio.
+- **Sin hacer en la fase 6:** flujo a través del espesor (modelo 3D de volumen, o dual-domain), pérdidas propias en las uniones en T y
+  esquinas con radio, varios nodos por paso (la caja de 1850 nodos tarda 29 min), y comparación con piezas medidas.
 
 ## Primeros pasos de la nueva sesión
 

@@ -44,6 +44,9 @@
 # iterations with the rate at the mean temperature of the step); cells with X >= X_noflow stop flowing; with a pvT law the density
 # follows X, (1 - X) v_melt + X v_solid, instead of the transition temperature, and the shrinkage uses the crystallinity reached.
 #
+# The planform may also be a surface in space, the midplane of a folded part (plates joined at edges, T joints included): T3/Q4 with three
+# coordinates (Mesh.from_gmsh_model(surface=True)); the Discretization then gives tangential gradients and the measure of the surface, and
+# nothing else changes (Test/test_hele_shaw_surface.py, Example_Filling_Box_3D.py).
 # Linear elements (T3, Q4). SI units: gap [m], pressure [Pa], flow rate [m3/s]; temperature in the units of the viscosity law (°C).
 import time
 
@@ -199,17 +202,19 @@ class HeleShawFilling:
 
     def __init__(self, mesh, gap, viscosity, T=None, layers=16):
 
-        """mesh: the planform (2D, linear elements). gap: full thickness h [m], a number or f(x, y). viscosity: eta(gamma_dot^2) or a Rheology
-        law at the fixed temperature T."""
+        """mesh: the planform (2D, linear elements), or the midplane of a folded part as a surface in space (T3/Q4 with three coordinates:
+        Mesh.from_gmsh_model(surface=True); plates joined at edges, T joints included). gap: full thickness h [m], a number or f(x, y[, z]).
+        viscosity: eta(gamma_dot^2) or a Rheology law at the fixed temperature T."""
 
         self.mesh = mesh
         self.disc = Discretization(mesh)
         if self.disc.element.linear_subspace:
             raise ValueError("Hele-Shaw usa elementos lineales (T3, Q4): los volumenes de control necesitan pesos positivos.")
-        self.xy = np.array([n.coor[:2] for n in mesh.NL], dtype=float)
+        self.xy = self.disc.node_xy                                     # (x, y) of a planform, (x, y, z) of a surface in space
         self.fluidity = GapFluidity(viscosity, T, layers)
         gp = self.disc.x_gp
-        self.h = np.broadcast_to(np.asarray(gap(gp[..., 0], gp[..., 1]) if callable(gap) else gap, dtype=float), self.disc.detJw.shape)
+        h = gap(*[gp[..., a] for a in range(gp.shape[-1])]) if callable(gap) else gap
+        self.h = np.broadcast_to(np.asarray(h, dtype=float), self.disc.detJw.shape)
         self.volume = _scatter_vector(self.disc, np.einsum('eg,gi->ei', self.disc.detJw * self.h, self.disc.N), self.disc.conn)
         self.fill_factor = np.zeros(len(self.xy))
         self.fill_time = np.full(len(self.xy), np.nan)                  # when each node filled: the isochrones of the filling
@@ -373,9 +378,9 @@ class HeleShawFilling:
 
     def setFilled(self, region):
 
-        """Nodes where region(x, y) is True start filled (an initial short shot)."""
+        """Nodes where region(x, y[, z]) is True start filled (an initial short shot)."""
 
-        inside = np.asarray(region(self.xy[:, 0], self.xy[:, 1]), dtype=bool)
+        inside = np.asarray(region(*self.xy.T), dtype=bool)
         self.fill_factor[inside] = 1.0
         self.fill_time[inside] = 0.0
 

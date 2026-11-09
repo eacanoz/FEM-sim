@@ -110,7 +110,14 @@ class Discretization:
         self.axisymmetric = bool(axisymmetric)
 
         self.conn = np.array([e.getNodesId() for e in mesh.EL], dtype=int)
-        self.node_xy = np.array([node.coor[:self.dim] for node in mesh.NL], dtype=float)
+        width = max(len(node.coor) for node in mesh.NL)
+        full = np.array([tuple(node.coor) + (0.0,) * (width - len(node.coor)) for node in mesh.NL], dtype=float)
+        # A surface in space (the midplane of a folded part): elements of lower dimension than the coordinates, which are not all in
+        # the plane of the first ones. Gradients are then tangential, of `dim` = the dimension of space.
+        self.manifold = width > self.dim and bool(np.any(full[:, self.dim:] != 0.0))
+        if self.manifold:
+            self.dim = width
+        self.node_xy = full[:, :self.dim]
 
         points, weights = self.element.quadrature(self.order)
         N, dN = self.element.shape(points)  # (ngp, nne), (ngp, nne, dim)
@@ -119,11 +126,19 @@ class Discretization:
 
         # J[e, g, a, b] = dx_a / dxi_b
         J = np.einsum('eka,gkb->egab', coords, dN)
-        detJ = np.linalg.det(J)
-        if np.any(np.abs(detJ) < 1e-14):
-            raise ValueError("Elemento degenerado: jacobiano casi nulo.")
 
-        invJ = np.linalg.inv(J)  # invJ[e, g, b, a] = dxi_b / dx_a
+        if self.manifold:
+            # Metric M = J^T J; measure sqrt(det M); tangential gradient dN/dx = dN/dxi M^-1 J^T (exact for flat elements)
+            M = np.einsum('egab,egac->egbc', J, J)
+            detJ = np.sqrt(np.linalg.det(M))
+            if np.any(detJ < 1e-14):
+                raise ValueError("Elemento degenerado: jacobiano casi nulo.")
+            invJ = np.einsum('egbc,egac->egba', np.linalg.inv(M), J)     # the left inverse, (e, g, b, a)
+        else:
+            detJ = np.linalg.det(J)
+            if np.any(np.abs(detJ) < 1e-14):
+                raise ValueError("Elemento degenerado: jacobiano casi nulo.")
+            invJ = np.linalg.inv(J)  # invJ[e, g, b, a] = dxi_b / dx_a
 
         self._invJ, self._coords, self._points = invJ, coords, points
 
@@ -156,6 +171,8 @@ class Discretization:
             d2N = self.element.second_derivatives(self._points)
             if d2N is None:
                 return None
+            if self.manifold:
+                raise NotImplementedError("Segundas derivadas de elementos cuadraticos sobre superficies: no implementadas.")
             # d2x/dxi dxi of the isoparametric map, and d2N/dx dx = J^-T (d2N/dxi dxi - dN/dx_c d2x_c/dxi dxi) J^-1
             d2x = np.einsum('eka,gkbc->egabc', self._coords, d2N)
             reference = d2N[None] - np.einsum('egka,egabc->egkbc', self.B, d2x)
@@ -257,7 +274,7 @@ class Discretization:
             M = sp.coo_matrix((Me.ravel(), (rows, cols)), shape=(self.n_nodes, self.n_nodes)).tocsc()
             # 3D: the LU of the mass matrix fills in (12 s of a 32 s Stokes solve with 31 k tet10); the mass matrix scaled by its
             # diagonal has a condition number independent of h, so CG + Jacobi converges in a few tens of iterations.
-            self._mass_lu = _MassCG(M) if self.dim == 3 else spla.splu(M)
+            self._mass_lu = _MassCG(M) if self.element.dim == 3 else spla.splu(M)
 
         return self._mass_lu
 
@@ -373,7 +390,12 @@ class Discretization:
         centroid = self.node_xy[self.conn[elems]].mean(axis=1)[:, None, :]
         outward = x - centroid
 
-        if self.dim == 1:
+        if self.manifold:
+            # Edge of a surface: the outward normal in the plane of the owning element, the part of x - centroid across the edge
+            t = tangent[..., 0] / np.linalg.norm(tangent[..., 0], axis=-1, keepdims=True)
+            normals = outward - np.sum(outward * t, axis=-1, keepdims=True) * t
+            normals /= np.linalg.norm(normals, axis=-1, keepdims=True)
+        elif self.dim == 1:
             normals = np.sign(outward)
         elif self.dim == 2:
             t = tangent[..., 0]

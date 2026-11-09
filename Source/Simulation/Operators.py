@@ -286,7 +286,7 @@ def element_size(disc):
     elif disc.element.name.startswith('tet'):
         measure = 6.0 * measure
 
-    return measure ** (1.0 / disc.dim)
+    return measure ** (1.0 / disc.element.dim)        # the dimension of the element (a surface in space: 2)
 
 
 def stress_divergence(disc, mu):

@@ -211,21 +211,24 @@ class Mesh:
             cached = (key, outer_facets(conn, ELEMENTS[key[2]]))
             self._outer_facets = cached
 
-        dim = ELEMENTS[key[2]].dim
-        node_xy = np.array([node.coor[:dim] for node in self.NL], dtype=float)
+        width = max(len(node.coor) for node in self.NL)        # all the coordinates: a surface in space passes (x, y, z)
+        node_xy = np.array([tuple(node.coor) + (0.0,) * (width - len(node.coor)) for node in self.NL], dtype=float)
+        if not np.any(node_xy[:, ELEMENTS[key[2]].dim:] != 0.0):
+            node_xy = node_xy[:, :ELEMENTS[key[2]].dim]
         return select_facets(cached[1], node_xy, selector)
 
     # ----- meshes from gmsh -----
 
     @classmethod
-    def read_msh(cls, path):
+    def read_msh(cls, path, surface=False):
 
         """Reads a gmsh mesh (.msh): 2D of triangles (T3, T6) or quadrilaterals (Q4, Q9), or 3D of tetrahedra (tet4, tet10) or
         hexahedra (hex8, hex27); a mesh with 3D elements is read as 3D.
 
         The physical groups of the dimension of the boundary (1 in 2D, 2 in 3D) become named boundary groups, available as
         `mesh.boundary_edges('name')` / `mesh.boundary_faces('name')` and in `mesh.groups`; the groups of the dimension of
-        the mesh are kept in `mesh.regions` (name -> indices in mesh.EL, for Model.region_field). Needs the gmsh package.
+        the mesh are kept in `mesh.regions` (name -> indices in mesh.EL, for Model.region_field). surface=True keeps the z of a 2D mesh that is a surface in space (the
+        midplane of a folded part, for Hele-Shaw): see from_gmsh_model. Needs the gmsh package.
         """
 
         import gmsh
@@ -235,15 +238,17 @@ class Mesh:
 
         try:
             gmsh.open(str(path))
-            return cls.from_gmsh_model()
+            return cls.from_gmsh_model(surface=surface)
         finally:
             gmsh.finalize()
 
     @classmethod
-    def from_gmsh_model(cls):
+    def from_gmsh_model(cls, surface=False):
 
         """Mesh from the gmsh model that is currently open (mesh it first with gmsh.model.mesh.generate(2), or generate(3) for a
-        3D mesh; for quadratic elements, also gmsh.model.mesh.setOrder(2))."""
+        3D mesh; for quadratic elements, also gmsh.model.mesh.setOrder(2)). surface=True: a mesh of 2D elements keeps its three
+        coordinates, a surface in space (the plates of a part joined at edges, T joints included); the Discretization then works with
+        tangential gradients. The orientation of its elements is kept (on a folded surface there is no common sense of rotation)."""
 
         import gmsh
 
@@ -266,7 +271,8 @@ class Mesh:
 
         tags = np.array(node_lists[0], dtype=int).reshape(-1, nne)
         all_tags, all_xyz, _ = gmsh.model.mesh.getNodes()
-        coords = dict(zip((int(t) for t in all_tags), np.asarray(all_xyz).reshape(-1, 3)[:, :mesh_dim]))
+        width = 3 if (surface and mesh_dim == 2) else mesh_dim
+        coords = dict(zip((int(t) for t in all_tags), np.asarray(all_xyz).reshape(-1, 3)[:, :width]))
 
         used = sorted(set(tags.ravel().tolist()))
         index = {tag: i for i, tag in enumerate(used)}
@@ -282,7 +288,9 @@ class Mesh:
         for row in tags:
             nodes = [mesh.NL[index[int(t)]] for t in row]
             xy = np.array([n.coor for n in nodes[:n_vertices]])
-            if mesh_dim == 2:
+            if mesh_dim == 2 and width == 3:
+                negative = False
+            elif mesh_dim == 2:
                 negative = np.sum(xy[:, 0] * np.roll(xy[:, 1], -1) - np.roll(xy[:, 0], -1) * xy[:, 1]) < 0
             else:
                 negative = reversed_order is not None and np.linalg.det(xy[1:4] - xy[0]) < 0
