@@ -199,7 +199,8 @@ lo permite), paralelismo MPI.
   tira plegada igual a la plana a 2e-14 (1.6e-7 con empaque, la tolerancia de su Newton), unión en T de 3, 2 y 1 mm frente al reparto
   exacto x_i = h_i s(t) (relación de volúmenes 4.067 con 1 mm, orden 1), caja de gmsh. `Example_Filling_Box_3D.py`: caja con nervio.
 - **Sin hacer en la fase 6:** flujo a través del espesor (modelo 3D de volumen, o dual-domain), pérdidas propias en las uniones en T y
-  esquinas con radio, varios nodos por paso (la caja de 1850 nodos tarda 29 min), y comparación con piezas medidas.
+  esquinas con radio, varios nodos por paso (la caja de 1850 nodos tardaba 29 min; hecho después en la fase 0 de `PLAN_INYECCION.md`: 83 s con
+  `fill(batch=0.1)`), y comparación con piezas medidas.
 
 ## Primeros pasos de la nueva sesión
 

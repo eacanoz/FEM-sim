@@ -31,7 +31,7 @@ validarse con soluciones exactas y piezas medidas, no contra otro programa.
 
 | Bloque | Qué hace falta | Dificultad |
 |---|---|---|
-| Rendimiento | el llenado avanza un nodo por paso con el bucle en Python: la caja de 1850 nodos tarda 29 min; una pieza industrial tiene 10⁴–10⁵ nodos | alta, y condiciona todo lo demás |
+| Rendimiento | ~~el llenado avanza un nodo por paso: la caja de 1850 nodos tarda 29 min~~ hecho en la fase 0 (83 s con `batch=0.1`); falta el llenado compresible y el empaque por lotes, y bajar de unos minutos en 10⁴ nodos | hecho en parte |
 | Geometría desde CAD | importar STEP/STL (gmsh OCC lo lee), malla de superficie y espesor local medido en el sólido | alta |
 | Sistema de alimentación | elementos 1D (bebedero, canales, canal caliente, entradas) acoplados a la superficie | media |
 | Orientación de fibras | Folgar–Tucker con RSC o MRD y un cierre (híbrido, IBOF), por capa del espesor | media–alta |
@@ -84,10 +84,17 @@ de viscosidad de 10⁴ no fue fiable), inyección asistida por gas o agua, sobre
 
 ## Avance
 
-(vacío: ninguna fase empezada)
+- **Fase 0 hecha (2026-11-09): rendimiento del llenado.** Perfil: un paso por nodo y coste N² (kernel de la fluidez 33 %, temperatura
+  27 %, SuperLU 22 %). `fill(batch=f)` avanza hasta que se llena la fracción f del frente; el exceso de los nodos que se llenan antes
+  pasa a sus vecinos con su calor (masa y energía exactas). Convección de la temperatura con BiCGSTAB sobre filas escaladas,
+  ensamblaje de patrón fijo, kernel solo en los elementos con fundido. `batch=0` (por omisión) reproduce el código anterior a 2e-10 K.
+  Caja de `Example_Filling_Box_3D.py` (1850 nodos): 1296 s → 318 s con lote 0 y 83 s con lote 0.1 (15.6 veces; presión +0.07 %,
+  tiempos de llenado a 0.9 ms rms). Escalado de la pieza del cuaderno con lote 0.1: de 562 a 16450 nodos en 11 a 947 s (pasos ~√N, tiempo ~N^1.35, 0.61 GB), y a 3.5 mm
+  7.3 veces más rápido que nodo a nodo. `Test/test_hele_shaw_batch.py`
+  (5 pruebas), `Test/manual/hele_shaw_scaling.py`. **Sin hacer:** lotes en el llenado compresible y en el empaque (con lotes la presión
+  divergía con un fundido casi incompresible: ahora los rechaza), y el kernel y Newton (unas 6 iteraciones por paso) siguen dominando.
 
 ## Primeros pasos de la nueva sesión
 
 1. Leer este archivo, `docs/ESTADO.md` y la fase 6 de `docs/PLAN_3D.md`; correr la suite completa para la línea base.
-2. Fase 0: perfilar el llenado de `Example_Filling_Box_3D.py` y de la pieza de `Ejemplo_Llenado_Pieza_3D.ipynb` para ver dónde se va el
-   tiempo antes de cambiar nada.
+2. Fase 1: geometría desde CAD (la fase 0 está hecha; usar `fill(batch=0.1)` en piezas grandes).

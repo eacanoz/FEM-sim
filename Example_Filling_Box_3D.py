@@ -4,7 +4,7 @@ rib, POLYFORT FPP 30 GFC K1079 (Cross-WLF fitted to its viscosity data), mold at
 Gaps: base 2.0 mm, walls 1.5 mm, rib 1.0 mm. The rib joins the base along a line (a T joint: three elements share each edge there),
 the walls join the base and each other at the edges of the box. The melt enters through the rim of one short wall (fill in 1 s).
 
-Result (3582 triangles of 3 mm, 1850 nodes, about 29 min: one node per step, with temperature): gate pressure 24.3 MPa at the end, mean
+Result (3582 triangles of 3 mm, 1850 nodes, 80 s in batches of 10 % of the front; 29 min node by node): gate pressure 24.3 MPa at the end, mean
 frozen fraction 32.5 %; the base fills from 0.05 to 0.91 s, the rib from 0.26 to 0.89 s, and the last point is the rim of the wall opposite
 the gate, at 1.00 s. No measurements to compare with: a demonstration of the surface model, not a validation.
 
@@ -74,7 +74,7 @@ fill.addGate(gate, volume / FILL_TIME)
 print(f"{mesh.getNoE()} triangles, {mesh.getNoN()} nodes, cavity {volume * 1e6:.2f} cm3, gate on {len(gate)} edges", flush=True)
 
 start = time.perf_counter()
-fill.fill(progress=True, every=500)
+fill.fill(progress=True, every=100, batch=0.1)      # 10 % of the front per step (docs/PLAN_INYECCION.md, phase 0)
 print(f"gate pressure at the end {fill.history[-1][2] / 1e6:.2f} MPa, mean frozen fraction {fill.frozen_fraction().mean():.1%}"
       + (f", SHORT SHOT at {fill.short_shot:.2f} s" if fill.short_shot else "") + f" ({time.perf_counter() - start:.0f} s)")
 

@@ -1,6 +1,6 @@
 # Estado del proyecto, validación y próximos pasos
 
-Última actualización: 2026-10-28. Rama de trabajo: `test-branch`.
+Última actualización: 2026-11-09. Rama de trabajo: `test-branch`.
 
 ## 1. Qué está validado
 
@@ -160,6 +160,7 @@
 | 3D, fase 4 (pendientes): no isotermo, difusión, modos, PTT, bloques, contracción | canal en losa 3D frente a 2D con Giesekus no isotermo (WLF, calentamiento del polímero y del solvente, calor convectado), difusión artificial localizada, dos modos PTT lineal y exponencial; GMRES + bloques con b y G frente a PARDISO en el conducto; contracción plana 4:1 en losa 3D frente a 2D y contracción cuadrada 4:1 (estudio manual) | `Test/test_3d_viscoelastic.py` (7), `Test/manual/contraction_3d.py`, `Test/manual/viscoelastic_3d_cost.py` | 3D − 2D de 4e-15 a 3e-9 en los cuatro casos (T a 9e-10); bloques: misma solución (3e-15) y mismos pasos de Newton, 105–120 iteraciones de Krylov (200–290 en la sección fina); contracción plana: C de la losa a 1.7e-4 (De = 0.1) y 2.2e-3 (De = 0.5) del 2D, no exacto porque en una malla no estructurada el h de SUPG no se puede igualar |
 | 3D, fase 5: turbulencia | distancia a la pared a caras (cubo exacto, esfera de gmsh); canal SA y SST a Re_τ = 180 en losa 3D frente al 2D y a la DNS (Moser, Kim & Mansour 1999, el valor ya guardado en las suites 2D); tangente 3D acoplada SA y SST en hex8 y hex27; conducto cuadrado SA en hex27 | `Test/test_3d_turbulence.py` | pasa (4); cubo 1e-12; esfera 3.3e-2 (tet4) y 8.3e-3 (tet10); U_c⁺ 18.491 (SA) y 17.645 (SST) en 3D y en 2D (DNS 18.3), perfil 3D − 2D 3e-6 (orden igual: el h de PSPG no se iguala en malla graduada); tangente 3e-8; conducto: flujo secundario 2e-16 (Boussinesq lineal: no hay flujo secundario de segunda especie), reacciones de pared = fuerza de volumen a 1e-8 |
 | 3D, fase 6: llenado Hele-Shaw sobre la superficie media de una pieza 3D | discretización de superficies (área, gradiente tangencial unitario de la longitud de arco en una tira con dos pliegues, normales del contorno en el plano de cada elemento); junta en T como arista interior; caja abierta de gmsh con `surface=True`; tira plegada 90° frente a la plana (isometría): isoterma newtoniana y ley de potencia en Q4 y T3, no isoterma, llenado compresible con Tait + empaque + enfriamiento; unión en T de placas de 3, 2 y 1 mm frente a la solución exacta del reparto | `Test/test_hele_shaw_surface.py` | pasa (5); plegada − plana 2e-14 (isoterma y no isoterma, T a 1.5e-11 K), 1.6e-7 con empaque (la tolerancia de su Newton); unión en T: relación de volúmenes 4.137 y 4.067 (exacta 4) y presión de entrada +5.4 y +2.2 % con celdas de 2 y 1 mm (orden 1), masa 4e-14 |
+| Inyección, fase 0: llenado Hele-Shaw por lotes y más rápido (`fill(batch=...)`) | ensamblaje de patrón fijo frente al de COO; disco con entrada central por lotes del 20 % del frente (masa, presión exacta, tiempos de llenado del llenado nodo a nodo); energía exacta del traspaso del exceso con paredes adiabáticas; llenado térmico por lotes frente a nodo a nodo; el compresible rechaza los lotes; caja de `Example_Filling_Box_3D.py` y pieza del cuaderno frente al código anterior | `Test/test_hele_shaw_batch.py`, `Test/manual/hele_shaw_scaling.py` | pasa (5); ensamblaje 9e-16; disco: masa 2e-15, presión −0.53 % (−0.36 % nodo a nodo), tiempos de llenado a 0.37 % del tiempo de llenado (rms), 4.6 veces menos pasos; energía 3e-14; térmico: presión +0.05 %, T media a 1.8 °C, 2.2 veces menos pasos; con `batch=0` igual al código anterior a 2e-10 K y 1e-14 en presión; caja de 1850 nodos: 1296 s → 318 s (lote 0) y 83 s (lote 0.1, presión +0.07 %) |
 | Ecuación de estado (Tait de dos dominios) y su ajuste | ramas fundido y sólido; ajuste de datos sintéticos con 0.02 % de dispersión; ajuste de medidas reales (PP con 30 % de fibra de vidrio, 560 puntos de 0.1 a 200 MPa y 20 a 280 °C) | `Test/test_compressible.py`; `Fitting.fit_tait` | ramas 1e-12; sintético: error 0.058 %, transición a 0.37 K; medidas: rms 0.036 % (fundido 0.017, sólido 0.013, transición 0.08 %), máximo 0.43 %, T_t = 180.7 °C + 0.17 K/MPa |
 | Flujo compresible (`ff.setDensityLaw`) | tangente (también la parte temporal sola, y con Cross y Cross–WLF); densidad constante = grad-div con γ = −2/3 μ; canal estacionario frente a lubricación (ρ +27 %); empaque frente a la serie de la difusión de presión; calentamiento por compresión | `Test/test_compressible.py` | tangente ≤ 3.2e-9; grad-div 1e-14; canal 1.4e-4 de p_in, caudal másico entrada = salida a 1e-6; empaque 1.2e-3 a 1.2e-4 (Q9 y T6); calentamiento 4e-5 |
 | Superficie libre: hinchamiento newtoniano | método de la línea de corriente; plano frente a 1.190 ± 0.002 (Tanner 2002, en arXiv:1408.5167; publicados 1.184–1.200); axisimétrico frente a ≈ 1.127 (fuente secundaria); flujo tapón | `Test/test_free_surface.py`, `Test/manual/die_swell.py` | plano 1.19112, 1.18907, 1.18786 (borde 0.025 a 0.00625 H), orden ≈ 0.8, extrapolado ≈ 1.186 (el elemento singular de Georgiou y Boudouvis da 1.1863); axisimétrico 1.13356, 1.13063, 1.12883; tapón 1e-13; 11–13 iteraciones |
@@ -597,10 +598,27 @@ Lo que sigue pendiente:
   cambian); `Mesh.from_gmsh_model(surface=True)` / `read_msh(..., surface=True)`; `HeleShawFilling` toma el espesor y las regiones como
   f(x, y, z). Todo lo de Hele-Shaw (térmico, empaque, compresible, cristalización) funciona sobre la superficie sin otros cambios.
   `Example_Filling_Box_3D.py`: caja abierta 100 × 60 × 20 mm con un nervio (base 2, paredes 1.5, nervio 1 mm), POLYFORT no isotermo,
-  1850 nodos y unos 29 min (un nodo por paso): presión de entrada 24.3 MPa, capa congelada media 32.5 %, el nervio se llena entre 0.26 y
+  1850 nodos, 29 min nodo a nodo y 83 s con `batch=0.1` (desde la fase 0 de inyección): presión de entrada 24.3 MPa, capa congelada media 32.5 %, el nervio se llena entre 0.26 y
   0.89 s y lo último es el borde de la pared opuesta a la entrada; una demostración, sin medidas con que compararla. Límites: el modelo de
   plano medio no resuelve el flujo a través del espesor (zonas gruesas, uniones con radio, el efecto fuente del frente), las uniones en T
-  se tratan como aristas compartidas sin pérdida propia, y el avance de un nodo por paso hace lentas las piezas grandes. **Falta:** ensamblaje por bloques de elementos (todos los arrays siguen enteros en memoria), las físicas en
+  se tratan como aristas compartidas sin pérdida propia, y el avance de un nodo por paso hace lentas las piezas grandes (resuelto en la
+  fase 0 del plan de inyección, abajo).
+  **Inyección, fase 0 (`docs/PLAN_INYECCION.md`): rendimiento del llenado Hele-Shaw.** Perfil de la pieza del cuaderno (562 nodos,
+  39.5 s): un paso por nodo (555 pasos), con el kernel de la fluidez 33 %, la temperatura 27 % y SuperLU 22 %; el coste total crecía
+  como N². Cambios: (1) `fill(batch=f)`: cada paso dura hasta que se llena la fracción f de los nodos del frente; los que se llenan
+  antes pasan su exceso a los vecinos no llenos por la conductancia h³ del hueco (o a los abiertos más cercanos por el grafo, si no
+  tienen), y ese traspaso entra en la convección de la temperatura con las celdas del nodo de origen: masa y energía exactas; el
+  exceso cuenta solo por encima del redondeo (los nodos empatados se llenan juntos, como antes). (2) La convección de las celdas con
+  BiCGSTAB sobre las filas escaladas por su diagonal (matriz M, unas 10 iteraciones; SuperLU crecía con el frente; sin escalar, las
+  celdas casi vacías quedaban mal resueltas, hasta 1.3 K). (3) Ensamblaje con el patrón CSR y la posición de cada entrada calculados
+  una vez (`np.bincount`). (4) El kernel jax de la fluidez solo en los elementos con fundido, en tamaños nel/2^k para compilar pocas
+  formas. (5) `t_end` con tolerancia de redondeo (sin un último paso de 1e-13 s). Con `batch=0` (por omisión) el resultado es el del
+  código anterior a 2e-10 K y 1e-14 en presión. El llenado compresible (y el empaque) siguen nodo a nodo: con lotes y un fundido casi
+  incompresible la presión divergía (un nodo lleno antes del final del paso no puede pasar su exceso sin comprimirse), así que lo
+  rechaza. Escalado de la pieza con lote 0.1 (`Test/manual/hele_shaw_scaling.py`): 562, 1209, 2370, 4450, 8811 y
+  16450 nodos en 11, 22, 54, 136, 358 y 947 s (128 a 693 pasos, ~√N; tiempo ~N^1.35; memoria 0.26 a 0.61 GB), presión de entrada de
+  18.33 a 17.56 MPa con la malla; a 3.5 mm, nodo a nodo con el código nuevo, 2359 pasos y 396 s (7.3 veces más). El kernel de la
+  fluidez y Newton (unas 6 iteraciones por paso desde la presión anterior) dominan ahora. **Falta:** ensamblaje por bloques de elementos (todos los arrays siguen enteros en memoria), las físicas en
   3D (fases 1–5) y la reorientación de hexaedros de gmsh con jacobiano negativo (los tetraedros sí se reorientan; la integración usa
   |det J| y no se ha visto un caso que la necesite).
 - `Model.region_field` asigna coeficientes por región física (`mesh.regions`, índices de

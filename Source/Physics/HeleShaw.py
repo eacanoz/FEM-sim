@@ -60,11 +60,29 @@ import Source.Simulation.Operators as ops
 
 
 def _scatter(disc, Ke):
-    conn = disc.conn
-    n = disc.n_nodes
-    rows = np.repeat(conn, conn.shape[1], axis=1).ravel()
-    cols = np.tile(conn, (1, conn.shape[1])).ravel()
-    return sp.csr_matrix((Ke.ravel(), (rows, cols)), shape=(n, n))
+
+    """Assembles element matrices Ke (nel, nn, nn) into a CSR (n, n). The pattern and where each element entry lands in it are built once
+    per discretization; then the assembly is a bincount into the data (the matrix keeps explicit zeros of the pattern)."""
+
+    pattern = getattr(disc, '_hele_shaw_pattern', None)
+    if pattern is None:
+        conn = disc.conn
+        n, nn = disc.n_nodes, conn.shape[1]
+        rows = np.repeat(conn, nn, axis=1).ravel()
+        cols = np.tile(conn, (1, nn)).ravel()
+        A = sp.csr_matrix((np.arange(1, len(rows) + 1, dtype=float), (rows, cols)), shape=(n, n))     # duplicates summed: only the pattern
+        A.sort_indices()
+        # the slot of each element entry in the CSR data: the rank of its (row, col) key, row-major as the sorted CSR
+        order = np.lexsort((cols, rows))
+        sorted_keys = rows[order] * n + cols[order]
+        unique_keys = np.unique(sorted_keys)
+        slot = np.empty(len(rows), dtype=np.int64)
+        slot[order] = np.searchsorted(unique_keys, sorted_keys)
+        pattern = (A.indptr.copy(), A.indices.copy(), slot, len(unique_keys), n)
+        disc._hele_shaw_pattern = pattern
+    indptr, indices, slot, nnz, n = pattern
+    data = np.bincount(slot, weights=np.ascontiguousarray(Ke, dtype=float).ravel(), minlength=nnz)
+    return sp.csr_matrix((data, indices.copy(), indptr.copy()), shape=(n, n))      # copies: eliminate_zeros works in place
 
 
 def _scatter_vector(disc, fe, nodes):
@@ -177,6 +195,37 @@ def _thermal_kernel(law, edges, T_noflow):
         return S, dS, flow, heat, g
 
     return jax.jit(kernel)
+
+
+def _convection_solve(A, rhs, rtol=1e-13):
+
+    """The implicit upwind convection of the cells, A x = rhs (one or more columns): A is diagonally dominant (an M-matrix, the diagonal
+    the content plus the inflow), so BiCGSTAB with the diagonal converges in a few iterations, several times faster than SuperLU (whose
+    fill-in grows with the front); SuperLU if it does not converge."""
+
+    A = A.tocsr()
+    d = A.diagonal()
+    # rows scaled by the diagonal: the residual is then in the units of the unknowns in every cell (a cell nearly empty of melt has a
+    # tiny row, which a tolerance on the unscaled residual leaves unresolved)
+    As = sp.diags(1.0 / d) @ A
+    columns = rhs[:, None] if rhs.ndim == 1 else rhs
+    out = np.empty_like(columns, dtype=float)
+    for j in range(columns.shape[1]):
+        b = columns[:, j]
+        bs = b / d
+        x, info = spla.bicgstab(As, bs, x0=bs, rtol=rtol, atol=0.0, maxiter=500)
+        if info != 0 or not np.all(np.isfinite(x)):
+            x = spla.spsolve(A.tocsc(), b)
+        out[:, j] = x
+    return out[:, 0] if rhs.ndim == 1 else out
+
+
+def _kth(values, batch):
+
+    """The k-th smallest of values, k a fraction batch of their number (at least 1: batch 0 gives the smallest)."""
+
+    k = max(1, int(np.ceil(batch * len(values))))
+    return float(np.partition(values, k - 1)[k - 1])
 
 
 def _tridiagonal(lower, diag, upper, rhs):
@@ -396,20 +445,37 @@ class HeleShawFilling:
             self._table = ([self.fluidity.table(float(k * b_e.max())) for k in unique], index)
         return self._table
 
-    def _element_fluidity(self, G, derivative=False):
+    def _element_fluidity(self, G, derivative=False, active=None):
 
-        """S_e(G_e) of each element from the table of its gap, G_e the mean |grad p| of the element; with derivative, dS_e / dG_g at each point."""
+        """S_e(G_e) of each element from the table of its gap, G_e the mean |grad p| of the element; with derivative, dS_e / dG_g at each point.
+        active (with temperature): only these elements are evaluated (the others get S = 0 and no flow): the kernel then runs on a subset
+        padded to nel / 2^k elements, so that jax compiles at most a few shapes."""
 
         w = self.disc.detJw
         W = w.sum(axis=1)
         if self.thermal is not None:
+            nel = len(w)
             G_e = np.sum(w * G, axis=1) / W
             Tc = self.T[self.disc.conn].mean(axis=1)
             guess = self.thermal.get('guess')
             if guess is None:
                 guess = np.zeros(Tc.shape + (2,))
             solid = self._element_frozen() if getattr(self, 'crystal', None) is not None else np.zeros(Tc.shape, dtype=bool)
-            S, dS_e, flow, heat, g = (np.asarray(a) for a in self.thermal['kernel'](0.5 * self.h.mean(axis=1), G_e, Tc, guess, solid))
+            b = 0.5 * self.h.mean(axis=1)
+            idx = None if active is None else np.flatnonzero(active)
+            if idx is not None and len(idx) and len(idx) <= nel // 2:
+                size = nel
+                while size // 2 >= len(idx) and size > 64:
+                    size //= 2
+                pick = np.concatenate([idx, np.full(size - len(idx), idx[0])])
+                out = [np.asarray(a) for a in self.thermal['kernel'](b[pick], G_e[pick], Tc[pick], guess[pick], solid[pick])]
+                k = len(idx)
+                S, dS_e = np.zeros(nel), np.zeros(nel)
+                flow, heat = np.zeros((nel,) + out[2].shape[1:]), np.zeros((nel,) + out[3].shape[1:])
+                g = guess.copy()
+                S[idx], dS_e[idx], flow[idx], heat[idx], g[idx] = (a[:k] for a in out)
+            else:
+                S, dS_e, flow, heat, g = (np.asarray(a) for a in self.thermal['kernel'](b, G_e, Tc, guess, solid))
             self.thermal['guess'] = g
             self._layers = (flow, heat, G_e)
             Sg = np.broadcast_to(S[:, None], w.shape)
@@ -473,11 +539,11 @@ class HeleShawFilling:
             if self.thermal is None:
                 S = self.fluidity(0.5 * self.h, np.full_like(self.h, 1e6))
             else:
-                S, _ = self._element_fluidity(np.full_like(self.h, 1e6))
+                S, _ = self._element_fluidity(np.full_like(self.h, 1e6), active=active)
             for _ in range(30):                                                 # damped Picard: Newton alone does not start from rest
                 A = stiffness(S)
                 p[free] = spla.spsolve(A[free][:, free].tocsc(), F[free])
-                S_new, _ = self._element_fluidity(np.linalg.norm(disc.gradient(p), axis=-1))
+                S_new, _ = self._element_fluidity(np.linalg.norm(disc.gradient(p), axis=-1), active=active)
                 with np.errstate(divide='ignore', invalid='ignore'):
                     change = np.nanmax(np.abs(np.log(S_new[active, 0] / S[active, 0])))
                 S = np.sqrt(S * S_new)
@@ -486,7 +552,7 @@ class HeleShawFilling:
         for k in range(1, max_iterations + 1):
             gp = disc.gradient(p)
             G = np.linalg.norm(gp, axis=-1)
-            S, dS = self._element_fluidity(G, derivative=True)
+            S, dS = self._element_fluidity(G, derivative=True, active=active)
             A = stiffness(S)
             R = A @ p - F
             a = np.einsum('eg,egia,ega->ei', disc.detJw, B, gp) * active[:, None]
@@ -500,7 +566,7 @@ class HeleShawFilling:
             if np.max(np.abs(dp)) <= tol * max(np.max(np.abs(p)), 1e-300):
                 break
         self.p = p
-        S, _ = self._element_fluidity(np.linalg.norm(disc.gradient(p), axis=-1))
+        S, _ = self._element_fluidity(np.linalg.norm(disc.gradient(p), axis=-1), active=active)
         self.S = S * mask
         self._step = (ops.diffusion(disc, S * mask), F, active)
         reaction = F - stiffness(S) @ p                                          # flow rate into each node not filled
@@ -509,11 +575,13 @@ class HeleShawFilling:
 
     # ----- the temperature -----
 
-    def _advance_temperature(self, dt, old, new, p_old=None):
+    def _advance_temperature(self, dt, old, new, p_old=None, transfer=None):
 
         """One step of the temperature over dt: convection in the plane (implicit upwind per cell), then conduction across the gap with the
         viscous heating (implicit). old, new: the content of each node at the start and the end of the step, in the units of the fluxes of
-        self._step (melt volume f V in the filling, mass in the packing)."""
+        self._step (melt volume f V in the filling, mass in the packing). transfer: extra flow rates between nodes (a sparse (n, n), entry
+        [j, i] the rate from i into j), the overflow of the nodes that filled before the end of a step; they carry the cells of i by its
+        shares of the flow."""
 
         th, disc = self.thermal, self.disc
         T_start = self.T.copy()
@@ -541,7 +609,13 @@ class HeleShawFilling:
         M.data = np.maximum(M.data, 0.0)
         M.setdiag(0.0)
         M.eliminate_zeros()
-        gate = (np.maximum(F, 0.0)[:, None] * node_phi).T.ravel()                         # melt entering at the gates, per cell
+        if transfer is not None and transfer.nnz:
+            tr = transfer.tocoo()
+            rows_t = (tr.row[None, :] + n * layer[:, None]).ravel()
+            cols_t = (tr.col[None, :] + n * layer[:, None]).ravel()
+            data_t = (tr.data[None, :] * node_phi[tr.col].T).ravel()
+            M = (M + sp.csr_matrix((data_t, (rows_t, cols_t)), shape=(n * nc, n * nc))).tocsr()
+        gate =(np.maximum(F, 0.0)[:, None] * node_phi).T.ravel()                         # melt entering at the gates, per cell
         back = (np.maximum(-F, 0.0)[:, None] * node_phi).T.ravel()                         # and leaving (packing, falling gate pressure)
         # cell order k * n + i. Per cell, with c the melt volume, the vertical excess m = in - out - dc/dt leaves at the cell temperature
         # and the cells short of melt (m < 0) receive the mixing-cup temperature of the excess of their node:
@@ -573,11 +647,11 @@ class HeleShawFilling:
             A = A - X
         crystal = getattr(self, 'crystal', None)
         if crystal is None:
-            self.T = spla.spsolve(A.tocsc(), rhs).reshape(nc, n).T.copy()
+            self.T = _convection_solve(A, rhs).reshape(nc, n).T.copy()
         else:                                                                       # the Nakamura time rides with the melt (fresh: 0)
             tau_start = self.tau.copy()
             old_tau = self.tau.T.ravel()
-            both = spla.spsolve(A.tocsc(), np.column_stack([rhs, np.where(idle, old_tau, content * old_tau)]))
+            both = _convection_solve(A, np.column_stack([rhs, np.where(idle, old_tau, content * old_tau)]))
             self.T = both[:, 0].reshape(nc, n).T.copy()
             self.tau = np.maximum(both[:, 1].reshape(nc, n).T, 0.0)
         compression = None
@@ -755,7 +829,7 @@ class HeleShawFilling:
             reaction, _ = self.solve_pressure()
             rate = reaction * self.full_density()
         start, step, dt = time.perf_counter(), 0, np.inf
-        while self.time < t_end:
+        while t_end - self.time > 1e-12 * self.time:
             full = self.volume * self.full_density()
             short = full - self.mass
             if not np.any(np.isnan(self.fill_time)):
@@ -885,7 +959,84 @@ class HeleShawFilling:
     def melt_volume(self):
         return float(self.fill_factor @ self.volume)
 
-    def fill(self, t_end=np.inf, progress=True, every=50, on_step=None, compressible=None, switchover=None):
+    def _neighbours(self):
+
+        """Weights between neighbouring nodes for the overflow: the off-diagonal conductance of the gap, h^3, clipped at zero (n, n)."""
+
+        if getattr(self, '_neighbour_weights', None) is None:
+            K = _scatter(self.disc, ops.diffusion(self.disc, self.h ** 3)).tocsr()
+            W = (-K).tocsr()
+            W.setdiag(0.0)
+            W.data = np.maximum(W.data, 0.0)
+            W.eliminate_zeros()
+            self._neighbour_weights = W
+        return self._neighbour_weights
+
+    def _overflow(self, excess, reaction):
+
+        """Passes the melt that the nodes filled before the end of the step received beyond their volume (excess [m3] per node) on to their
+        neighbours not yet full, by the conductance of the gap; a node that overflows in turn passes its excess on. A node with no
+        neighbour short of melt (the end of a branch) passes it to the nearest nodes short of melt, through the filled ones. Mass is kept
+        exactly; only with nothing open left in reach (a full cavity) the excess goes to the front by its flow rate. Updates fill_factor;
+        returns the transfers [m3] (n, n), entry [j, i] from node i into node j."""
+
+        from scipy.sparse.csgraph import dijkstra
+        W = self._neighbours()
+        n = len(self.xy)
+        rows, cols, vals = [], [], []
+        excess = excess.copy()
+        tiny = 1e-15 * self.volume.max()
+        for _ in range(200):
+            src = np.flatnonzero(excess > tiny)
+            if not len(src):
+                break
+            open_ = self.fill_factor < 1.0
+            to_open = (sp.diags(open_.astype(float)) @ W[:, src]).tocsc()
+            total = np.asarray(to_open.sum(axis=0)).ravel()
+            near = total > 0
+            moved = np.zeros(n)
+            if np.any(near):
+                weights = (to_open[:, near] @ sp.diags(excess[src[near]] / total[near])).tocoo()
+                rows.append(weights.row); cols.append(src[near][weights.col]); vals.append(weights.data)
+                np.add.at(moved, weights.row, weights.data)
+            stuck = src[~near]
+            if len(stuck):
+                if np.any(open_):
+                    dist = dijkstra(W, directed=False, indices=stuck, unweighted=True)
+                    dist[:, ~open_] = np.inf
+                    for s, d in zip(stuck, dist):
+                        best = np.min(d)
+                        if np.isfinite(best):
+                            tgt = np.flatnonzero(d == best)
+                            share = excess[s] * self.volume[tgt] / self.volume[tgt].sum()
+                            rows.append(tgt); cols.append(np.full(len(tgt), s)); vals.append(share)
+                            np.add.at(moved, tgt, share)
+                            excess[s] = 0.0
+                if not np.any(near) and np.all(excess[stuck] > 0):
+                    break
+            excess[src[near]] = 0.0
+            room = (1.0 - self.fill_factor) * self.volume
+            take = np.minimum(moved, room)
+            self.fill_factor += take / self.volume
+            self.fill_factor[(moved > 0) & (room - take <= 1e-12 * self.volume)] = 1.0            # full, to round-off
+            excess += moved - take
+        left = excess[excess > tiny]
+        if len(left):                                                   # nothing open in reach: to the front, by its flow rate
+            front = (self.fill_factor < 1.0) & (reaction > 0)
+            if not np.any(front):
+                front = self.fill_factor < 1.0
+            if np.any(front):
+                share = np.where(front, reaction if np.any(reaction[front] > 0) else self.volume, 0.0)
+                share = share / share.sum()
+                tgt = np.flatnonzero(share)
+                for s in np.flatnonzero(excess > tiny):
+                    rows.append(tgt); cols.append(np.full(len(tgt), s)); vals.append(excess[s] * share[tgt])
+                self.fill_factor = np.minimum(self.fill_factor + left.sum() * share / self.volume, 1.0)
+        if not rows:
+            return sp.csr_matrix((n, n))
+        return sp.csr_matrix((np.concatenate(vals), (np.concatenate(rows), np.concatenate(cols))), shape=(n, n))
+
+    def fill(self, t_end=np.inf, progress=True, every=50, on_step=None, compressible=None, switchover=None, batch=0.0):
 
         """Fills node by node until t_end or until every node is filled. Keeps self.history of (t, melt volume, mean gate pressure, Newton
         iterations, filled nodes) and returns it; self.fill_time holds when each node filled; with setThermal, self.T the temperature of each
@@ -893,15 +1044,21 @@ class HeleShawFilling:
         (t, filled volume, gate pressure, iterations, filled nodes, mass) and self.mass the mass of each node. switchover: stop at
         this fraction of the cavity volume filled (the velocity-to-pressure switchover, before pack(), which fills the rest; at constant
         flow rate the last nodes of a nearly full compressible cavity only take melt as the whole cavity compresses). on_step(self) is called after each step (to take
-        snapshots for an animation)."""
+        snapshots for an animation). batch (incompressible filling only): each step lasts until this fraction of the nodes of the front has
+        filled (0: the next node only, one node per step; the cost of the filling then grows as the square of the nodes). The nodes that
+        fill before the end of the step pass their excess on to their neighbours (mass and energy kept exactly); their fill time is when
+        they filled inside the step, by their rate."""
 
         if compressible is None:
             compressible = self.density is not None
         if compressible:
+            if batch:
+                raise ValueError("batch solo para el llenado incompresible: el compresible avanza nodo a nodo (con lotes la presion "
+                                 "diverge con un fundido casi incompresible).")
             return self._fill_compressible(t_end, progress, every, on_step, switchover)
         gate_nodes = self._gate_nodes()
         start, step = time.perf_counter(), 0
-        while self.time < t_end and not np.all(self.fill_factor >= 1.0):
+        while t_end - self.time > 1e-12 * self.time and not np.all(self.fill_factor >= 1.0):   # t_end to round-off: no last step of 1e-13 s
             if switchover is not None and self.fill_factor @ self.volume >= switchover * self.volume.sum():
                 break
             reaction, iterations = self.solve_pressure()
@@ -915,12 +1072,19 @@ class HeleShawFilling:
                     break
                 raise RuntimeError("Ningun nodo recibe fundido: la cavidad esta cerrada sin venteo o la entrada no tiene caudal.")
             remaining = (1.0 - self.fill_factor[receiving]) * self.volume[receiving] / reaction[receiving]
-            dt = min(float(remaining.min()), t_end - self.time)
+            # the step: until the k-th node of the front fills, k a fraction `batch` of the nodes receiving (1: the next node only)
+            dt = min(_kth(remaining, batch), t_end - self.time)
             f_old = self.fill_factor.copy()
             f = self.fill_factor[receiving] + dt * reaction[receiving] / self.volume[receiving]
+            idx = np.flatnonzero(receiving)
+            excess = np.zeros(len(self.xy))
+            excess[idx] = np.where(f > 1.0 + 1e-12, f - 1.0, 0.0) * self.volume[idx]   # beyond round-off (ties fill together)
+            early = idx[f >= 1.0 - 1e-12]
+            self.fill_time[early] = self.time + np.minimum(remaining[f >= 1.0 - 1e-12], dt)   # when each filled inside the step
             self.fill_factor[receiving] = np.where(f > 1.0 - 1e-12, 1.0, f)           # the node that set dt is full, to round-off
+            transfer = self._overflow(excess, reaction) / dt if dt > 0 and np.any(excess > 0) else None
             if self.thermal is not None and dt > 0:
-                self._advance_temperature(dt, f_old * self.volume, self.fill_factor * self.volume)
+                self._advance_temperature(dt, f_old * self.volume, self.fill_factor * self.volume, transfer=transfer)
             self.time += dt
             step += 1
             new = (self.fill_factor >= 1.0) & np.isnan(self.fill_time)
