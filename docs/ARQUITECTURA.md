@@ -103,7 +103,8 @@ Toda física debe implementar `build_system`; la antigua ruta por elemento (JAX 
   `add_terms` y añade las BC). `KELVIN_OFFSET` es la constante de conversión °C → K compartida.
 - Solvers (`Simulation/Solvers.py`, `DirectSolver.py`, `IterativeSolver.py`): `modelSolver._solve_system(A, b)` es el único punto
   de resolución lineal (estacionario, pasos de Newton y transitorio). Directo: `FactorizedSolver` (PARDISO o SuperLU) guarda la
-  factorización de la última matriz y solo refactoriza si cambia; vive en el modelo (`model._factorizer`), de modo que `solve()`
+  factorización de la última matriz y solo refactoriza si cambia (con PARDISO, si la matriz nueva tiene el mismo patrón solo
+  repite la parte numérica, con el análisis simbólico de la primera: `n_analyses`, `reuse_analysis`); vive en el modelo (`model._factorizer`), de modo que `solve()`
   repetidos con la misma matriz no vuelven a factorizar. Iterativo: se eliminan los nodos con Dirichlet (filas identidad) y se
   resuelve el sistema reducido con CG/BiCGSTAB/GMRES y `build_preconditioner` (`iLU`, `Jacobi`, `AMG` de pyamg), reutilizando el
   precondicionador mientras la matriz no cambie. Un transitorio sin términos no lineales (`System.is_linear`) ensambla y

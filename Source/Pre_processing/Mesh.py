@@ -243,6 +243,24 @@ class Mesh:
             gmsh.finalize()
 
     @classmethod
+    def from_arrays(cls, coords, conn, element_type='tri3', regions=None):
+
+        """Mesh from node coordinates (n, 2 or 3) and the element connectivity (nel, nne) in the node order of Elements.py:
+        'tri3' or 'quad4' (2D elements; with three coordinates, a surface in space). regions: name -> element indices."""
+
+        coords = np.asarray(coords, dtype=float)
+        conn = np.asarray(conn, dtype=int)
+        mesh = cls()
+        mesh.PD = 2
+        mesh.element_type = element_type
+        mesh.meshType = {'tri': ElementType.triangle, 'qua': ElementType.quadrilateral}[element_type[:3]]
+        mesh.NL = [Node(id=i, coor=tuple(float(c) for c in xyz)) for i, xyz in enumerate(coords)]
+        mesh.EL = [Element(id=e, nodes=[mesh.NL[i] for i in row]) for e, row in enumerate(conn)]
+        mesh.NoN, mesh.NoE = len(mesh.NL), len(mesh.EL)
+        mesh.regions = {name: list(ids) for name, ids in (regions or {}).items()}
+        return mesh
+
+    @classmethod
     def from_gmsh_model(cls, surface=False):
 
         """Mesh from the gmsh model that is currently open (mesh it first with gmsh.model.mesh.generate(2), or generate(3) for a

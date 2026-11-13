@@ -93,8 +93,17 @@ de viscosidad de 10⁴ no fue fiable), inyección asistida por gas o agua, sobre
   7.3 veces más rápido que nodo a nodo. `Test/test_hele_shaw_batch.py`
   (5 pruebas), `Test/manual/hele_shaw_scaling.py`. **Sin hacer:** lotes en el llenado compresible y en el empaque (con lotes la presión
   divergía con un fundido casi incompresible: ahora los rechaza), y el kernel y Newton (unas 6 iteraciones por paso) siguen dominando.
+- **Fase 1 hecha (2026-11-12): piezas desde CAD como doble superficie.** `Source/Pre_processing/DualDomain.py`: el sólido (STEP con
+  `DualDomain.from_step`, o el modelo de gmsh) → pieles y bordes por rayos, espesor por triángulo, enlaces de cada nodo al punto opuesto.
+  `HeleShawFilling.from_dual_domain`: medio espesor por piel y enlaces que conducen c (p_i − Σ w_k p_k) desde los nodos llenos (con los
+  nodos vacíos del triángulo creaban masa; como laplaciano i–k, un atajo dejaba la presión un 85 % baja). Espesor exacto en placa y
+  nervio, cuña h cos θ en la cara inclinada (2e-4); tira sólida: masa 1e-13, la misma presión en ambas pieles, presión de entrada a un
+  volumen de control de la exacta, también con la entrada en una sola piel; no isoterma igual a la superficie media de los mismos
+  triángulos (+0.23 %); la caja como STEP (`Example_Filling_Box_STEP.py`) frente a su superficie media: presión −3 %, capa congelada
+  31.9 frente a 32.5 %, tiempos de llenado iguales a 0.01 s. `Test/test_dual_domain.py` (6). **Sin hacer:** compresible y empaque con
+  enlaces, entradas puntuales en una cara, enlaces en esquinas de 90° y raíces de nervios, y piezas gruesas.
 
 ## Primeros pasos de la nueva sesión
 
 1. Leer este archivo, `docs/ESTADO.md` y la fase 6 de `docs/PLAN_3D.md`; correr la suite completa para la línea base.
-2. Fase 1: geometría desde CAD (la fase 0 está hecha; usar `fill(batch=0.1)` en piezas grandes).
+2. Fase 2: sistema de alimentación (las fases 0 y 1 están hechas: `fill(batch=0.1)` y `DualDomain.from_step`).

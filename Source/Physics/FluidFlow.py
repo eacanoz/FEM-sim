@@ -838,8 +838,9 @@ class FlowTerm:
         disc, layout = self.system.disc, self.system.layout
         fields = layout.split(x)
         U = np.asarray(fields['u'], dtype=float)[disc.conn]                       # (nel, nne, dim)
-        u = np.einsum('gj,ejc->egc', disc.N, U)
-        G = np.einsum('egjb,eja->egab', disc.B, U)                                # G_ab = du_a/dx_b
+        # matmul, not einsum: these run in every residual, and the generic loop of einsum is 2 to 8 times slower here
+        u = np.matmul(disc.N, U)                                                  # (nel, ngp, dim)
+        G = np.matmul(U.transpose(0, 2, 1)[:, None], disc.B)                      # G_ab = du_a/dx_b
         F = np.stack([disc.interpolate(np.asarray(fields[name], dtype=float)) for name in self.fields], axis=-1)             if self.fields else np.zeros(disc.detJw.shape + (0,))                 # (nel, ngp, n_fields)
 
         return fields, u, G, F
@@ -863,15 +864,20 @@ class FlowTerm:
 
         return eps, e_hh, g2, dg2
 
-    def viscosity(self, x, derivatives=True):
+    def viscosity(self, x, derivatives=True, kinematics=None):
 
         """mu, dmu/dgamma2 (nel, ngp) and dmu/df (nel, ngp, n_fields) at the Gauss points of the state x, for the fields
-        read by the viscosity law (the derivatives are zero for a constant mu, and None without `derivatives`)."""
+        read by the viscosity law (the derivatives are zero for a constant mu, and None without `derivatives`).
+        kinematics: (gamma2, F) of x when the caller has them already."""
 
         disc = self.system.disc
-        _, u, G, F = self._kinematics(x)
-        _, _, g2, _ = self._strain(u, G, derivative=False)
         shape = disc.detJw.shape
+
+        if kinematics is None:
+            _, u, G, F = self._kinematics(x)
+            _, _, g2, _ = self._strain(u, G, derivative=False)
+        else:
+            g2, F = kinematics
         nf = F.shape[-1]
 
         if self.law is None:
@@ -895,12 +901,12 @@ class FlowTerm:
         N, B, w = disc.N, disc.B, disc.detJw
         eye = np.eye(dim)
 
-        fields, u, G, _ = self._kinematics(x)
+        fields, u, G, F = self._kinematics(x)
         P = np.asarray(fields['p'], dtype=float)[disc.conn]
-        gp = np.einsum('egjb,ej->egb', B, P)
+        gp = np.matmul(P[:, None, None, :], B)[:, :, 0]                           # grad p (nel, ngp, dim)
 
         eps, e_hh, g2, dg2 = self._strain(u, G, tangent)                          # dg2 = d(gamma2)/dU_jc
-        mu, mu_g2, mu_F = self.viscosity(x, tangent)
+        mu, mu_g2, mu_F = self.viscosity(x, tangent, kinematics=(g2, F))
         axi = disc.axisymmetric
         divB = B.copy()                                                           # div of the vector test function
         if axi:
@@ -908,7 +914,8 @@ class FlowTerm:
 
         state = x if self.tau_state is None else self.tau_state
         mu_tau = mu if self.tau_state is None else self.viscosity(state, False)[0]
-        speed = np.linalg.norm(self._kinematics(state)[1], axis=-1) if self.inertia else np.zeros(w.shape)
+        u_tau = u if self.tau_state is None else self._kinematics(state)[1]
+        speed = np.linalg.norm(u_tau, axis=-1) if self.inertia else np.zeros(w.shape)
         rho = ops.at_gauss(disc, self.rho)
         time = self.system.time
         # tau without the time step (Bochev, Gunzburger & Shadid 2004): a dt-dependent tau shifts the discrete
@@ -1037,9 +1044,9 @@ class FlowTerm:
             tau_c = ops.lsic_tau(disc, mu_tau, self.rho, speed)
             divu = np.einsum('egaa->eg', G) + e_hh
 
-            Ru += np.einsum('eg,gi,ega->eia', w, N, conv) + np.einsum('eg,egia->eia', w * tau_c * divu, divB)
+            Ru += np.matmul(N.T, w[..., None] * conv) + np.einsum('eg,egia->eia', w * tau_c * divu, divB)
             if self.supg:
-                Ru += np.einsum('eg,egi,ega->eia', ws, uB, RM_s)
+                Ru += np.matmul((ws[..., None] * uB).transpose(0, 2, 1), RM_s)   # integral of ws (u . grad N_i) R_M
 
             if tangent:
                 Juu = (np.einsum('eg,gi,egajc->eiajc', w, N, dconv)

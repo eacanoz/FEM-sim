@@ -166,7 +166,50 @@ def test_repeated_solves_reuse_the_factorization_until_the_matrix_changes():
     model.physics.K_const = 2.0                                      # the matrix changes
     model.solve()
     assert model._factorizer.n_factorizations == 2
+    assert model._factorizer.n_analyses == 1                         # same structure: only the numeric factorization
     assert np.allclose(np.asarray(model.sol['T']), 1.5 * first, atol=1e-10)
+
+
+def test_newton_reuses_the_pardiso_analysis():
+
+    """The tangents of a Newton solve share their structure: PARDISO analyses the first and only refactorizes the values of
+    the others, with the same solution as a full factorization per iteration. A matrix with another structure is analysed."""
+
+    import scipy.sparse as sp
+    from Source.Simulation.DirectSolver import FactorizedSolver
+
+    def solve(reuse):
+        model = poisson(24)
+        model.physics.F_const = 300.0                                # T of order 5: several Newton iterations
+        model.physics.setConductivityLaw(lambda T: 1.0 + 0.5 * T ** 2 + 0.0 * jnp.sum(T))
+        model._factorizer = FactorizedSolver(DirectSolvers.PARDISO)
+        model._factorizer.reuse_analysis = reuse
+        return solve_with(model, kind=ProblemType.nonlinear), model
+
+    T_reused, model = solve(True)
+    T_full, reference = solve(False)
+
+    assert model.newton_iterations == reference.newton_iterations >= 3
+    assert model._factorizer.n_factorizations == reference._factorizer.n_factorizations >= 3
+    assert model._factorizer.n_analyses == 1, model._factorizer.n_analyses
+    assert reference._factorizer.n_analyses == reference._factorizer.n_factorizations
+    assert np.max(np.abs(T_reused - T_full)) < 1e-12, np.max(np.abs(T_reused - T_full))
+
+    # Direct use: new values, then a new structure
+    rng = np.random.default_rng(0)
+    n = 200
+    A = (sp.random(n, n, density=0.05, random_state=1) + 10.0 * sp.identity(n)).tocsr()
+    B = A.copy()
+    B.data = B.data * (1.0 + 0.3 * rng.random(B.nnz))
+    C = (sp.random(n, n, density=0.08, random_state=2) + 10.0 * sp.identity(n)).tocsr()
+    b = rng.random(n)
+
+    solver = FactorizedSolver(DirectSolvers.PARDISO)
+    for matrix, analyses in ((A, 1), (B, 1), (C, 2), (A, 3)):
+        x = solver.solve(matrix, b)
+        assert np.linalg.norm(matrix @ x - b) < 1e-10 * np.linalg.norm(b)
+        assert solver.n_analyses == analyses, (solver.n_analyses, analyses)
+    assert solver.n_factorizations == 4
 
 
 # ---------------------------------------------------------------------------------------------
@@ -264,6 +307,7 @@ if __name__ == "__main__":
              test_amg_needs_pyamg_message_and_unknown_preconditioner,
              test_linear_transient_factorizes_once_and_solvers_agree,
              test_repeated_solves_reuse_the_factorization_until_the_matrix_changes,
+             test_newton_reuses_the_pardiso_analysis,
              test_vtu_of_a_steady_2d_solution_round_trips, test_transient_export_writes_a_time_series,
              test_vtu_1d_and_errors]
     failed = 0

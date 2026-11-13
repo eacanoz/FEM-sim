@@ -47,6 +47,12 @@
 # The planform may also be a surface in space, the midplane of a folded part (plates joined at edges, T joints included): T3/Q4 with three
 # coordinates (Mesh.from_gmsh_model(surface=True)); the Discretization then gives tangential gradients and the measure of the surface, and
 # nothing else changes (Test/test_hele_shaw_surface.py, Example_Filling_Box_3D.py).
+#
+# Or the two skins of a solid (dual domain, from_dual_domain with Source/Pre_processing/DualDomain.py, a STEP part): each skin element
+# carries half of its wall (share = 0.5 scales the measure), and links join every filled skin node i to the opposite point of the other
+# skin, a flow c (p_i - sum w_k p_k) with the weights of the filled nodes of the opposite triangle (an outlet c p_i into an empty one):
+# the melt crosses the wall freely and the front advances on both skins together; the flow of the links enters the convection of the
+# temperature. Incompressible filling only (Test/test_dual_domain.py, Example_Filling_Box_STEP.py).
 # Linear elements (T3, Q4). SI units: gap [m], pressure [Pa], flow rate [m3/s]; temperature in the units of the viscosity law (°C).
 import time
 
@@ -249,20 +255,27 @@ def _tridiagonal(lower, diag, upper, rhs):
 
 class HeleShawFilling:
 
-    def __init__(self, mesh, gap, viscosity, T=None, layers=16):
+    def __init__(self, mesh, gap, viscosity, T=None, layers=16, share=1.0):
 
         """mesh: the planform (2D, linear elements), or the midplane of a folded part as a surface in space (T3/Q4 with three coordinates:
-        Mesh.from_gmsh_model(surface=True); plates joined at edges, T joints included). gap: full thickness h [m], a number or f(x, y[, z]).
-        viscosity: eta(gamma_dot^2) or a Rheology law at the fixed temperature T."""
+        Mesh.from_gmsh_model(surface=True); plates joined at edges, T joints included). gap: full thickness h [m], a number,
+        f(x, y[, z]) or an array (nel,) per element. viscosity: eta(gamma_dot^2) or a Rheology law at the fixed temperature T.
+        share: the fraction of its gap that each element carries (0.5 on the two skins of a dual domain: from_dual_domain)."""
 
         self.mesh = mesh
         self.disc = Discretization(mesh)
         if self.disc.element.linear_subspace:
             raise ValueError("Hele-Shaw usa elementos lineales (T3, Q4): los volumenes de control necesitan pesos positivos.")
+        if share != 1.0:
+            self.disc.detJw = self.disc.detJw * float(share)            # volume, flow and heat of each element: its share of the gap
+        self.share = float(share)
+        self.connectors, self.coupling = None, 0.0
         self.xy = self.disc.node_xy                                     # (x, y) of a planform, (x, y, z) of a surface in space
         self.fluidity = GapFluidity(viscosity, T, layers)
         gp = self.disc.x_gp
-        h = gap(*[gp[..., a] for a in range(gp.shape[-1])]) if callable(gap) else gap
+        h = gap(*[gp[..., a] for a in range(gp.shape[-1])]) if callable(gap) else np.asarray(gap, dtype=float)
+        if np.ndim(h) == 1 and len(h) == len(self.disc.conn):
+            h = h[:, None]                                              # per element
         self.h = np.broadcast_to(np.asarray(h, dtype=float), self.disc.detJw.shape)
         self.volume = _scatter_vector(self.disc, np.einsum('eg,gi->ei', self.disc.detJw * self.h, self.disc.N), self.disc.conn)
         self.fill_factor = np.zeros(len(self.xy))
@@ -275,6 +288,63 @@ class HeleShawFilling:
         self.density = None
         self.thermal = None
         self.short_shot = None                                             # with temperature: when the flow froze before filling
+
+    @classmethod
+    def from_dual_domain(cls, dual, viscosity, T=None, layers=16, coupling=20.0):
+
+        """The filling of a thin-walled solid on its two skins (Source/Pre_processing/DualDomain.py): each skin triangle carries half of
+        its wall thickness (from its mold wall to the midplane), and each link of a skin node to the opposite point of the other skin
+        carries the flow c (p_i - sum w_k p_k), c = `coupling` times the largest in-plane diagonal of its nodes, so that the melt crosses
+        the wall freely and the front advances on both skins together. Gates on the skin mesh (dual.mesh)."""
+
+        fill = cls(dual.mesh, dual.thickness, viscosity, T, layers, share=0.5)
+        V = dual.connectors.tocsr()
+        fill.connectors = V
+        fill._link_graph = (abs(V).T @ abs(V)).tocsr()                  # node pairs that a link joins (and the diagonal)
+        fill._link_graph.setdiag(0.0)
+        fill._link_graph.eliminate_zeros()
+        fill.coupling = float(coupling)
+        fill.dual = dual
+        return fill
+
+    def _connector_laplacian(self, D):
+
+        """The stiffness of the links, V^T diag(c) V (V the rows e_i - sum w_k e_k), c = coupling times the largest in-plane diagonal D
+        of the stiffness among the nodes of the link (the conductance of a node to its neighbours): it follows the fluidity, also its frozen
+        layer, without a derivative of its own. Rows add up to zero: mass is kept."""
+
+        V = self._links
+        A = abs(V).tocsr()
+        largest = np.zeros(V.shape[0])
+        np.maximum.at(largest, np.repeat(np.arange(V.shape[0]), np.diff(A.indptr)), D[A.indices])
+        c = self.coupling * largest
+        self._link_conductance = c
+        return (V.T @ sp.diags(c) @ V).tocsr()
+
+    def _set_links(self, filled):
+
+        """The links of this step, from the filled nodes only (the opposite skin gives the links of the other way):
+            - to a triangle with filled nodes: the opposite point by those nodes (weights renormalized), all the link among filled nodes;
+            - to a triangle with none: all its weights, an outlet c p_i into its empty nodes (how the melt crosses to an empty skin).
+        A link from an empty node, or one into the empty nodes of a partly filled triangle, could take melt out of empty nodes: the
+        penalty is not an M-matrix and leaves filled nodes near the front slightly below zero (a negative inflow, 12 % of the mass created
+        in a strip with coupling 100)."""
+
+        d = self.dual
+        tf = filled[d.link_nodes]
+        some = np.any(tf, axis=1)
+        use = filled[d.link_source]
+        w = np.where(some[:, None], d.link_weights * tf, d.link_weights)
+        total = w.sum(axis=1)
+        use &= total > 1e-12
+        w = w[use] / total[use, None]
+        src, tri = d.link_source[use], d.link_nodes[use]
+        m = len(src)
+        rows = np.repeat(np.arange(m), 4)
+        cols = np.column_stack([src, tri]).ravel()
+        vals = np.column_stack([np.ones(m), -w]).ravel()
+        self._links = sp.csr_matrix((vals, (rows, cols)), shape=(m, len(self.xy)))
+        self._link_parts = (src, tri, w)
 
     def setThermal(self, T_melt, T_mold, rho, cp, k, htc=None, T_noflow=None, cells=20, viscous_heating=True, edges=None):
 
@@ -520,18 +590,24 @@ class HeleShawFilling:
             from scipy.sparse.csgraph import connected_components
             nn = disc.conn.shape[1]
             graph = _scatter(disc, np.broadcast_to(active[:, None, None] * 1.0, (len(active), nn, nn)))
+            touched = _scatter_vector(disc, np.repeat(active[:, None], disc.conn.shape[1], axis=1).astype(float), disc.conn) > 0
+            if self.connectors is not None:                                      # the skins of a dual domain: joined across the wall
+                t = sp.diags(touched.astype(float))
+                graph = graph + t @ self._link_graph @ t
             graph.eliminate_zeros()                                              # csgraph takes stored zeros as edges
             _, label = connected_components(graph, directed=False)
-            touched = _scatter_vector(disc, np.repeat(active[:, None], disc.conn.shape[1], axis=1).astype(float), disc.conn) > 0
             vented = np.unique(label[touched & ~filled])
             filled = filled & touched & np.isin(label, vented)
             if not np.any(filled & (F > 0)):                                   # the gate is cut off: a short shot
                 return np.zeros(len(self.xy)), 0
         free = np.flatnonzero(filled)
         mask = active[:, None].astype(float)
+        if self.connectors is not None:
+            self._set_links(self.fill_factor >= 1.0)
 
         def stiffness(S):
-            return _scatter(disc, ops.diffusion(disc, S * mask))
+            K = _scatter(disc, ops.diffusion(disc, S * mask))
+            return K if self.connectors is None else K + self._connector_laplacian(K.diagonal())
 
         p = np.where(filled, self.p, 0.0)
         B = disc.B
@@ -570,6 +646,16 @@ class HeleShawFilling:
         self.S = S * mask
         self._step = (ops.diffusion(disc, S * mask), F, active)
         reaction = F - stiffness(S) @ p                                          # flow rate into each node not filled
+        if self.connectors is not None:                                           # the flow of the links, for the temperature
+            q = self._link_conductance * (self._links @ p)                        # from the source node to the opposite point
+            src, tri, w = self._link_parts
+            out, back = q > 0, q < 0
+            rows = np.concatenate([tri[out].ravel(), np.repeat(src[back], 3)])
+            cols = np.concatenate([np.repeat(src[out], 3), tri[back].ravel()])
+            vals = np.concatenate([(q[out, None] * w[out]).ravel(), (-q[back, None] * w[back]).ravel()])
+            keep = vals > 0
+            n = len(p)
+            self._connector_flow = sp.csr_matrix((vals[keep], (rows[keep], cols[keep])), shape=(n, n))   # [j, i] from i into j
         reaction[self.fill_factor >= 1.0] = 0.0
         return np.maximum(reaction, 0.0), k
 
@@ -894,6 +980,8 @@ class HeleShawFilling:
 
         if self.density is None:
             raise ValueError("El empaque necesita setDensity (la ecuacion de estado del fundido).")
+        if self.connectors is not None:
+            raise NotImplementedError("El empaque de la doble superficie (conectores) no esta hecho: solo su llenado incompresible.")
         if np.any(np.isnan(self.fill_time)) and getattr(self, 'mass', None) is None:
             raise ValueError("El empaque empieza tras el llenado: llamar fill() primero (compresible si se cambia antes de llenar).")
         n = len(self.xy)
@@ -968,6 +1056,8 @@ class HeleShawFilling:
             W = (-K).tocsr()
             W.setdiag(0.0)
             W.data = np.maximum(W.data, 0.0)
+            if self.connectors is not None:                             # across the wall too, as strongly as the coupling
+                W = (W + self.coupling * sp.diags(K.diagonal()) @ self._link_graph).tocsr()
             W.eliminate_zeros()
             self._neighbour_weights = W
         return self._neighbour_weights
@@ -1052,6 +1142,9 @@ class HeleShawFilling:
         if compressible is None:
             compressible = self.density is not None
         if compressible:
+            if self.connectors is not None:
+                raise NotImplementedError("La doble superficie (conectores) solo tiene el llenado incompresible: el compresible y el empaque "
+                                          "no llevan aun los conectores.")
             if batch:
                 raise ValueError("batch solo para el llenado incompresible: el compresible avanza nodo a nodo (con lotes la presion "
                                  "diverge con un fundido casi incompresible).")
@@ -1083,6 +1176,8 @@ class HeleShawFilling:
             self.fill_time[early] = self.time + np.minimum(remaining[f >= 1.0 - 1e-12], dt)   # when each filled inside the step
             self.fill_factor[receiving] = np.where(f > 1.0 - 1e-12, 1.0, f)           # the node that set dt is full, to round-off
             transfer = self._overflow(excess, reaction) / dt if dt > 0 and np.any(excess > 0) else None
+            if self.connectors is not None:                                    # the melt that crosses the wall between the skins
+                transfer = self._connector_flow if transfer is None else transfer + self._connector_flow
             if self.thermal is not None and dt > 0:
                 self._advance_temperature(dt, f_old * self.volume, self.fill_factor * self.volume, transfer=transfer)
             self.time += dt

@@ -5,6 +5,7 @@ from Source.enums import DirectSolvers
 
 
 import pypardiso
+from pypardiso.pardiso_wrapper import PyPardisoError
 
 from Source.logger_config import sim_logger
 
@@ -78,6 +79,16 @@ def checked_pardiso(A, b, solver, retry=None, factorized=True):
     return x, 'default', retry
 
 
+def _same_pattern(a, b):
+
+    """True if two sparse matrices of the same format have the same structure (their values may differ)."""
+
+    if b is None or a.format != b.format or a.shape != b.shape or a.nnz != b.nnz:
+        return False
+
+    return np.array_equal(a.indptr, b.indptr) and np.array_equal(a.indices, b.indices)
+
+
 def _same_sparse(a, b):
 
     """True if two sparse matrices have the same structure and values."""
@@ -89,6 +100,17 @@ def _same_sparse(a, b):
             and np.array_equal(a.data, b.data))
 
 
+def _numeric_factorization(solver, A):
+
+    """Numeric factorization of A (PARDISO phase 22) with the analysis the solver already has, of a matrix with the same
+    structure: the reordering and the symbolic factorization are not repeated. Mirrors PyPardisoSolver.factorize."""
+
+    solver._check_A(A)
+    solver.factorized_A = solver._hash_csr_matrix(A) if A.nnz > solver.size_limit_storage else A.copy()
+    solver.set_phase(22)
+    solver._call_pardiso(A, np.zeros((A.shape[0], 1)))
+
+
 class FactorizedSolver:
 
     """Direct solver that keeps the factorization of its last matrix.
@@ -96,7 +118,18 @@ class FactorizedSolver:
     solve(A, b) factorizes A only when it differs from the previous matrix (same structure and values),
     so a transient linear problem, repeated solves with new right-hand sides, or a parameter sweep that
     leaves the matrix unchanged cost one factorization. `n_factorizations` counts them.
+
+    PARDISO, new values on the same structure (the tangent of every Newton iteration, a new time step): only the numeric
+    factorization is repeated, with the analysis (reordering, symbolic factorization) of the first matrix. The analysis is half
+    of a factorization on equal-order 2D meshes and most of it on Taylor-Hood ones (measured: 1.1 of 2.0 s with 187 k unknowns
+    of Q4, 3.8 of 4.4 s of Q9). `n_analyses` counts the analyses. The weighted matching of that analysis comes from the values
+    of its own matrix, so the first solve with each reused analysis is checked: a residual above REFINE_ABOVE after refinement
+    repeats the whole factorization, and if that is clearly better (10 times) the solver stops reusing; if it is not, the
+    matrix is ill-conditioned by itself (viscoelastic) and the reuse stays, repeating the analysis only above BROKEN_ABOVE.
+    reuse_analysis = False restores a full factorization per matrix.
     """
+
+    reuse_analysis = True
 
     def __init__(self, kind=DirectSolvers.PARDISO):
 
@@ -105,23 +138,63 @@ class FactorizedSolver:
 
         self.kind = kind
         self.n_factorizations = 0
+        self.n_analyses = 0
         self._A = None
         self._lu = None
         self._pardiso = pypardiso.PyPardisoSolver() if kind == DirectSolvers.PARDISO else None
         self._retry = None           # PARDISO without the weighted matching, made only if a solve needs it (checked_pardiso)
         self._mode = 'default'       # which factorization of the current matrix is trusted: 'default' or 'retry'
+        self._reused = False         # the current factorization uses the analysis of an earlier matrix
+        self._reuse_trusted = False  # a full factorization did not improve on a reused analysis: residuals up to BROKEN_ABOVE pass
+
+    def _factorize_pardiso(self, A, previous):
+
+        self._reused = False
+        if self.reuse_analysis and self.n_analyses and _same_pattern(A, previous):
+            try:
+                _numeric_factorization(self._pardiso, A)
+                self._reused = True
+            except PyPardisoError:                # a pivot the old reordering cannot take: start again
+                pass
+
+        if not self._reused:
+            self._pardiso.factorize(A)            # the same solver object: PARDISO reuses (and releases) its own memory
+            self.n_analyses += 1
+
+    def _solve_reused(self, A, b):
+
+        """Solution with a reused analysis if its residual is good; otherwise None, with A factorized again in full."""
+
+        x, residual = _refined(self._pardiso, A, b, self._pardiso.solve(A, b))
+        if not residual > REFINE_ABOVE or (self._reuse_trusted and not residual > BROKEN_ABOVE):
+            return x
+
+        self._pardiso.factorize(A)
+        self.n_analyses += 1
+        self._reused = False
+        full = _relative_residual(A, self._pardiso.solve(A, b), b)
+        if full < 0.1 * residual and not self._reuse_trusted:
+            sim_logger.info(f"PARDISO: residual {residual:.1e} with a reused analysis, {full:.1e} with its own: "
+                            f"the analysis is not reused.")
+            self.reuse_analysis = False
+        else:
+            self._reuse_trusted = True
+
+        return None
 
     def solve(self, A, b):
 
         A = A.tocsr() if self.kind == DirectSolvers.PARDISO else A.tocsc()
+        if not A.has_sorted_indices:
+            A.sort_indices()                      # PARDISO sorts them anyway; unsorted, an equal matrix would look new
 
         if A is not self._A and not _same_sparse(A, self._A):
 
             self.n_factorizations += 1
-            self._A = A
+            previous, self._A = self._A, A
 
             if self.kind == DirectSolvers.PARDISO:
-                self._pardiso.factorize(A)        # the same solver object: PARDISO reuses (and releases) its own memory
+                self._factorize_pardiso(A, previous)
                 self._mode = 'default'
                 if self._retry is not None:       # a new matrix starts again with the default reordering
                     self._retry.free_memory(everything=True)
@@ -132,6 +205,10 @@ class FactorizedSolver:
         if self.kind == DirectSolvers.PARDISO:
             if self._mode == 'retry':
                 return _refined(self._retry, A, b, self._retry.solve(A, b))[0]
+            if self._reused:
+                x = self._solve_reused(A, b)
+                if x is not None:
+                    return x
             x, self._mode, self._retry = checked_pardiso(A, b, self._pardiso, self._retry)
             return x
 

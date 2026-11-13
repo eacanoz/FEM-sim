@@ -217,9 +217,9 @@ class Discretization:
         nodal = np.asarray(nodal, dtype=float)
 
         if nodal.ndim == 1:
-            return np.einsum('gi,ei->eg', self.N, nodal[self.conn])
+            return nodal[self.conn] @ self.N.T
 
-        return np.einsum('gi,eik->egk', self.N, nodal[self.conn])
+        return np.matmul(self.N, nodal[self.conn])          # faster than einsum('gi,eik->egk'), and in every residual
 
     def gradient(self, nodal):
 
