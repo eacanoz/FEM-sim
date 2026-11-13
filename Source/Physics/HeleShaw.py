@@ -53,6 +53,10 @@
 # skin, a flow c (p_i - sum w_k p_k) with the weights of the filled nodes of the opposite triangle (an outlet c p_i into an empty one):
 # the melt crosses the wall freely and the front advances on both skins together; the flow of the links enters the convection of the
 # temperature. Incompressible filling only (Test/test_dual_domain.py, Example_Filling_Box_STEP.py).
+#
+# A feed system (addRunners, Source/Physics/Runners.py): sprue, runners and gates as circular tubes; one pressure for the cavity and the
+# network, Newton with the tangent of each tube and a line search; the network fills by the same control volumes and its melt reaches
+# the cavity through the gates at the injection temperature (a hot runner). Incompressible filling only (Test/test_runners.py).
 # Linear elements (T3, Q4). SI units: gap [m], pressure [Pa], flow rate [m3/s]; temperature in the units of the viscosity law (°C).
 import time
 
@@ -270,6 +274,7 @@ class HeleShawFilling:
             self.disc.detJw = self.disc.detJw * float(share)            # volume, flow and heat of each element: its share of the gap
         self.share = float(share)
         self.connectors, self.coupling = None, 0.0
+        self.runners = None
         self.xy = self.disc.node_xy                                     # (x, y) of a planform, (x, y, z) of a surface in space
         self.fluidity = GapFluidity(viscosity, T, layers)
         gp = self.disc.x_gp
@@ -288,6 +293,25 @@ class HeleShawFilling:
         self.density = None
         self.thermal = None
         self.short_shot = None                                             # with temperature: when the flow froze before filling
+
+    def addRunners(self, system):
+
+        """Feeds the cavity through a network of runners and gates (Source/Physics/Runners.py, a RunnerSystem): the flow rate enters at its
+        inlet, the network fills first and the melt reaches the cavity nodes of its gates. Replaces addGate. The network is at the injection
+        temperature (T_melt of setThermal, called before this, or the fixed T): call setThermal first. Incompressible filling only."""
+
+        from Source.Physics.Runners import TubeFluidity
+        if self.gates:
+            raise ValueError("Con una red de alimentacion la entrada es la de la red: sin addGate.")
+        T = self.thermal['T_melt'] if self.thermal is not None else self.T_fixed
+        from Source.Physics.Rheology import ViscosityLaw
+        law = self.law
+        if self.thermal is not None and not isinstance(law, ViscosityLaw):
+            fn = law
+            law = lambda g2: np.asarray(fn(g2, T), dtype=float)           # a callable eta(gamma_dot^2, T) at the injection temperature
+        system.bind(self.xy, TubeFluidity(law, T))
+        self.runners = system
+        return self
 
     @classmethod
     def from_dual_domain(cls, dual, viscosity, T=None, layers=16, coupling=20.0):
@@ -577,6 +601,8 @@ class HeleShawFilling:
         reactions (the flow rate each node receives) and the Newton iterations."""
 
         disc = self.disc
+        if self.runners is not None:
+            return self._solve_with_runners(tol, max_iterations)
 
         F = np.zeros(len(self.xy))
         for facets, Q in self.gates:
@@ -647,17 +673,115 @@ class HeleShawFilling:
         self._step = (ops.diffusion(disc, S * mask), F, active)
         reaction = F - stiffness(S) @ p                                          # flow rate into each node not filled
         if self.connectors is not None:                                           # the flow of the links, for the temperature
-            q = self._link_conductance * (self._links @ p)                        # from the source node to the opposite point
-            src, tri, w = self._link_parts
-            out, back = q > 0, q < 0
-            rows = np.concatenate([tri[out].ravel(), np.repeat(src[back], 3)])
-            cols = np.concatenate([np.repeat(src[out], 3), tri[back].ravel()])
-            vals = np.concatenate([(q[out, None] * w[out]).ravel(), (-q[back, None] * w[back]).ravel()])
-            keep = vals > 0
-            n = len(p)
-            self._connector_flow = sp.csr_matrix((vals[keep], (rows[keep], cols[keep])), shape=(n, n))   # [j, i] from i into j
+            self._link_flow(p)
         reaction[self.fill_factor >= 1.0] = 0.0
         return np.maximum(reaction, 0.0), k
+
+    def _solve_with_runners(self, tol, max_iterations):
+
+        """solve_pressure with the feed system: one Newton over the filled nodes of the cavity and of the network (cavity first), the
+        tubes with their exact tangent. Sets self.p, self.runners.p, the gate inflow of each cavity node (self._step, for the temperature)
+        and self._runner_reaction; returns the reactions of the cavity nodes and the Newton iterations."""
+
+        disc, R = self.disc, self.runners
+        n, nr = len(self.xy), R.n
+        N = n + nr
+        filled_c, filled_r = self.fill_factor >= 1.0, R.fill_factor >= 1.0
+        active = np.any(filled_c[disc.conn], axis=1)
+        if self._freezes():
+            active &= ~np.all(self._element_frozen(), axis=1)
+        mask = active[:, None].astype(float)
+        if self.connectors is not None:
+            self._set_links(filled_c)
+        F = np.zeros(N)
+        F[n + R.inlet[0]] = R.inlet[1]
+        free = np.flatnonzero(np.concatenate([filled_c, filled_r]))
+        p = np.concatenate([np.where(filled_c, self.p, 0.0), np.where(filled_r, R.p, 0.0)])
+
+        def cavity(S):
+            K = _scatter(disc, ops.diffusion(disc, S * mask))
+            if self.connectors is not None:
+                K = K + self._connector_laplacian(K.diagonal())
+            return sp.block_diag((K, sp.csr_matrix((nr, nr))), format='csr')
+
+        def tubes(p):
+            return R.assemble(p[:n], p[n:], n, filled_c, filled_r)
+
+        B = disc.B
+        if not np.any(p[free]):                                         # from rest: damped Picard on the secant conductances
+            if self.thermal is None:
+                S = self.fluidity(0.5 * self.h, np.full_like(self.h, 1e6))
+            else:
+                S, _ = self._element_fluidity(np.full_like(self.h, 1e6), active=active)
+            for _ in range(60):
+                Kt, _, _ = tubes(p)
+                A = cavity(S) + Kt
+                p_new = np.zeros(N)
+                p_new[free] = spla.spsolve(A[free][:, free].tocsc(), F[free])
+                S_new, _ = self._element_fluidity(np.linalg.norm(disc.gradient(p_new[:n]), axis=-1), active=active)
+                change = np.max(np.abs(p_new - p)) / max(np.max(np.abs(p_new)), 1e-300)
+                p = p_new if not np.any(p) else 0.5 * (p + p_new)
+                S = np.sqrt(S * S_new)
+                if change < 1e-3:
+                    break
+        def state(p):
+            gp = disc.gradient(p[:n])
+            G = np.linalg.norm(gp, axis=-1)
+            S, dS = self._element_fluidity(G, derivative=True, active=active)
+            Kt, Jt, _ = tubes(p)
+            Rv = (cavity(S) + Kt) @ p - F
+            return gp, G, S, dS, Kt, Jt, Rv, np.linalg.norm(Rv[free])
+
+        # Newton with backtracking: q ~ dp^(1/n) of a shear-thinning melt in a tube is strongly convex, and from a node just filled (at
+        # zero) the full step overshoots by orders of magnitude; halve it until the residual falls (the accepted state is reused)
+        current = state(p)
+        noise = 1e-12 * np.linalg.norm(F)                                  # a residual at round-off: no backtracking below it
+        for k in range(1, max_iterations + 1):
+            gp, G, S, dS, Kt, Jt, Rv, norm = current
+            if norm <= noise and k > 1:
+                break
+            a = np.einsum('eg,egia,ega->ei', disc.detJw, B, gp) * active[:, None]
+            c = np.einsum('eg,ega,egja->ej', dS / np.maximum(G, 1e-300), gp, B)
+            J = cavity(S) + sp.block_diag((_scatter(disc, np.einsum('ei,ej->eij', a, c)), sp.csr_matrix((nr, nr))), format='csr') + Jt
+            dp = np.zeros(N)
+            dp[free] = spla.spsolve(J[free][:, free].tocsc(), -Rv[free])
+            if not np.all(np.isfinite(dp)):
+                raise RuntimeError(f"Tiro corto a t = {self.time:.4g} s: la presion no tiene solucion (el fundido se congelo y cerro el paso).")
+            alpha = 1.0
+            for _ in range(40):
+                trial = state(p + alpha * dp)
+                if trial[-1] <= max(norm, noise) or alpha < 1e-9:
+                    break
+                alpha *= 0.5
+            p, current = p + alpha * dp, trial
+            if alpha == 1.0 and np.max(np.abs(dp)) <= tol * max(np.max(np.abs(p)), 1e-300):
+                break
+        self.p, R.p = p[:n].copy(), p[n:].copy()
+        S, _ = self._element_fluidity(np.linalg.norm(disc.gradient(self.p), axis=-1), active=active)
+        self.S = S * mask
+        Kt, _, q = tubes(p)
+        reaction = F - (cavity(S) + Kt) @ p
+        tube_in = -(Kt @ p)[:n]                                         # what the gates bring to each cavity node
+        self._step = (ops.diffusion(disc, S * mask), np.maximum(tube_in, 0.0), active)
+        self._tube_flow = q
+        if self.connectors is not None:
+            self._link_flow(self.p)
+        r_c, r_r = reaction[:n], reaction[n:]
+        r_c[filled_c] = 0.0
+        r_r[filled_r] = 0.0
+        self._runner_reaction = np.maximum(r_r, 0.0)
+        return np.maximum(r_c, 0.0), k
+
+    def _link_flow(self, p):
+        q = self._link_conductance * (self._links @ p)                        # from the source node to the opposite point
+        src, tri, w = self._link_parts
+        out, back = q > 0, q < 0
+        rows = np.concatenate([tri[out].ravel(), np.repeat(src[back], 3)])
+        cols = np.concatenate([np.repeat(src[out], 3), tri[back].ravel()])
+        vals = np.concatenate([(q[out, None] * w[out]).ravel(), (-q[back, None] * w[back]).ravel()])
+        keep = vals > 0
+        n = len(p)
+        self._connector_flow = sp.csr_matrix((vals[keep], (rows[keep], cols[keep])), shape=(n, n))   # [j, i] from i into j
 
     # ----- the temperature -----
 
@@ -1045,6 +1169,13 @@ class HeleShawFilling:
         return np.where(np.isnan(self.fill_time), np.nan, 1.0 - v_room / v)
 
     def melt_volume(self):
+
+        """The melt in the cavity, and in the feed system if there is one."""
+
+        cavity = float(self.fill_factor @ self.volume)
+        return cavity if self.runners is None else cavity + float(self.runners.fill_factor @ self.runners.volume)
+
+    def cavity_volume_filled(self):
         return float(self.fill_factor @ self.volume)
 
     def _neighbours(self):
@@ -1142,6 +1273,8 @@ class HeleShawFilling:
         if compressible is None:
             compressible = self.density is not None
         if compressible:
+            if self.runners is not None:
+                raise NotImplementedError("La red de alimentacion solo tiene el llenado incompresible (sin compresible ni empaque por ahora).")
             if self.connectors is not None:
                 raise NotImplementedError("La doble superficie (conectores) solo tiene el llenado incompresible: el compresible y el empaque "
                                           "no llevan aun los conectores.")
@@ -1155,10 +1288,15 @@ class HeleShawFilling:
             if switchover is not None and self.fill_factor @ self.volume >= switchover * self.volume.sum():
                 break
             reaction, iterations = self.solve_pressure()
-            self.history.append((self.time, self.melt_volume(), float(self.p[gate_nodes].mean()), iterations,
-                                 int(np.sum(self.fill_factor >= 1.0))))
+            p_in = float(self.runners.p[self.runners.inlet[0]]) if self.runners is not None else float(self.p[gate_nodes].mean())
+            self.history.append((self.time, self.melt_volume(), p_in, iterations, int(np.sum(self.fill_factor >= 1.0))))
             receiving = reaction > 0
-            if not np.any(receiving):
+            if self.runners is not None:                                   # the network: no node fills past its end inside the step
+                Rn = self.runners
+                r_net = self._runner_reaction
+                net = (r_net > 0) & (Rn.fill_factor < 1.0)
+                dt_net = float(np.min((1.0 - Rn.fill_factor[net]) * Rn.volume[net] / r_net[net])) if np.any(net) else np.inf
+            if not np.any(receiving) and (self.runners is None or not np.any(net)):
                 if self.thermal is not None:
                     self.short_shot = self.time
                     print(f"   tiro corto a t = {self.time:.4g} s: ningun nodo recibe fundido (la capa congelada cerro el paso)", flush=True)
@@ -1166,7 +1304,13 @@ class HeleShawFilling:
                 raise RuntimeError("Ningun nodo recibe fundido: la cavidad esta cerrada sin venteo o la entrada no tiene caudal.")
             remaining = (1.0 - self.fill_factor[receiving]) * self.volume[receiving] / reaction[receiving]
             # the step: until the k-th node of the front fills, k a fraction `batch` of the nodes receiving (1: the next node only)
-            dt = min(_kth(remaining, batch), t_end - self.time)
+            dt = min(_kth(remaining, batch) if len(remaining) else np.inf, t_end - self.time)
+            if self.runners is not None and np.any(net):
+                dt = min(dt, dt_net)
+                fr = Rn.fill_factor[net] + dt * r_net[net] / Rn.volume[net]
+                done = fr > 1.0 - 1e-12
+                Rn.fill_factor[net] = np.where(done, 1.0, fr)
+                Rn.fill_time[np.flatnonzero(net)[done]] = self.time + dt
             f_old = self.fill_factor.copy()
             f = self.fill_factor[receiving] + dt * reaction[receiving] / self.volume[receiving]
             idx = np.flatnonzero(receiving)

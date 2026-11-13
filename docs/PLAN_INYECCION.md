@@ -102,8 +102,15 @@ de viscosidad de 10⁴ no fue fiable), inyección asistida por gas o agua, sobre
   triángulos (+0.23 %); la caja como STEP (`Example_Filling_Box_STEP.py`) frente a su superficie media: presión −3 %, capa congelada
   31.9 frente a 32.5 %, tiempos de llenado iguales a 0.01 s. `Test/test_dual_domain.py` (6). **Sin hacer:** compresible y empaque con
   enlaces, entradas puntuales en una cara, enlaces en esquinas de 90° y raíces de nervios, y piezas gruesas.
+- **Fase 2 hecha en parte (2026-11-12): sistema de alimentación con canal caliente.** `Source/Physics/Runners.py`: fluidez de un tubo
+  circular (exacta newtoniana y ley de potencia) y la red (`RunnerSystem`: tramos, entrada de la máquina, entradas puntuales o en abanico);
+  `HeleShawFilling.addRunners`: una sola presión con la cavidad, Newton con la tangente de los tubos y búsqueda lineal, el frente corre por
+  los canales y entra por las entradas. Validado: frente del canal a medio elemento de la presión exacta, cavidades simétricas iguales a
+  5e-16, molde de familia a 0.6 % del balance de caudales y su desequilibrio al cambiar el diámetro de una rama; `Example_Family_Mold.py`
+  equilibra dos placas estrechando la rama de la pequeña (2.77 mm). `Test/test_runners.py` (6). **Sin hacer:** el canal frío (capa
+  congelada en el radio), el compresible y el empaque a través de la red (los rechaza), secciones no circulares.
 
 ## Primeros pasos de la nueva sesión
 
 1. Leer este archivo, `docs/ESTADO.md` y la fase 6 de `docs/PLAN_3D.md`; correr la suite completa para la línea base.
-2. Fase 2: sistema de alimentación (las fases 0 y 1 están hechas: `fill(batch=0.1)` y `DualDomain.from_step`).
+2. Fase 2b (canal frío y empaque a través de la red) o fase 3 (orientación de fibras); hechas la 0, la 1 y la 2 con canal caliente.

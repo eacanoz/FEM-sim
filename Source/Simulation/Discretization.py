@@ -295,14 +295,24 @@ class Discretization:
         import scipy.sparse as sp
 
         nel, ngp = self.detJw.shape
-        node_elems = [[] for _ in range(self.n_nodes)]
-        for e, nodes in enumerate(self.conn):
-            for k in nodes:
-                node_elems[k].append(e)
+        n, nne = self.n_nodes, self.conn.shape[1]
 
-        boundary = np.zeros(self.n_nodes, dtype=bool)
+        boundary = np.zeros(n, dtype=bool)
         for nodes in self.boundary_facet_nodes():
             boundary[list(nodes)] = True
+
+        # Patches as sparse incidence products (a loop over the nodes with one pseudoinverse each took 3.3 s with 37 k nodes):
+        # E[k, e] = 1 if node k belongs to element e; the neighbours of k are the nodes of its elements.
+        E = sp.csr_matrix((np.ones(nel * nne), (self.conn.ravel(), np.repeat(np.arange(nel), nne))), shape=(n, nel))
+        E.data[:] = 1.0                                                      # a node repeated in an element counts once
+        neighbours = (E @ E.T).tocsr()
+        interior = neighbours @ sp.diags((~boundary).astype(float))          # interior neighbours of each node
+        interior.eliminate_zeros()
+        has_interior = np.diff(interior.tocsr().indptr) > 0
+        chosen = sp.diags((boundary & has_interior).astype(float)) @ interior \
+            + sp.diags((boundary & ~has_interior).astype(float)) @ neighbours
+        patches = (E + chosen @ E).tocsr()                                   # interior node: its elements
+        patches.sort_indices()
 
         # Element means: the Gauss values of a gradient carry an O(h) error that is odd inside each element, so the
         # mean (the value at the centre) is accurate to O(h^2); fitting the means keeps that order on one-sided patches.
@@ -311,22 +321,17 @@ class Discretization:
         mean_weights = self.area / volume[:, None]                           # (nel, ngp)
 
         rows, cols, vals = [], [], []
+        sizes = np.diff(patches.indptr)
 
-        for k in range(self.n_nodes):
-            patch = set(node_elems[k])
-            if boundary[k]:
-                neighbours = {int(j) for e in node_elems[k] for j in self.conn[e]}
-                interior = [j for j in neighbours if not boundary[j]] or list(neighbours)
-                for j in interior:
-                    patch.update(node_elems[j])
+        for size in np.unique(sizes):                                        # the nodes with patches of the same size, at once
+            nodes = np.flatnonzero(sizes == size)
+            elems = patches.indices[patches.indptr[nodes][:, None] + np.arange(size)]          # (nodes, size), sorted
+            A = np.concatenate([np.ones((len(nodes), size, 1)), centres[elems] - self.node_xy[nodes][:, None]], axis=-1)
+            w = np.linalg.pinv(A)[:, 0]        # value at the node of the linear function fitted to the means
 
-            elems = np.array(sorted(patch))
-            A = np.hstack([np.ones((len(elems), 1)), centres[elems] - self.node_xy[k]])
-            w = np.linalg.pinv(A)[0]           # value at the node of the linear function fitted to the means
-
-            rows.append(np.full(len(elems) * ngp, k))
-            cols.append((elems[:, None] * ngp + np.arange(ngp)).ravel())
-            vals.append((w[:, None] * mean_weights[elems]).ravel())
+            rows.append(np.repeat(nodes, size * ngp))
+            cols.append((elems[:, :, None] * ngp + np.arange(ngp)).ravel())
+            vals.append((w[:, :, None] * mean_weights[elems]).ravel())
 
         self._recovery = sp.coo_matrix((np.concatenate(vals), (np.concatenate(rows), np.concatenate(cols))),
                                        shape=(self.n_nodes, nel * ngp)).tocsr()
