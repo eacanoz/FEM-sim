@@ -2,42 +2,62 @@ import logging
 import os
 from datetime import datetime
 
-def setup_logger(name="FEM_Simulator", log_dir="Logs"):
-    # 1. Crear la carpeta de Logs si no existe
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+LOGGER_NAME = "FEM_Simulator"
+_FORMAT = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
-    # 2. Generar un nombre de archivo único con fecha y hora
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    log_file = os.path.join(log_dir, f"sim_{timestamp}.log")
 
-    # 3. Crear el logger principal
+def setup_logger(name=LOGGER_NAME, log_dir="Logs", console_level=logging.INFO):
+
+    """Logger of the session: one file per session in log_dir, created when the first message is written (importing
+    Source no longer creates an empty file), and a console handler at console_level (None: no console output)."""
+
     logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG) # Nivel base: Captura todo
+    logger.setLevel(logging.DEBUG)       # the file keeps everything
 
-    # Evitar duplicación de logs si la celda de Jupyter se corre varias veces
-    if logger.hasHandlers():
-        logger.handlers.clear()
+    # No duplicated handlers if a Jupyter cell runs again
+    for handler in list(logger.handlers):
+        handler.close()
+        logger.removeHandler(handler)
 
-    # 4. Formato del texto (Ej: 2026-04-28 14:30:00 - INFO - Newton converged)
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', 
-                                  datefmt='%Y-%m-%d %H:%M:%S')
+    if log_dir is not None:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        log_file = os.path.join(log_dir, f"sim_{timestamp}.log")
+        file_handler = _LazyDirFileHandler(log_file)
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(_FORMAT)
+        logger.addHandler(file_handler)
 
-    # 5. Handler para el Archivo (Guarda hasta los detalles más mínimos)
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(formatter)
-
-    # 6. Handler para la Consola / Jupyter (Solo muestra lo importante)
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO) # Oculta los DEBUG en la pantalla
-    console_handler.setFormatter(formatter)
-
-    # Añadir los handlers al logger
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
+    if console_level is not None:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(console_level)
+        console_handler.setFormatter(_FORMAT)
+        logger.addHandler(console_handler)
 
     return logger
 
-# Instancia global para importar en otros archivos
+
+class _LazyDirFileHandler(logging.FileHandler):
+
+    """File handler that creates its folder and file at the first record (delay=True only postpones the file)."""
+
+    def __init__(self, path):
+        super().__init__(path, delay=True)
+
+    def _open(self):
+        os.makedirs(os.path.dirname(self.baseFilename), exist_ok=True)
+        return super()._open()
+
+
+def configure_logging(log_dir="Logs", console_level="INFO"):
+
+    """Configures the logging of the session: the folder of the log file (None: no file) and the console level
+    ('DEBUG', 'INFO', 'WARNING', ... or None for silence). Starts a new file."""
+
+    if isinstance(console_level, str):
+        console_level = getattr(logging, console_level.upper())
+
+    return setup_logger(log_dir=log_dir, console_level=console_level)
+
+
+# Global instance to import elsewhere
 sim_logger = setup_logger()

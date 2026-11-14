@@ -270,6 +270,21 @@ Propuesta, de menos a más esfuerzo:
 8. Visor: `pyvista` opcional para 3D y superficies (hoy matplotlib y VTK para ParaView); informe HTML de un caso.
 9. Malla en arrays (coordenadas, conectividad, grupos) con los objetos `Node`/`Element` como vista de compatibilidad.
 
+**Hecho el 2026-11-14 (E.1, E.2 y E.3):**
+
+- `Model.solve()` sin configuración: estudio estacionario, tipo detectado de `System.is_linear` y `Method='auto'`.
+  `solverConfiguration` toma `Type=None` por defecto (se detecta al resolver y se vuelve a detectar si el modelo cambia; un
+  `Type` explícito se respeta tal cual) y acepta cadenas en `Study`, `Type`, `Method` y `Solver` (`'transient'`, `'steady'`,
+  `'nonlinear'`, `'PARDISO'`...; los enumerados siguen valiendo; un nombre desconocido da `ValueError` con las opciones).
+  `timeScheme='BDF2'` y compañía ya eran cadenas. Pruebas en `Test/test_auto_solver.py`.
+- Registro (`Source/logger_config.py`): el archivo de la sesión se crea con el primer mensaje, no al importar `Source` (se
+  acabaron los archivos vacíos en `Logs/`), y `configure_logging(log_dir=..., console_level=...)` cambia carpeta (`None`: sin
+  archivo) y nivel de consola (`None`: silencio). Pruebas en `Test/test_interface.py`.
+- E.3: `pyproject.toml` (paquete `femsim`, extras `amg` y `mesh`; instalar con `pip install -e .`). `femsim.X` es `Source.X`
+  (mismos objetos de módulo, por un buscador de importación en `femsim/__init__.py`, no copias: los enumerados comparan igual).
+  Los 33 ejemplos y cuadernos versionados pasan a `examples/` (con `git mv`); `README` con instalación, uso y rutas al día. Los
+  archivos sin versionar de la raíz quedan donde estaban. Hizo falta instalar `setuptools` en `.venv`.
+
 ## Físicas: robustez y especialización
 
 Lo que la revisión confirma como siguiente (ya inventariado en `ESTADO.md` y `PLAN_INYECCION.md`): orientación de fibras, molde y
@@ -283,6 +298,7 @@ medido. La fase 1 de inyección (geometría desde CAD) puede ir en paralelo: no 
 
 ## Avance
 
+- **2026-11-14:** fase E.1 (`solve()` sin configuración, cadenas), E.2 (registro de la sesión) y E.3 (paquete `femsim`, `examples/`).
 - **2026-11-12:** revisión y perfiles; fase A, dos primeros cambios (análisis de PARDISO reutilizado, cinemática del flujo), que
   entraron en el commit `a0d5e6e` junto con la fase 1 de inyección.
 - **2026-11-14:** Newton se para en el piso de redondeo (el arranque Taylor–Hood tardaba de 2 a 175 iteraciones según la ejecución).

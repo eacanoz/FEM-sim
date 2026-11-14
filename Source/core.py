@@ -13,10 +13,28 @@ from Source.Pre_processing.Mesh import Mesh
 from Source.Material import material
 from Source.Physics.Coupled import CoupledPhysics
 import Source.Simulation.Solvers as Solution
-from Source.enums import StudyType, ProblemType, SolverType, DirectSolvers, Preconditioners
+from Source.enums import StudyType, ProblemType, SolverType, DirectSolvers, IterativeSolvers, Preconditioners
 from Source.logger_config import sim_logger
 from Source.Simulation.Discretization import Discretization
 from Source.Simulation.DofLayout import DofLayout
+
+
+def _as_enum(enum_class, value, aliases=None):
+
+    """The member of enum_class named by value (a member, or its name in any case, e.g. 'Transient' or 'steady')."""
+
+    if isinstance(value, enum_class):
+        return value
+
+    if isinstance(value, str):
+        key = value.strip().lower().replace(' ', '_')
+        key = (aliases or {}).get(key, key)
+        for member in enum_class:
+            if member.name.lower() == key:
+                return member
+
+    names = ', '.join(repr(m.name) for m in enum_class)
+    raise ValueError(f"{enum_class.__name__}: valor desconocido {value!r} (use {names}).")
 
 
 class Model(object):
@@ -186,12 +204,17 @@ class Model(object):
 
         return self._system().mass()
 
-    def solverConfiguration(self, Study=StudyType.steady_state, Type=ProblemType.linear, Method=SolverType.direct, Solver = DirectSolvers.PARDISO, 
+    def solverConfiguration(self, Study=StudyType.steady_state, Type=None, Method=SolverType.direct, Solver = DirectSolvers.PARDISO, 
                             timeDisc = 1, timeStep=0.05, totalTime = 3, prec = Preconditioners.iLU, tol = 1e-10, maxiter = None,
                             timeScheme='theta', globalization='newton', cfl0=10.0, relaxation=None, reuseTangent=True, adaptiveTol=None,
                             adaptiveMaxStep=None, nonlinearMaxIter=None):
 
         """Configures the solver for the model based on the provided options.
+
+        Study, Type, Method and Solver also accept strings ('steady', 'transient'; 'linear', 'nonlinear'; 'direct', 'iterative',
+        'auto'; 'PARDISO', 'UMFPACK', ...). Type=None (the default) is detected from the system when solving: nonlinear if it
+        has nonlinear terms (System.is_linear). Calling solve() without configuring anything uses a steady study, the detected
+        type and Method 'auto'.
 
         Method: SolverType.direct, .iterative or .auto (also the strings 'direct', 'iterative', 'auto'). With auto, Solver and
         prec are ignored: the linear solver is chosen from the size and kind of the system (Source/Simulation/SolverSelection.py)
@@ -210,8 +233,11 @@ class Model(object):
         the same steady solution). relaxation = {field: factor} takes only that fraction of the update of a field.
         nonlinearMaxIter: limit of the pseudo-transient march (default 500)."""
 
-        if isinstance(Method, str):
-            Method = SolverType[Method.lower()]       # 'direct', 'iterative' or 'auto'
+        Study = _as_enum(StudyType, Study, {'steady': 'steady_state', 'steady-state': 'steady_state', 'stationary': 'steady_state'})
+        Type = None if Type is None else _as_enum(ProblemType, Type)
+        Method = _as_enum(SolverType, Method)        # 'direct', 'iterative' or 'auto'
+        if isinstance(Solver, str):
+            Solver = _as_enum(DirectSolvers, Solver) if Solver.strip().lower() in [m.name.lower() for m in DirectSolvers] else _as_enum(IterativeSolvers, Solver)
 
         if timeScheme not in ('theta', 'BDF2'):
             raise ValueError(f"Esquema temporal desconocido: {timeScheme!r} (use 'theta' o 'BDF2').")
@@ -251,7 +277,12 @@ class Model(object):
         self._system_cache = None  # boundary conditions and coefficients may have changed
 
         if self.solverOptions is None:
-            self.solverConfiguration()
+            self.solverConfiguration(Method=SolverType.auto)
+
+        if self.solverOptions['Type'] is None or self.solverOptions.get('Type detected'):
+            linear = self._system().is_linear
+            self.solverOptions['Type'] = ProblemType.linear if linear else ProblemType.nonlinear
+            self.solverOptions['Type detected'] = True      # detected again if the model changes and is solved again
 
         sim_logger.info("------- Starting simulation -------")
         sim_logger.info("Model: " + self.name)

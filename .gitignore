@@ -14,3 +14,7 @@ venv/
 
 # Cuaderno pesado (25 MB), solo en disco
 Ejemplo_vortice_cilindro.ipynb
+
+# Instalacion editable
+*.egg-info/
+build/

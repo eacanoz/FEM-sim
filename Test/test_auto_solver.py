@@ -19,7 +19,7 @@ from Source.core import Model
 from Source.Material import material
 from Source.Physics.HeatTransfer import ht
 from Source.Simulation import SolverSelection as selection
-from Source.enums import ElementType, SolverType, DirectSolvers, IterativeSolvers, Preconditioners
+from Source.enums import ElementType, StudyType, ProblemType, SolverType, DirectSolvers, IterativeSolvers, Preconditioners
 
 
 def poisson(n=20, convection=False):
@@ -109,11 +109,53 @@ def test_gmres_maxiter_counts_iterations_not_restart_cycles():
     assert not solver.converged and solver.iterations <= 40, solver.iterations
 
 
+def test_solve_without_configuration_detects_the_problem_type():
+    # linear: same answer as the explicit configuration
+    reference = solve(poisson(), Method=SolverType.direct, Solver=DirectSolvers.PARDISO)
+    model = poisson()
+    model.solve()
+    assert model.solverOptions['Type'] == ProblemType.linear and model.solverOptions['Method'] == SolverType.auto
+    assert np.max(np.abs(np.asarray(model.sol['T']) - reference)) < 1e-10
+
+    # nonlinear (k(T)): detected, and equal to the explicit nonlinear configuration
+    def nonlinear():
+        m = poisson()
+        m.physics.setConductivityLaw(lambda T: 1.0 + 0.5 * T)
+        return m
+
+    explicit = nonlinear()
+    explicit.solverConfiguration(Type=ProblemType.nonlinear)
+    explicit.solve()
+    detected = nonlinear()
+    detected.solverConfiguration()                     # Type=None: detected when solving
+    detected.solve()
+    assert detected.solverOptions['Type'] == ProblemType.nonlinear
+    assert np.max(np.abs(np.asarray(detected.sol['T']) - np.asarray(explicit.sol['T']))) < 1e-10
+
+
+def test_configuration_accepts_strings_and_rejects_unknown_names():
+    model = poisson()
+    model.solverConfiguration(Study='Steady', Type='linear', Method='direct', Solver='PARDISO')
+    assert model.solverOptions['Study'] == StudyType.steady_state
+    assert model.solverOptions['Type'] == ProblemType.linear
+    assert model.solverOptions['Solver'] == DirectSolvers.PARDISO
+    model.solverConfiguration(Study='transient')
+    assert model.solverOptions['Study'] == StudyType.transient
+    for bad in (dict(Study='dynamic'), dict(Type='quadratic'), dict(Method='fast'), dict(Solver='LAPACK')):
+        try:
+            model.solverConfiguration(**bad)
+        except ValueError:
+            continue
+        raise AssertionError(bad)
+
+
 if __name__ == "__main__":
     tests = [test_choice_by_size_and_kind, test_auto_matches_the_direct_solution_and_accepts_a_string,
              test_auto_uses_the_iterative_solver_above_the_threshold,
              test_auto_falls_back_to_the_direct_solver_when_the_iterations_run_out,
-             test_gmres_maxiter_counts_iterations_not_restart_cycles]
+             test_gmres_maxiter_counts_iterations_not_restart_cycles,
+             test_solve_without_configuration_detects_the_problem_type,
+             test_configuration_accepts_strings_and_rejects_unknown_names]
     failed = 0
     for t in tests:
         try:

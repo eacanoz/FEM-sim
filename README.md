@@ -1,8 +1,26 @@
 # FEM-sim: simulador de elementos finitos
 
-FEM-sim es un simulador de elementos finitos en Python para problemas de conducción de calor.
-Hoy resuelve problemas **1D** (elementos lineales) y **2D estacionarios lineales** (cuadriláteros Q4).
-Está pensado para crecer por capas: geometría, física, condiciones de contorno y solvers se pueden ampliar por separado.
+FEM-sim es un simulador de elementos finitos en Python (1D, 2D, axisimétrico y 3D): conducción de calor, transporte de especies,
+Darcy, flujo de fluidos newtonianos y no newtonianos (Navier–Stokes, Stokes, turbulencia), viscoelasticidad y llenado de moldes de
+inyección de polímeros (Hele-Shaw 2.5D, empaque, cristalización, piezas desde CAD). Se organiza por capas (geometría, física,
+condiciones de contorno y solvers) que se amplían por separado. La tabla de abajo detalla qué está operativo y cómo se validó.
+
+## Instalación y primer uso
+
+```bash
+pip install -e .            # paquete `femsim` (alias de `Source`); extras: .[amg], .[mesh], .[all]
+```
+
+```python
+from femsim.core import Model          # igual que `from Source.core import Model`
+...
+model.solve()                          # estudio estacionario, tipo (lineal o no) detectado y solver 'auto'
+model.solverConfiguration(Study='transient', Method='direct', timeScheme='BDF2', totalTime=2.0)   # opciones como cadenas
+```
+
+Los ejemplos están en [examples/](examples/) (ejecútelos desde cualquier carpeta; escriben sus salidas en la carpeta actual). El
+registro de la sesión se guarda en `Logs/` al primer mensaje; `femsim.logger_config.configure_logging(log_dir=..., console_level=...)`
+cambia la carpeta y el nivel de consola.
 
 > Documentación detallada:
 > - [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md): cómo está organizado el código y cómo extenderlo.
@@ -37,7 +55,7 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | Viscoelástico no isotermo (`ve.setTemperatureShift`, `ve.setViscousHeating`): λ y μ_p desplazados con WLF o Arrhenius, calentamiento por el esfuerzo polimérico | Operativo: límite isotermo exacto, Couette calentado de orden 2 frente a `solve_bvp`, tangente; reómetro capilar no isotermo |
 | Superficie libre estacionaria (`Source/Physics/FreeSurface.py`): hinchamiento del extrudado por el método de la línea de corriente, con cualquier fluido del código, plano o axisimétrico | Operativo: newtoniano plano 1.188 (literatura 1.184–1.200) y axisimétrico 1.129 (≈ 1.127); Giesekus hasta Wi = 3 con la tendencia publicada; sin tensión superficial |
 | Flujo compresible (`ff.setDensityLaw`) con la ecuación de estado de Tait de dos dominios (`Rheology.TaitPVT`) y su ajuste a datos pvT (`Fitting.fit_tait`) | Operativo en el plano: canal frente a lubricación, empaque frente a la difusión de presión, calentamiento por compresión; Tait ajustado a medidas de un PP con fibra con 0.036 % de error |
-| Llenado de molde Hele-Shaw 2.5D (`Source/Physics/HeleShaw.py`): fluidez del espesor para cualquier ley de viscosidad, frente por volúmenes de control | Etapa 1, isoterma: tira y disco frente a sus soluciones exactas (masa a 1e-14, presión de entrada de orden 1); etapa 2, no isoterma (`setThermal`): temperatura en el espesor, calentamiento viscoso, capa congelada y tiro corto; Graetz, placa que se enfría y balance de energía exacto; ejemplo de la curva U con POLYFORT (`Example_Filling_NonIsothermal.py`); etapa 3, empaque (`setDensity`, `pack`): Tait de dos dominios, masa por nodo exacta, contracción volumétrica (`Example_Packing_HeleShaw.py`); llenado compresible con cambio V/P y calentamiento por compresión β T Dp/Dt; cristalización (Nakamura / Hoffman–Lauritzen, calor latente, no flujo por cristalinidad, pvT con X, `Example_Crystallization_HeleShaw.py`) |
+| Llenado de molde Hele-Shaw 2.5D (`Source/Physics/HeleShaw.py`): fluidez del espesor para cualquier ley de viscosidad, frente por volúmenes de control | Etapa 1, isoterma: tira y disco frente a sus soluciones exactas (masa a 1e-14, presión de entrada de orden 1); etapa 2, no isoterma (`setThermal`): temperatura en el espesor, calentamiento viscoso, capa congelada y tiro corto; Graetz, placa que se enfría y balance de energía exacto; ejemplo de la curva U con POLYFORT (`examples/Example_Filling_NonIsothermal.py`); etapa 3, empaque (`setDensity`, `pack`): Tait de dos dominios, masa por nodo exacta, contracción volumétrica (`examples/Example_Packing_HeleShaw.py`); llenado compresible con cambio V/P y calentamiento por compresión β T Dp/Dt; cristalización (Nakamura / Hoffman–Lauritzen, calor latente, no flujo por cristalinidad, pvT con X, `examples/Example_Crystallization_HeleShaw.py`) |
 | Deslizamiento en pared (`ff.addBC_SlipLawEdges`: Navier, potencia, umbral) y PTT (`ve.setModes(..., 'ptt-linear')`) | Operativo: Poiseuille exacto, Mooney recupera la velocidad dada; PTT frente a `solve_ivp`; reómetro hasta 1583 s⁻¹ con PTT en malla gruesa |
 | Navier–Stokes estacionario (`ff.setInertia(True)`): convección con Newton o Picard, SUPG/PSPG/LSIC sobre el residuo completo; grad-div opcional (`ff.setGradDiv`) para acercar div(u) a cero | Operativo: Kovasznay (orden 2 en u y p), cavidad Re = 100 frente a Ghia et al., Newton en 5–7 iteraciones; grad-div consistente (extensión exacta), con costo en precisión medido |
 | Fluidos no newtonianos (`ff.setViscosityLaw`): ley de potencia, Carreau–Yasuda, Cross, Cross–WLF, Bingham y Herschel–Bulkley regularizados, desplazamiento de Arrhenius | Operativo: perfiles analíticos de ley de potencia (orden 2) y Bingham (tapón), jacobiano exacto con dμ/dγ̇ y dμ/dT |
@@ -50,10 +68,10 @@ Está pensado para crecer por capas: geometría, física, condiciones de contorn
 | 3D, fase 0 (`docs/PLAN_3D.md`): tetraedros y hexaedros lineales y cuadráticos (tet4, tet10, hex8, hex27), `Mesh.generate3DMesh`, gmsh 3D con grupos de caras, normales de cara, VTK 3D binario | Base validada (Poisson de orden 2 y 3, parche, normales en cubo y esfera) |
 | 3D, fase 1: calor (`ht`), especies (`mt`) y Darcy en tetraedros y hexaedros, con condiciones en caras (`addBC_*Edges(mesh.boundary_faces(...))`) | Operativo: soluciones manufacturadas de orden 2 y 3, enfriamiento de un cubo frente a la serie de Fourier, SUPG nodalmente exacto en hexaedros (no monótono en tetraedros), Darcy anisótropo exacto; `Method=auto` usa CG + AMG desde 10 000 incógnitas en 3D. Flujo, viscoelástico y turbulencia en 3D: pendientes |
 | 3D, fase 2: Stokes y Navier–Stokes (`ff`) con Taylor–Hood P2/P1 (tet10) y Q2/Q1 (hex27) o igual orden con PSPG (tet4, hex8) | Operativo: Poiseuille exacto, conducto rectangular frente a su serie (orden 3 / 2), tubería en tet10 curvos igual al modelo axisimétrico, Navier–Stokes de Ethier–Steinman (u orden 3, p orden 2); Navier–Stokes transitorio (BDF2, orden 2.5 en Ethier–Steinman) y SUPG/PSPG de Taylor–Hood; GMRES con bloques en 3D (iteraciones casi constantes en Stokes, crecientes con la convección), elegido por `Method=auto` desde 120 000 incógnitas. Fluidos de polímeros en 3D en la fila siguiente |
-| 3D, fase 6: llenado de piezas 3D con Hele-Shaw sobre la superficie media (`Mesh.from_gmsh_model(surface=True)`, placas plegadas y uniones en T, espesor por zona) | Operativo: una tira plegada llena exactamente como la plana (también no isoterma y con empaque), la unión en T reparte el fundido como la solución exacta; ejemplo de una caja con nervio (`Example_Filling_Box_3D.py`). Sin flujo a través del espesor |
-| Inyección, fase 0 (`docs/PLAN_INYECCION.md`): llenado Hele-Shaw por lotes del frente (`fill(batch=0.1)`), ensamblaje de patrón fijo, temperatura con BiCGSTAB | Operativo: la caja de 1850 nodos de `Example_Filling_Box_3D.py` pasa de 29 min a 83 s con la misma presión (+0.07 %), masa y energía exactas; `batch=0` reproduce el resultado anterior. El llenado compresible y el empaque siguen nodo a nodo |
-| Inyección, fase 1: piezas desde CAD (STEP) como doble superficie (`DualDomain.from_step`, `HeleShawFilling.from_dual_domain`): pieles, bordes y espesor por rayos, enlaces entre pieles | Operativo: espesor exacto en placas y nervios, tira sólida con la presión exacta y la masa a 1e-13, la caja de `Example_Filling_Box_STEP.py` llena como su superficie media (presión −3 %). Solo llenado incompresible; entradas como aristas del contorno |
-| Inyección, fase 2: sistema de alimentación (`RunnerSystem`, `HeleShawFilling.addRunners`): bebedero, canales y entradas como tubos circulares, moldes de varias cavidades | Operativo con canal caliente: fluidez del tubo exacta, molde de familia igual al balance de caudales (0.6 %), equilibrado por el diámetro de una rama (`Example_Family_Mold.py`). Sin canal frío ni empaque a través de la red |
+| 3D, fase 6: llenado de piezas 3D con Hele-Shaw sobre la superficie media (`Mesh.from_gmsh_model(surface=True)`, placas plegadas y uniones en T, espesor por zona) | Operativo: una tira plegada llena exactamente como la plana (también no isoterma y con empaque), la unión en T reparte el fundido como la solución exacta; ejemplo de una caja con nervio (`examples/Example_Filling_Box_3D.py`). Sin flujo a través del espesor |
+| Inyección, fase 0 (`docs/PLAN_INYECCION.md`): llenado Hele-Shaw por lotes del frente (`fill(batch=0.1)`), ensamblaje de patrón fijo, temperatura con BiCGSTAB | Operativo: la caja de 1850 nodos de `examples/Example_Filling_Box_3D.py` pasa de 29 min a 83 s con la misma presión (+0.07 %), masa y energía exactas; `batch=0` reproduce el resultado anterior. El llenado compresible y el empaque siguen nodo a nodo |
+| Inyección, fase 1: piezas desde CAD (STEP) como doble superficie (`DualDomain.from_step`, `HeleShawFilling.from_dual_domain`): pieles, bordes y espesor por rayos, enlaces entre pieles | Operativo: espesor exacto en placas y nervios, tira sólida con la presión exacta y la masa a 1e-13, la caja de `examples/Example_Filling_Box_STEP.py` llena como su superficie media (presión −3 %). Solo llenado incompresible; entradas como aristas del contorno |
+| Inyección, fase 2: sistema de alimentación (`RunnerSystem`, `HeleShawFilling.addRunners`): bebedero, canales y entradas como tubos circulares, moldes de varias cavidades | Operativo con canal caliente: fluidez del tubo exacta, molde de familia igual al balance de caudales (0.6 %), equilibrado por el diámetro de una rama (`examples/Example_Family_Mold.py`). Sin canal frío ni empaque a través de la red |
 | 3D, fase 5: turbulencia (SA y k-ω SST) con distancia a la pared a caras | Operativo: canal Re_τ = 180 en 3D igual al 2D (U_c⁺ 18.49 con SA y 17.65 con SST, DNS 18.3), tangente 3D acoplada, conducto cuadrado sin flujo secundario (modelo lineal de viscosidad turbulenta) y con las reacciones de pared iguales a la fuerza de volumen |
 | 3D, fase 4: viscoelástico (`ve`) con la raíz de la conformación de 6 componentes y DEVSS-G de 9, en hex27 y tet10 | Operativo: flujos homogéneos 3D frente a `solve_ivp` (orden 2), Couette y canal 3D iguales al 2D (también no isotermo, con difusión artificial y con varios modos PTT), conducto rectangular con Oldroyd-B rectilíneo y el flujo secundario de Giesekus; tangente 3D completa; solver de bloques con los campos viscoelásticos; contracción cuadrada 4:1 como estudio de coste (149 k incógnitas, 10 min) |
 | 3D, fase 3: fluidos de polímeros (leyes de viscosidad, Cross–WLF con presión, calentamiento viscoso, compresible con Tait, deslizamiento de Navier y de potencia) | Operativo: el mismo canal en 2D y en 3D coincide a 1e-11 en todas las físicas; tangente 3D completa frente a diferencias finitas; dado rectangular ancho → placas paralelas (newtoniano a la serie); el deslizamiento en 3D es isótropo en la pared. Las soluciones de PARDISO comprueban su residuo: refinan y, si siguen mal, refactorizan sin el emparejamiento ponderado |
@@ -139,7 +157,7 @@ mesh = Mesh.from_gmsh_model()                # modelo de gmsh abierto y ya malla
 physics.addBC_TemperatureEdges(mesh.boundary_edges('inner'), 100.0)     # grupo físico de dimensión 1, por nombre
 ```
 
-La malla debe tener un solo tipo de elemento de su dimensión. Ver `Example_Gmsh_Geometry.py`.
+La malla debe tener un solo tipo de elemento de su dimensión. Ver `examples/Example_Gmsh_Geometry.py`.
 
 ### Mallas 3D
 
@@ -192,7 +210,7 @@ mass.setDiffusivity('A', lambda T: 1e-3 * jnp.exp(0.02 * T), depends_on=('T',)) 
 
 Con `T` numérico (Kelvin) la reacción es isotérmica y no depende del calor. Con campo de temperatura puede haber varios
 estados estacionarios (ignición): si Newton no converge o cae en otra rama, marche en el tiempo hasta el estacionario y
-use ese estado como inicial. Ver `Example_Reactive_Heat.py`.
+use ese estado como inicial. Ver `examples/Example_Reactive_Heat.py`.
 
 ### Problema 2D
 
@@ -230,28 +248,28 @@ Las aristas se seleccionan con un predicado sobre su punto medio: `mesh.boundary
 |---|---|
 | `Simulation.py` | Barra 1D no lineal con Dirichlet, convección y radiación |
 | `Simulation_time_dependent.py` | Barra 1D transitoria |
-| `Example_2D_Poisson.py` | Poisson 2D con solución exacta, tabla de convergencia y gráficos |
-| `Example_2D_Transient.py` | Placa 2D con punto caliente, radiación y convección: transitorio no lineal, convergencia en el tiempo y gráficos |
-| `Example_Reactive_Heat.py` | Reacción exotérmica acoplada con el calor: verificación frente a una EDO, barrido del calor de reacción y arranque transitorio |
-| `Ejemplo_Fisicas_Acopladas.ipynb` | **Cuaderno guiado** del caso reactivo: monta el modelo paso a paso, explica cada función y parámetro, muestra qué ocurre dentro del solver (geometría, DOF, jacobiano, Newton), los resultados, la verificación y el transitorio |
+| `examples/Example_2D_Poisson.py` | Poisson 2D con solución exacta, tabla de convergencia y gráficos |
+| `examples/Example_2D_Transient.py` | Placa 2D con punto caliente, radiación y convección: transitorio no lineal, convergencia en el tiempo y gráficos |
+| `examples/Example_Reactive_Heat.py` | Reacción exotérmica acoplada con el calor: verificación frente a una EDO, barrido del calor de reacción y arranque transitorio |
+| `examples/Ejemplo_Fisicas_Acopladas.ipynb` | **Cuaderno guiado** del caso reactivo: monta el modelo paso a paso, explica cada función y parámetro, muestra qué ocurre dentro del solver (geometría, DOF, jacobiano, Newton), los resultados, la verificación y el transitorio |
 | `2DFEM.py` | Generación de malla 2D (referencia de numeración) |
-| `Example_Solver_Scaling.py` | Poisson 2D hasta 160 mil incógnitas: PARDISO frente a CG y CG+AMG, factorización reutilizada y exportación a ParaView |
-| `Example_Gmsh_Geometry.py` | Cuarto de anillo (convergencia frente a la solución logarítmica) y placa con orificio, con mallas T3 de gmsh |
-| `Example_Darcy_Transport.py` | Darcy en un medio con una inclusión de baja permeabilidad, conservación del caudal y pluma de un trazador arrastrada por la velocidad de Darcy |
-| `Example_Stokes_Contraction.py` | Contracción plana 4:1 (entrada a un dado) en flujo reptante: conservación del caudal, pérdida de presión de entrada y corrección de Couette en tres mallas, vórtice de esquina |
-| `Example_Viscoelastic_Contraction.py` | Contracción 4:1 de un fluido viscoelástico: corrección de Couette, vórtice de esquina y estimación de Tanner frente a De |
-| `Example_Fit_Rheology.py` | Ajuste a datos de reómetro (CSV de viscosidad y oscilatorio, o sintéticos): curva maestra y WLF, espectro, α de Giesekus y Cross–WLF, con las líneas listas para el modelo |
-| `Example_Viscoelastic_NonIsothermal.py` | El reómetro capilar con calor: desplazamiento de Arrhenius y calentamiento, frente al isotermo (caída, Bagley, aumento de T) |
-| `Example_Die_Swell.py` | Hinchamiento del extrudado a la salida de un dado plano: newtoniano y Giesekus con continuación en Wi |
-| `Ejemplo_Hinchamiento_Extrudado.ipynb` | Cuaderno explicativo del hinchamiento: método, perfiles de velocidad, forma de la superficie, B frente a Wi y relajación de N1 |
-| `Example_Packing.py` | Empaque de una cavidad con un fundido compresible: presión que entra y masa añadida, con pvT y viscosidad ajustadas a medidas |
-| `Example_Viscoelastic_Rheometer.py` | Reómetro capilar con 4 modos Giesekus frente a un fluido inelástico de igual viscosidad: cuánto aporta la elasticidad a la pérdida de entrada |
-| `Example_NavierStokes_Cavity.py` | Cavidad con tapa móvil a Re = 100, 400 y 1000 con continuación en Re; perfil central frente a Ghia et al. y líneas de corriente |
-| `Example_Polymer_Slit_Die.py` | Fundido de polímero en un dado de rendija: Cross–WLF, calentamiento viscoso y acoplamiento térmico; perfil de velocidad, temperatura, balance de energía y curva caudal–presión |
-| `Example_Capillary_Rheometer.py` | Reómetro capilar simulado (axisimétrico, Cross): tasa de corte aparente, esfuerzo en pared, pérdida de entrada (Bagley), corrección de Rabinowitsch; recupera la curva de viscosidad del modelo |
-| `Example_Cylinder_Vortex_Shedding.py` | Desprendimiento de vórtices detrás de un cilindro (Schäfer–Turek 2D-2, Re = 100): Navier–Stokes transitorio con BDF2, C_D, C_L y Strouhal frente a la referencia (varios minutos) |
-| `Example_Natural_Convection.py` | Cavidad calentada lateralmente (de Vahl Davis), Ra = 1e3–1e6 con continuación: Nusselt, velocidades máximas frente a la referencia, isotermas y líneas de corriente |
-| `Example_Turbulent_Channel.py` | Canal turbulento con Spalart–Allmaras a Re_τ = 180, 395 y 590: u⁺(y⁺) frente a la ley de pared, U_c⁺ frente a la DNS, C_f frente a Dean, viscosidad turbulenta |
+| `examples/Example_Solver_Scaling.py` | Poisson 2D hasta 160 mil incógnitas: PARDISO frente a CG y CG+AMG, factorización reutilizada y exportación a ParaView |
+| `examples/Example_Gmsh_Geometry.py` | Cuarto de anillo (convergencia frente a la solución logarítmica) y placa con orificio, con mallas T3 de gmsh |
+| `examples/Example_Darcy_Transport.py` | Darcy en un medio con una inclusión de baja permeabilidad, conservación del caudal y pluma de un trazador arrastrada por la velocidad de Darcy |
+| `examples/Example_Stokes_Contraction.py` | Contracción plana 4:1 (entrada a un dado) en flujo reptante: conservación del caudal, pérdida de presión de entrada y corrección de Couette en tres mallas, vórtice de esquina |
+| `examples/Example_Viscoelastic_Contraction.py` | Contracción 4:1 de un fluido viscoelástico: corrección de Couette, vórtice de esquina y estimación de Tanner frente a De |
+| `examples/Example_Fit_Rheology.py` | Ajuste a datos de reómetro (CSV de viscosidad y oscilatorio, o sintéticos): curva maestra y WLF, espectro, α de Giesekus y Cross–WLF, con las líneas listas para el modelo |
+| `examples/Example_Viscoelastic_NonIsothermal.py` | El reómetro capilar con calor: desplazamiento de Arrhenius y calentamiento, frente al isotermo (caída, Bagley, aumento de T) |
+| `examples/Example_Die_Swell.py` | Hinchamiento del extrudado a la salida de un dado plano: newtoniano y Giesekus con continuación en Wi |
+| `examples/Ejemplo_Hinchamiento_Extrudado.ipynb` | Cuaderno explicativo del hinchamiento: método, perfiles de velocidad, forma de la superficie, B frente a Wi y relajación de N1 |
+| `examples/Example_Packing.py` | Empaque de una cavidad con un fundido compresible: presión que entra y masa añadida, con pvT y viscosidad ajustadas a medidas |
+| `examples/Example_Viscoelastic_Rheometer.py` | Reómetro capilar con 4 modos Giesekus frente a un fluido inelástico de igual viscosidad: cuánto aporta la elasticidad a la pérdida de entrada |
+| `examples/Example_NavierStokes_Cavity.py` | Cavidad con tapa móvil a Re = 100, 400 y 1000 con continuación en Re; perfil central frente a Ghia et al. y líneas de corriente |
+| `examples/Example_Polymer_Slit_Die.py` | Fundido de polímero en un dado de rendija: Cross–WLF, calentamiento viscoso y acoplamiento térmico; perfil de velocidad, temperatura, balance de energía y curva caudal–presión |
+| `examples/Example_Capillary_Rheometer.py` | Reómetro capilar simulado (axisimétrico, Cross): tasa de corte aparente, esfuerzo en pared, pérdida de entrada (Bagley), corrección de Rabinowitsch; recupera la curva de viscosidad del modelo |
+| `examples/Example_Cylinder_Vortex_Shedding.py` | Desprendimiento de vórtices detrás de un cilindro (Schäfer–Turek 2D-2, Re = 100): Navier–Stokes transitorio con BDF2, C_D, C_L y Strouhal frente a la referencia (varios minutos) |
+| `examples/Example_Natural_Convection.py` | Cavidad calentada lateralmente (de Vahl Davis), Ra = 1e3–1e6 con continuación: Nusselt, velocidades máximas frente a la referencia, isotermas y líneas de corriente |
+| `examples/Example_Turbulent_Channel.py` | Canal turbulento con Spalart–Allmaras a Re_τ = 180, 395 y 590: u⁺(y⁺) frente a la ley de pared, U_c⁺ frente a la DNS, C_f frente a Dean, viscosidad turbulenta |
 | `readMesh.py` | Lectura de información de un archivo `.msh` con gmsh |
 
 Algunos ejemplos abren ventanas de Matplotlib (`plt.show()`). Para ejecutarlos sin ventanas use `MPLBACKEND=Agg`.
