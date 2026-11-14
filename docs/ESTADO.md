@@ -58,7 +58,7 @@
 | Newton iterativo | GMRES + AMG en cada paso de Newton igual a Newton directo con `k(T)` | `Test/test_solver_scaling_output.py` | pasa (1e-7) |
 | Factorización reutilizada | transitorio lineal con una sola factorización (PARDISO y SuperLU); `solve()` repetido solo refactoriza si cambia la matriz | `Test/test_solver_scaling_output.py` | pasa |
 | Análisis de PARDISO reutilizado | Newton con `k(T)`: un solo análisis para todas las tangentes y la misma solución que con una factorización completa por iteración; un patrón nuevo se analiza de nuevo | `Test/test_solver_scaling_output.py` | pasa (1e-12) |
-| Residuo compilado del flujo y refinamiento a demanda | residuo de `FlowTerm` con `jax.numpy` frente al de numpy en Q4, T3, Q9, T6, hex8, tet4, hex27 y tet10 (ley de viscosidad, inercia, SUPG/PSPG, calentamiento, flotación, axisimétrico, paso de tiempo y nivel anterior); transitorio BDF2 con uno y otro; PARDISO sin sus dos pasos fijos de refinamiento frente a con ellos | `Test/test_flow_kernel.py` | pasa (7); residuo 1e-12; transitorio u 1e-9; solución 1e-12 en una matriz mal escalada |
+| Residuo y tangente compilados del flujo y refinamiento a demanda | residuo y tangente (1e-11, con τ en el estado y en otro) de `FlowTerm` con `jax.numpy` frente al de numpy en Q4, T3, Q9, T6, hex8, tet4, hex27 y tet10 (ley de viscosidad, inercia, SUPG/PSPG, calentamiento, flotación, axisimétrico, paso de tiempo y nivel anterior); transitorio BDF2 con uno y otro; PARDISO sin sus dos pasos fijos de refinamiento frente a con ellos | `Test/test_flow_kernel.py` | pasa (7); residuo 1e-12; transitorio u 1e-9; solución 1e-12 en una matriz mal escalada |
 | Salida VTK | `.vtu` (Q4, T3, línea) y serie `.pvd` releídos y comparados con malla y solución | `Test/test_solver_scaling_output.py` | pasa |
 | Newton ante una reacción desbocada | nunca deja NaN: se detiene con aviso y conserva el último estado finito | `Test/test_coupling.py` | pasa |
 | Operadores vectoriales | bloques = escalar ⊗ I, simetría, núcleo de movimientos rígidos, energía de corte puro, divergencia y su traspuesta | `Test/test_fluids_foundation.py` | pasa (1e-12) |
@@ -676,12 +676,14 @@ Lo que sigue pendiente:
 - La salida es VTK XML, en ASCII o binario base64 (`write_vtu(..., binary=True)`, por omisión en mallas 3D); no hay XDMF/HDF5 ni datos por celda.
 - La factorización se reutiliza si la matriz es idéntica. En transitorio no lineal se conserva entre iteraciones y pasos
   (`reuseTangent=True`); en estacionario no lineal cada iteración de Newton refactoriza.
-- **Residuo compilado del flujo (2026-11-13, fase B.1 de [PLAN_RENDIMIENTO_GPU_ML.md](PLAN_RENDIMIENTO_GPU_ML.md)):** el residuo
-  sin tangente de `FlowTerm` sale de `Source/Physics/FlowKernel.py` (las mismas expresiones con `jax.numpy`, compiladas);
-  `FlowTerm.compiled = False` deja la ruta numpy. Y `FactorizedSolver` ya no deja a PARDISO sus dos pasos de refinamiento en cada
-  solución: los hace en la primera de cada factorización y, si cambian la solución menos de 1e-11, las siguientes solo refinan
-  por encima de un residuo de 1e-13 (`refine_on_demand`); decidir solo por el residuo rompía la continuación viscoelástica.
-  Cavidad Re = 400 transitoria con BDF2 (49 923 incógnitas): 42.2 → 27.2 → 18.7 s. La tangente sigue en numpy, así que los estacionarios no cambian.
+- **Residuo y tangente compilados del flujo (2026-11-13 y 14, fase B de [PLAN_RENDIMIENTO_GPU_ML.md](PLAN_RENDIMIENTO_GPU_ML.md)):**
+  el residuo de `FlowTerm` sale de `Source/Physics/FlowKernel.py` (las mismas expresiones con `jax.numpy`, compiladas) y la
+  tangente es su derivada automática por elemento; `FlowTerm.compiled = False` deja la ruta numpy. Cavidad Re = 400: transitoria
+  BDF2 (49 923 incógnitas) 42.2 → 20.8 s, estacionaria 20.2 → 16.2 s; conducto 3D hex27 con Cross 36.9 → 24.4 s; la rendija Q4
+  con esfuerzo recuperado no cambia (dominan sus productos dispersos). `FactorizedSolver` mide el refinamiento de PARDISO en la
+  primera solución de cada factorización y lo omite en las siguientes si no cambia la solución (`refine_on_demand`). **Defecto
+  corregido:** entre los commits `641ad6b` y el del 2026-11-14 ese refinamiento se hacía fuera de PARDISO, y en Taylor–Hood
+  grande (rendija Q9 desde 82 mil incógnitas) Newton no convergía; sin prueba automática todavía.
 - **Análisis de PARDISO reutilizado (2026-11-12, [PLAN_RENDIMIENTO_GPU_ML.md](PLAN_RENDIMIENTO_GPU_ML.md)):** con valores nuevos
   sobre el mismo patrón (cada tangente de Newton) solo se repite la factorización numérica; el análisis era 1.1 de 2.0 s con
   187 mil incógnitas de Q4 y 3.8 de 4.4 s de Q9. La primera solución con un análisis reutilizado se comprueba (residuo > 1e-10 tras

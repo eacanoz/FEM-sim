@@ -126,14 +126,19 @@ Criterio: mismo resultado a 1e-10 en `test_navier_stokes`, `test_non_newtonian`,
   que XLA las funda. `FlowTerm.compiled = False` deja la ruta numpy, que es la referencia.
 - Igual a numpy a 1e-12 en Q4, T3, Q9, T6, hex8, tet4, hex27 y tet10, con las cuatro formas del contexto de paso
   (`Test/test_flow_kernel.py`, 7 pruebas; también `Test/test_modified_newton.py`, que ya comparaba el residuo con el de la tangente).
-- **Refinamiento de PARDISO a demanda** (encontrado al perfilar lo que quedaba): PARDISO hace por omisión dos pasos de
-  refinamiento iterativo en cada solución, sea cual sea el residuo: 39 ms por solución con 50 mil incógnitas frente a 15 ms sin
-  ellos. `FactorizedSolver` los apaga (`iparm(8) = 0`) y los hace él en la **primera solución de cada factorización**, donde
-  mide cuánto cambian la solución; si es menos de 1e-11 de su tamaño, las siguientes soluciones con esa factorización solo
-  refinan por encima de un residuo de 1e-13. Gana el Newton modificado (muchas soluciones por factorización); el Newton
-  estacionario refina siempre, como antes. **El primer intento, decidir solo por el residuo, rompió
-  `test_continuation_in_weissenberg` y `test_sst_flat_plate_closes_its_residual`:** el Couette viscoelástico a Wi = 4 tiene
-  residuos de 1e-14 sin refinar y aun así lo necesita. `FactorizedSolver.refine_on_demand = False` lo desactiva.
+- **Refinamiento de PARDISO a demanda** (encontrado al perfilar lo que quedaba): PARDISO hace dos pasos de su refinamiento
+  iterativo en cada solución (`iparm(8) = 2`), sea cual sea el residuo: 39 ms por solución con 50 mil incógnitas frente a 15 ms sin
+  ellos. `FactorizedSolver` los mide en la **primera solución de cada factorización**: esa solución es la de PARDISO de siempre,
+  y una segunda sin refinar dice cuánto cambia; si es menos de 1e-11 de su tamaño, las siguientes soluciones con esa
+  factorización van sin él y solo refinan por encima de un residuo de 1e-13. Gana el Newton modificado (muchas soluciones por
+  factorización); el Newton estacionario queda como antes. `FactorizedSolver.refine_on_demand = False` lo desactiva.
+  **Dos intentos fallidos antes de este:** (1) decidir solo por el residuo rompió `test_continuation_in_weissenberg` y
+  `test_sst_flat_plate_closes_its_residual` (el Couette viscoelástico a Wi = 4 tiene residuos de 1e-14 sin refinar y aun así
+  lo necesita). (2) Apagar el refinamiento de PARDISO y hacerlo aquí con la misma factorización, **que es lo que entró en el
+  commit `641ad6b`**: en puntos de silla de Taylor–Hood grandes (rendija Q9 desde 82 mil incógnitas) la respuesta sin refinar
+  tiene residuo relativo 1 y ese refinamiento no la repara; Newton no convergía. Las suites no lo vieron (mallas pequeñas);
+  apareció al medir la rendija Taylor–Hood, y se corrigió el 2026-11-14. **Falta una prueba automática de ese caso** (tarda
+  ~15 s): hoy solo lo cubre el perfil manual.
 
 | Cavidad transitoria BDF2 (49 923 incógnitas, 40 pasos) | Tiempo |
 |---|---|
@@ -145,13 +150,36 @@ Criterio: mismo resultado a 1e-10 en `test_navier_stokes`, `test_non_newtonian`,
 El residuo pasa de 57 a 18 ms por evaluación (16 384 Q4); de esos, unos 12 ms son ya el núcleo y el resto reunir y dispersar.
 Los estudios estacionarios apenas cambian: allí pesa la tangente.
 
+**Hecho el 2026-11-14 (B.2, tangente de `FlowTerm`):**
+
+- La tangente es la **derivada automática del residuo compilado**, elemento a elemento (`jacfwd` + `vmap`), respecto a las
+  velocidades, presiones y campos de la ley de viscosidad y de la flotación del elemento. τ y τ_c quedan fuera de la derivada
+  (`stop_gradient`, o el estado de `tau_state`), como en la tangente a mano; con Picard, también la velocidad convectora. La
+  parte no local sigue en scipy: `−(pesos de SUPG y PSPG) @ d(div σ̃)/dx`, con los pesos que devuelve el núcleo y `dσ/dx` de la
+  derivada de `stress`. Por trozos de elementos (30 millones de entradas) para acotar la memoria.
+- Igual a la tangente a mano a 1e-11 (relativo a su mayor entrada) en las mismas configuraciones que el residuo, con τ en el
+  propio estado y en otro (`Test/test_flow_kernel.py`). Las 200 líneas de derivadas a mano de `FlowTerm.contribution` quedan
+  como referencia (`FlowTerm.compiled = False`).
+
+| Estacionario (Newton completo) | Incógnitas | Antes de B.2 | Con B.2 |
+|---|---|---|---|
+| Cavidad Re = 400, Q4 | 111 747 | 20.2 s | 16.2 s |
+| Rendija Cross–WLF + calor, Taylor–Hood Q9 | 186 628 | 23.8 s | 20.8 s |
+| Conducto 3D hex27 con Cross | 44 772 | 36.9 s | 24.4 s |
+| Rendija Cross–WLF + calor, Q4 | 186 628 | 22.1 s | 23.2 s |
+
+La rendija Q4 no gana: de los 1.6 s de cada tangente, lo que pesa son los productos dispersos del esfuerzo recuperado
+(`Q @ dσ/dx`, `W @ d_divs`) y las sumas de matrices, no los núcleos. La cavidad transitoria queda en 20.8 s (18.7 s con el
+refinamiento defectuoso de `641ad6b`).
+
 **Pendiente de la fase B:**
 
-1. **Tangente de `FlowTerm`** (20–35 % del estacionario; en el conducto hex27, 11 de 37 s). Dos vías a medir: las contracciones
-   actuales con `jnp.einsum` compilado (×11 medido en la más cara), o `jacfwd` del residuo por elemento.
-2. `FieldConvectionTerm` (calor y especies convectados), `GradientLawTerm` (turbulencia) y `ConformationTerm` (viscoelástico),
-   residuo primero.
+1. Productos dispersos de la tangente con esfuerzo recuperado (`Q @ dσ/dx`: patrón simbólico una vez) y ensamblaje de patrón
+   fijo: es lo que domina ya la rendija Q4.
+2. `FieldConvectionTerm` (calor y especies convectados: 2.5 de 22 s en la rendija), `GradientLawTerm` (turbulencia) y
+   `ConformationTerm` (viscoelástico).
 3. Reunir y dispersar dentro del núcleo (índices fijos) para quitar las copias entre numpy y JAX.
+4. Retirar las derivadas a mano de `FlowTerm` cuando la ruta compilada lleve un tiempo en uso.
 
 ## Fase C: GPU (RTX 4060, 8 GB)
 
@@ -248,5 +276,7 @@ medido. La fase 1 de inyección (geometría desde CAD) puede ir en paralelo: no 
 
 - **2026-11-12:** revisión y perfiles; fase A, dos primeros cambios (análisis de PARDISO reutilizado, cinemática del flujo), que
   entraron en el commit `a0d5e6e` junto con la fase 1 de inyección.
+- **2026-11-14:** fase B.2, tangente de `FlowTerm` por derivada automática (conducto 3D 36.9 → 24.4 s); corregido el refinamiento
+  de PARDISO de `641ad6b`, que no convergía en Taylor–Hood grande.
 - **2026-11-13:** fase B.1, residuo compilado de `FlowTerm` y refinamiento de PARDISO a demanda: cavidad transitoria 42.2 → 18.7 s.
 - **2026-11-12, segunda tanda:** `recovery` vectorizado; patrón conservado en 3D, caché de JAX y búsqueda de línea descartados.

@@ -801,8 +801,8 @@ class FlowTerm:
     The tangent is exact except for tau and tau_c, which depend on |u| and on mu and are kept frozen (the usual
     practice); 'picard' also leaves out the derivative of the convecting velocity and of the SUPG weight.
 
-    compiled: the residual without its tangent comes from the compiled kernel of FlowKernel.py (the same expressions with
-    jax.numpy); False keeps the numpy path below, its reference.
+    compiled: the residual comes from the compiled kernel of FlowKernel.py (the same expressions with jax.numpy) and the
+    tangent from its automatic derivative; False keeps the numpy path below, their reference.
     """
 
     compiled = True
@@ -903,12 +903,12 @@ class FlowTerm:
 
     def contribution(self, x, tangent=True):
 
-        if not tangent and self.compiled and self.tau_state is None:
-            # The residual alone, which a modified Newton evaluates most: compiled (Source/Physics/FlowKernel.py)
+        if self.compiled:
+            # Compiled residual, and its automatic derivative as the tangent (Source/Physics/FlowKernel.py)
             if self._compiled is None:
                 from Source.Physics.FlowKernel import CompiledFlowResidual
                 self._compiled = CompiledFlowResidual(self)
-            return self._compiled(x), None
+            return self._compiled.tangent(x) if tangent else (self._compiled(x), None)
 
         disc, layout = self.system.disc, self.system.layout
         nel, ngp, nne, dim = disc.B.shape

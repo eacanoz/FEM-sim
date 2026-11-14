@@ -68,9 +68,22 @@ def compiled_matches(model, seed=5, tol=1e-12):
             error = np.max(np.abs(fast - reference))
             assert np.max(np.abs(reference)) > 0.0
             assert error <= tol * max(1.0, np.max(np.abs(reference))), (context and sorted(context), error)
+
+            # The tangent, with tau at another state as the tests against finite differences use it, and at this one
+            for tau_state in (None, old):
+                term.tau_state = tau_state
+                term.compiled = False
+                R_ref, J_ref = term.contribution(x)
+                term.compiled = True
+                R_fast, J_fast = term.contribution(x)
+                size = max(1.0, abs(J_ref).max())
+                assert np.max(np.abs(R_fast - R_ref)) <= tol * max(1.0, np.max(np.abs(R_ref)))
+                assert abs(J_fast - J_ref).max() <= 1e-11 * size, (context and sorted(context), tau_state is None,
+                                                                    abs(J_fast - J_ref).max() / size)
     finally:
         system.time = None
         term.compiled = True
+        term.tau_state = None
 
 
 def build(mesh, dim=2, law=None, inertia=True, heat=False, heating=False, buoyancy=False, axisymmetric=False, supg=False,
