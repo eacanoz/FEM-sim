@@ -1,0 +1,252 @@
+# Plan: rendimiento, GPU, aprendizaje automático e interfaz
+
+Revisión completa del código hecha el 2026-11-12 sobre `test-branch` (commit `0562c81`), con perfiles medidos en esta máquina
+(Ryzen de 12 hilos, 33 GB, RTX 4060 de 8 GB, Windows 11, Python 3.13 de `.venv`). Este documento es el traspaso: qué se midió, qué
+se cambió ya, y las fases siguientes con su criterio para seguir. Convenciones de trabajo: las de `docs/PLAN_INYECCION.md`.
+
+## Veredicto
+
+1. **Lo más rentable sigue estando en la CPU.** A ~190 mil incógnitas el tiempo se reparte entre PARDISO (35–55 %), `einsum`
+   (20–60 % según el estudio) y álgebra dispersa (10–25 %). Dos cambios pequeños, ya hechos, dan ×1.2 a ×1.7; pasar los núcleos de
+   elemento a funciones compiladas (JAX `jit`) da ×10 en esa parte **sin GPU** (medido, abajo).
+2. **GPU: sí, pero por pasos y con criterio de salida.** Con 8 GB de memoria de vídeo y doble precisión, la GPU sirve para los núcleos
+   de elemento, las leyes puntuales y los productos matriz–vector de los solvers iterativos; el solver directo en GPU (cuDSS) es una
+   prueba, no una promesa. El mismo refactor de la fase B (núcleos compilados) es el que deja el código listo para GPU.
+3. **Redes neuronales: no como sustituto del solver.** Una PINN clásica resolviendo el problema directo es más lenta y menos exacta
+   que este código. Lo que sí aporta, y aprovecha lo que ya existe (residuo y tangente exactos, leyes en JAX): gradientes por
+   adjunto para calibrar e invertir, leyes constitutivas neuronales dentro de `PointwiseLaw`, y sustitutos (surrogates) entrenados
+   con el propio simulador para ventanas de proceso.
+4. **Interfaz:** la física es amplia y está bien validada; el uso es lo más mejorable (configuración verbosa, resultados en memoria,
+   sin base de materiales ni archivo de caso). Varias mejoras son baratas y no tocan la numérica.
+
+## Perfil medido (antes de los cambios)
+
+Casos de `prof.py` (guardado fuera del repositorio; reproducible con `cProfile` sobre los ejemplos):
+
+| Caso | Incógnitas | Tiempo | PARDISO | `einsum` | Disperso (productos, sumas, COO) |
+|---|---|---|---|---|---|
+| Rendija Cross–WLF + calor, Q4, Newton estacionario (5 iter.) | 186 628 | 28.3 s | 37 % | 25 % | 21 % |
+| La misma en Taylor–Hood Q9 | 186 628 | 34.9 s | 60 % | 25 % | 5 % |
+| Cavidad Re = 400, Q4 PSPG/SUPG, Newton (7 iter.) | 111 747 | 26.8 s | 43 % | 20 % | 12 % |
+| Cavidad transitoria BDF2, 40 pasos, Newton modificado | 49 923 | 71.3 s | 19 % | **59 %** | 1 % |
+
+Qué había dentro:
+
+- **PARDISO repetía el análisis simbólico** (reordenación y factorización simbólica, fase 11) en cada iteración de Newton, aunque el
+  patrón de la tangente no cambia: 1.1 de 2.0 s por factorización en Q4 y **3.8 de 4.4 s en Taylor–Hood**.
+- **El residuo del flujo calculaba la cinemática tres veces** (`FlowTerm._kinematics` en `contribution`, en `viscosity` y para `|u|`
+  de τ), y con el bucle genérico de `einsum`: 35 % del transitorio.
+- `einsum` de tres operandos sin BLAS: `np.matmul` hace lo mismo 2–9 veces más rápido en las contracciones del residuo (Q4, Q9 y
+  hex27 medidos); con 12 hilos sobre trozos de elementos, ×5; **con `jax.jit` en CPU, ×11–12** en la contracción más cara de la
+  tangente (`eg,egib,egabjc->eiajc`: 0.110 → 0.009 s en Q4, 1.79 → 0.16 s en hex27).
+- `Q @ dσ/dx` (esfuerzo recuperado de la PSPG con ley de viscosidad): 11–13 % de la rendija Q4, un producto disperso por iteración.
+- `Discretization.recovery`: bucle de Python con una pseudoinversa por nodo, 3.3 s con 37 mil nodos (una vez por malla).
+
+## Fase A: CPU, cambios pequeños
+
+**Hecho el 2026-11-12:**
+
+- `FactorizedSolver` (`Source/Simulation/DirectSolver.py`) reutiliza el análisis de PARDISO cuando la matriz nueva tiene el mismo
+  patrón (solo fase 22). El emparejamiento ponderado del análisis sale de los valores de su matriz, así que la primera solución con
+  cada análisis reutilizado se comprueba: residuo por encima de 1e-10 tras refinar → factorización completa; si esta mejora 10 veces,
+  el solver deja de reutilizar; si no, la matriz es mal condicionada de por sí y se sigue reutilizando. `reuse_analysis = False` lo
+  desactiva; `n_analyses` cuenta los análisis. De paso: los índices se ordenan antes de comparar matrices (sin ordenar, una matriz
+  igual parecía nueva).
+- `FlowTerm`: la cinemática se calcula una vez por evaluación y con `matmul`; también `Discretization.interpolate`, `grad p` y los
+  términos de convección y SUPG del residuo.
+
+| Caso | Antes | Después | |
+|---|---|---|---|
+| Rendija Q4 | 28.3 s | 22.1 s | ×1.28 |
+| Rendija Taylor–Hood | 34.9 s | 23.8 s | ×1.47 |
+| Cavidad estacionaria | 26.8 s | 20.2 s | ×1.33 |
+| Cavidad transitoria | 71.3 s | 41.6 s | ×1.71 |
+
+**Hecho el 2026-11-12, segunda tanda:**
+
+- **`Discretization.recovery` vectorizado:** parches por productos de matrices de incidencia y pseudoinversas por lotes de igual
+  tamaño. Resultado idéntico bit a bit en Q4, T3, Q9, T6, hex8, tet4, axisimétrico y una tira sin nodos interiores; 2.68 → 0.33 s
+  con 37 mil nodos.
+
+**Probado y descartado:**
+
+- **Conservar el análisis de PARDISO cuando el patrón cambia** (escribir la matriz nueva sobre el patrón analizado con ceros
+  explícitos, o analizar sobre la unión). En 3D la tangente pierde o gana entradas entre iteraciones (scipy elimina las que se
+  cancelan) y el análisis se repite. Funcionaba (conducto hex27 con Cross, 44 772 incógnitas: 7 análisis → 3, 36.9 → 32.8 s), pero
+  **rompió dos pruebas**: `test_continuation_in_weissenberg` (Couette a Wi = 4: Newton sin converger en 200 iteraciones) y
+  `test_turbulence_on_quadratic_elements`. Los residuos lineales eran buenos (1e-15), así que no es un fallo de la solución sino
+  de su error en sistemas mal condicionados: el escalado y el emparejamiento del análisis salen de los valores de la primera
+  matriz (el estado de reposo), y aplicados a tangentes muy distintas cambian el redondeo lo bastante para sacar a Newton de su
+  camino. El residuo no lo detecta. Retirado. **Aviso:** el mismo riesgo existe en principio con la reutilización entre patrones
+  idénticos que sí está activa (las 47 suites pasan con ella); si un caso mal condicionado se comporta distinto, probar
+  `FactorizedSolver.reuse_analysis = False`. Una vía sin ese riesgo: análisis sin escalado ni emparejamiento (depende solo del
+  patrón), que habría que validar caso a caso porque cambia las trayectorias ya validadas.
+
+- **Caché de compilación de JAX en disco.** El 1.4 s por ley del primer perfil era un arranque en frío: en caliente compilar una
+  ley cuesta ~0.05 s, y con `jax_compilation_cache_dir` JAX no escribió ninguna entrada en este equipo (Windows, CPU). Sin ganancia.
+- **Búsqueda de línea con solo el residuo** en Newton estacionario: cuando el paso completo se acepta (lo habitual) habría que
+  ensamblar después la tangente en el mismo punto, un 20 % más por iteración; solo gana si hay muchos retrocesos.
+
+**Pendiente de la fase A** (en orden de rendimiento esperado):
+
+1. `Q @ dσ/dx` (11–13 % de la rendija Q4): producto con el patrón simbólico calculado una vez, o ensamblado por elementos del parche.
+2. **Patrón disperso fijo por término** (`np.bincount` sobre posiciones precalculadas, como `HeleShaw._scatter`): 5–8 % directo.
+3. Historia del transitorio: hoy es una matriz densa (incógnitas × pasos) en memoria. Guardar cada n pasos o volcar a disco.
+4. Barridos de parámetros en paralelo por procesos (ventana de proceso, caudal–presión): 12 hilos sin tocar el solver.
+
+En 3D pesa tanto la tangente como el solver: en el conducto hex27, `einsum` son 11 de 37 s (la contracción
+`eg,egib,egabjc->eiajc`, 4.8 s). Eso es la fase B.
+
+Criterio para cerrar: las 47 suites pasan y los cuatro casos de la tabla no empeoran.
+
+## Fase B: núcleos compilados (el paso que habilita la GPU)
+
+Hoy `FlowTerm`, `FieldConvectionTerm`, `GradientLawTerm` y `ConformationTerm` son cadenas de `einsum` de numpy. Propuesta: cada
+término expone un **núcleo de elemento** puro, `(x_e, geometría_e, parámetros) → (R_e, K_e)`, escrito en `jax.numpy` y compilado con
+`jit(vmap(...))`; el ensamblaje (dispersión con patrón fijo) queda en numpy/scipy.
+
+- Ganancia medida en CPU: ×10 en las contracciones. Sobre el transitorio (lo que queda de `einsum` tras la fase A, ~15–25 %) y sobre
+  la tangente estacionaria (20–35 %).
+- La tangente puede salir de `jacfwd` del residuo del elemento: menos código que mantener (hoy `FlowTerm.contribution` son 200 líneas
+  de derivadas a mano) y sirve para comprobar la tangente manual. Riesgo: `jacfwd` de un hex27 con 19 incógnitas por nodo es una
+  matriz de 513 × 513 por elemento; hay que medir memoria y trocear por bloques de elementos (`CHUNK_ENTRIES` ya existe).
+- Hacerlo por término, empezando por el residuo de `FlowTerm` (lo que domina el Newton modificado), con la versión numpy como
+  referencia en las pruebas (igualdad a 1e-12) hasta retirarla.
+- τ congelado, el residuo del nivel anterior y el contexto de paso (`System.time`) pasan como argumentos del núcleo.
+
+Criterio: mismo resultado a 1e-10 en `test_navier_stokes`, `test_non_newtonian`, `test_transient_flow`, `test_3d_flow` y al menos
+×2 total en la cavidad transitoria y ×1.3 en la rendija.
+
+**Hecho el 2026-11-13 (B.1, residuo de `FlowTerm`):**
+
+- `Source/Physics/FlowKernel.py`: el residuo sin tangente de `FlowTerm` con `jax.numpy`, compilado una vez por configuración
+  (ley de viscosidad, inercia, SUPG, PSPG, LSIC, calentamiento, flotación, axisimétrico, contexto de paso). Solo la parte local:
+  lo que acopla elementos (`V @ x`, `Q @ σ`) y el residuo del nivel anterior entran como datos en los puntos de Gauss, y la
+  dispersión es un `bincount`. No es por elemento con `vmap`, sino las mismas expresiones sobre todos los elementos: basta para
+  que XLA las funda. `FlowTerm.compiled = False` deja la ruta numpy, que es la referencia.
+- Igual a numpy a 1e-12 en Q4, T3, Q9, T6, hex8, tet4, hex27 y tet10, con las cuatro formas del contexto de paso
+  (`Test/test_flow_kernel.py`, 7 pruebas; también `Test/test_modified_newton.py`, que ya comparaba el residuo con el de la tangente).
+- **Refinamiento de PARDISO a demanda** (encontrado al perfilar lo que quedaba): PARDISO hace por omisión dos pasos de
+  refinamiento iterativo en cada solución, sea cual sea el residuo: 39 ms por solución con 50 mil incógnitas frente a 15 ms sin
+  ellos. `FactorizedSolver` los apaga (`iparm(8) = 0`) y los hace él en la **primera solución de cada factorización**, donde
+  mide cuánto cambian la solución; si es menos de 1e-11 de su tamaño, las siguientes soluciones con esa factorización solo
+  refinan por encima de un residuo de 1e-13. Gana el Newton modificado (muchas soluciones por factorización); el Newton
+  estacionario refina siempre, como antes. **El primer intento, decidir solo por el residuo, rompió
+  `test_continuation_in_weissenberg` y `test_sst_flat_plate_closes_its_residual`:** el Couette viscoelástico a Wi = 4 tiene
+  residuos de 1e-14 sin refinar y aun así lo necesita. `FactorizedSolver.refine_on_demand = False` lo desactiva.
+
+| Cavidad transitoria BDF2 (49 923 incógnitas, 40 pasos) | Tiempo |
+|---|---|
+| Inicio de la revisión | 71.3 s |
+| Fase A (cinemática una vez, `matmul`) | 42.2 s |
+| Residuo compilado | 27.2 s |
+| + refinamiento a demanda | 18.7 s |
+
+El residuo pasa de 57 a 18 ms por evaluación (16 384 Q4); de esos, unos 12 ms son ya el núcleo y el resto reunir y dispersar.
+Los estudios estacionarios apenas cambian: allí pesa la tangente.
+
+**Pendiente de la fase B:**
+
+1. **Tangente de `FlowTerm`** (20–35 % del estacionario; en el conducto hex27, 11 de 37 s). Dos vías a medir: las contracciones
+   actuales con `jnp.einsum` compilado (×11 medido en la más cara), o `jacfwd` del residuo por elemento.
+2. `FieldConvectionTerm` (calor y especies convectados), `GradientLawTerm` (turbulencia) y `ConformationTerm` (viscoelástico),
+   residuo primero.
+3. Reunir y dispersar dentro del núcleo (índices fijos) para quitar las copias entre numpy y JAX.
+
+## Fase C: GPU (RTX 4060, 8 GB)
+
+Limitaciones que conviene tener claras antes de invertir:
+
+- **JAX con CUDA no se distribuye para Windows nativo** (los paquetes con GPU son de Linux): para usar los núcleos de la fase B en la
+  GPU hace falta WSL2 con Ubuntu (hoy solo está la distribución de Docker Desktop). **A confirmar al empezar la fase.** CuPy
+  (`cupy-cuda12x`/`13x`) y PyTorch sí publican ruedas; no se ha comprobado que instalen con Python 3.13 en este equipo.
+- **Doble precisión:** las tarjetas de consumo rinden mucho menos en `float64` que en `float32`; el código necesita `float64` en el
+  residuo. Hay que medir, y considerar precisión mixta (precondicionador en simple, residuo en doble).
+- **8 GB:** una factorización directa de 190 mil incógnitas 2D ya ocupa varios GB en CPU. El solver directo en GPU queda para
+  mallas medianas; las grandes van por Krylov.
+
+Pasos, cada uno con una medida que decide si se sigue:
+
+| Paso | Qué | Sigue si |
+|---|---|---|
+| C0 | Entorno: WSL2 + `jax[cuda12]` (o CuPy nativo). Reproducir `einsum_par.py` en GPU, en `float64` | ≥ ×5 frente a `jit` en CPU con ≥ 50 mil elementos |
+| C1 | Núcleos de la fase B y leyes puntuales en GPU; ensamblaje en CPU | el tiempo de traer `K_e` a la CPU no se come la ganancia |
+| C2 | Krylov en GPU: `SpMV` y precondicionador (Jacobi/Chebyshev; jerarquía de pyamg copiada a la GPU) para CG + AMG escalar 3D y GMRES + bloques | más rápido que la CPU desde 300 mil incógnitas |
+| C3 | Solver directo en GPU (NVIDIA cuDSS, `nvidia-cudss-cu12` existe en PyPI) frente a PARDISO | más rápido y cabe en 8 GB en los casos de la tabla |
+| C4 | Hele-Shaw: el núcleo de fluidez y el perfil T(z) por nodos (ya son JAX) en GPU | reduce el tiempo de la pieza de 16 mil nodos (947 s) |
+
+Lo que no se propone: MPI ni varias GPU (fuera de alcance, como en `PLAN_INYECCION.md`), ni reescribir en otro lenguaje.
+
+## Fase D: diferenciable y aprendizaje automático
+
+Ordenado por valor para procesamiento de polímeros y por lo cerca que está del código actual:
+
+1. **Sensibilidades por adjunto discreto.** Con la tangente convergida `J` ya factorizada, el gradiente de una cantidad de interés
+   `q(x, θ)` respecto a parámetros `θ` (Cross–WLF, Tait, caudal, temperatura de pared) cuesta una solución con `Jᵀ` más `∂R/∂θ`, que
+   sale de `jax.grad` sobre las leyes. Sirve para calibrar con medidas de proceso (presión en cavidad, caída de un dado) y para
+   optimizar; es más exacto y mucho más barato que una PINN inversa. Prueba: gradiente frente a diferencias finitas.
+2. **Leyes constitutivas neuronales.** `PointwiseLaw` acepta cualquier función JAX: una red pequeña (viscosidad monótona en γ̇,
+   pvT, cinética) entra sin tocar el ensamblaje y con jacobiano automático. `Fitting.py` ganaría `fit_neural_viscosity` con las
+   restricciones físicas en la arquitectura. Riesgo bajo; útil cuando Cross–WLF no ajusta (cargas, fluencia).
+3. **Sustitutos entrenados con el simulador.** Barridos en paralelo (fase A.7) → base de datos → modelo reducido (POD + regresión
+   gaussiana primero; DeepONet o red de grafos sobre la malla después) que da presión de llenado, tiempos de llenado y contracción en
+   milisegundos para la ventana de proceso (fase 7 de `PLAN_INYECCION.md`). Siempre con error medido frente al solver en casos no
+   vistos.
+4. **Entrenamiento informado por la física con el residuo de elementos finitos.** `System.residual(x)` como función de pérdida de una
+   red que predice el campo nodal (sin etiquetas), o como término de regularización del sustituto del punto 3. Es la versión de
+   "PINN" que aprovecha la forma débil, las condiciones de contorno y la estabilización ya validadas. Requiere la fase B (residuo
+   diferenciable de extremo a extremo en JAX).
+5. **Arranque de Newton aprendido:** el sustituto da el estado inicial y Newton lo corrige; el resultado conserva la exactitud del
+   solver.
+6. **PINN clásica (colocación, sin malla):** solo como demostración en un caso 1D/2D pequeño para comparar coste y error con el
+   código; no se recomienda como vía de trabajo.
+
+Dependencias nuevas: `optax` (y `equinox` o `flax`) sobre JAX, sin PyTorch, para no tener dos pilas.
+
+## Fase E: interfaz y uso
+
+Observaciones de la revisión:
+
+- `solverConfiguration(Study=StudyType..., Type=ProblemType..., Method=SolverType..., Solver=DirectSolvers...)`: cuatro enumerados
+  para lo habitual. `Type` lo sabe el sistema (`System.is_linear`) y `Method='auto'` ya elige solver.
+- Las condiciones se guardan en objetos `Node` (`node.BC`) y `System.add_boundary_conditions` recorre nodos × campos en Python; la
+  malla como lista de objetos pesa en mallas de 10⁵–10⁶ nodos.
+- `Source` no es un paquete instalable; hay ~45 scripts y cuadernos en la raíz; el encabezado del `README` aún describe un
+  simulador de calor 1D/2D.
+- Cada `import Source` crea un archivo en `Logs/` del directorio actual.
+- Resultados: `model.sol` en memoria; sin puntos de control ni reanudación; el posproceso de inyección vive en un cuaderno.
+- Nombres mezclados (`addBC_VelocityEdges` vale para caras 3D, `miu`, español e inglés).
+
+Propuesta, de menos a más esfuerzo:
+
+1. `model.solve()` sin configuración: estudio estacionario, tipo detectado, solver `auto`. `solverConfiguration` acepta cadenas
+   (`study='transient'`, `scheme='BDF2'`) y conserva los enumerados.
+2. Registro: un solo archivo por sesión creado al primer `solve()`, carpeta configurable, nivel de consola configurable.
+3. `pyproject.toml` (paquete `femsim` con `Source` como alias), ejemplos a `examples/`, `README` al día.
+4. Monitores y parada: `on_step`/`on_iteration` en todos los solvers (hoy solo en Hele-Shaw), tabla de convergencia y sondas
+   (presión en un punto, caudal) durante el cálculo; puntos de control (`.npz`) y reanudación del transitorio.
+5. Base de materiales en JSON (reología, pvT, térmicas, cinética; fase 6 de inyección) y `material.from_file`.
+6. Archivo de caso (YAML/TOML) + línea de órdenes (`python -m femsim caso.toml`) para los flujos típicos: dado, reómetro,
+   llenado–empaque; es también el formato de los barridos de la fase D.3.
+7. Asistentes por aplicación (clases finas sobre `Model`): `SlitDie`, `CapillaryRheometer`, `InjectionCase` con sus condiciones,
+   mallas y salidas típicas (curva del dado, corrección de Bagley, isócronas, fuerza de cierre).
+8. Visor: `pyvista` opcional para 3D y superficies (hoy matplotlib y VTK para ParaView); informe HTML de un caso.
+9. Malla en arrays (coordenadas, conectividad, grupos) con los objetos `Node`/`Element` como vista de compatibilidad.
+
+## Físicas: robustez y especialización
+
+Lo que la revisión confirma como siguiente (ya inventariado en `ESTADO.md` y `PLAN_INYECCION.md`): orientación de fibras, molde y
+ciclo, mecánica de sólidos para el alabeo, `rho Cp(T)`, llenado compresible por lotes. Nada de esto depende de la GPU; sí se
+beneficia de las fases A y B.
+
+## Orden recomendado
+
+A (resto) → B (residuo de `FlowTerm`) → E.1–E.3 (baratas) → D.1 y D.2 → C0 (medir la GPU antes de comprometerse) → resto según lo
+medido. La fase 1 de inyección (geometría desde CAD) puede ir en paralelo: no toca los mismos archivos.
+
+## Avance
+
+- **2026-11-12:** revisión y perfiles; fase A, dos primeros cambios (análisis de PARDISO reutilizado, cinemática del flujo), que
+  entraron en el commit `a0d5e6e` junto con la fase 1 de inyección.
+- **2026-11-13:** fase B.1, residuo compilado de `FlowTerm` y refinamiento de PARDISO a demanda: cavidad transitoria 42.2 → 18.7 s.
+- **2026-11-12, segunda tanda:** `recovery` vectorizado; patrón conservado en 3D, caché de JAX y búsqueda de línea descartados.

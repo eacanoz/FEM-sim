@@ -16,6 +16,16 @@ from Source.logger_config import sim_logger
 # BROKEN_ABOVE is loose on purpose: ill-conditioned systems (viscoelastic, 1e-7 with PARDISO and SuperLU alike) must not refactorize.
 REFINE_ABOVE = 1e-10
 BROKEN_ABOVE = 1e-6
+# By default PARDISO runs two steps of iterative refinement in every solve, whatever the residual: 39 ms instead of 15 ms per solve
+# with 50 k unknowns, where the first answer already has a residual of 5e-14 (a modified Newton solves ten times per factorization).
+# FactorizedSolver turns them off (iparm 8 = 0: PARDISO then refines only after perturbed pivots) and runs the two steps itself in
+# the first solve of every factorization, where it measures what they change. If that is below LIGHT_BELOW of the solution, the
+# matrix is well conditioned and the later solves with that factorization refine only above a residual of POLISH_ABOVE. The
+# residual alone does not tell: a viscoelastic Couette at Wi = 4 has residuals of 1e-14 before refining and still needs it (without
+# it Newton did not converge in 200 iterations). Steady Newton, one solve per factorization, always refines, as before.
+POLISH_ABOVE = 1e-13
+LIGHT_BELOW = 1e-11
+_ON_DEMAND = {1: 1, 2: 2, 8: 0, 10: 13, 11: 1, 13: 1}       # the defaults of a nonsymmetric matrix, without the fixed refinement
 _NO_MATCHING = {1: 1, 2: 2, 8: 2, 10: 13, 11: 0, 13: 0}     # iparm (1-based): user values, nested dissection, no scaling/matching
 
 
@@ -24,13 +34,14 @@ def _relative_residual(A, x, b):
     return np.linalg.norm(b - A @ x) / norm if norm > 0 else np.linalg.norm(A @ x)
 
 
-def _refined(solver, A, b, x):
+def _refined(solver, A, b, x, above=REFINE_ABOVE, steps=3):
 
-    """Up to 3 steps of iterative refinement with the factorization of `solver`; returns the best (x, residual)."""
+    """Up to `steps` steps of iterative refinement with the factorization of `solver`, while the relative residual is above
+    `above`; returns the best (x, residual)."""
 
     best, residual = x, _relative_residual(A, x, b)
-    for _ in range(3):
-        if not residual > REFINE_ABOVE:
+    for _ in range(steps):
+        if not residual > above:
             break
         x = best + solver.solve(A, b - A @ best)
         r = _relative_residual(A, x, b)
@@ -50,7 +61,7 @@ def no_matching_pardiso():
     return solver
 
 
-def checked_pardiso(A, b, solver, retry=None, factorized=True):
+def checked_pardiso(A, b, solver, retry=None, factorized=True, above=REFINE_ABOVE, steps=3):
 
     """Solves A x = b with the PARDISO `solver` (already factorized if `factorized`), checking the residual: refinement, then a
     factorization without the matching (in `retry`, a no_matching_pardiso() made if None), used only if it gives a good residual.
@@ -59,7 +70,7 @@ def checked_pardiso(A, b, solver, retry=None, factorized=True):
     A = A.tocsr()
     if not factorized:
         solver.factorize(A)
-    x, residual = _refined(solver, A, b, solver.solve(A, b))
+    x, residual = _refined(solver, A, b, solver.solve(A, b), above, steps)
     if not residual > BROKEN_ABOVE:
         return x, 'default', retry
 
@@ -130,6 +141,7 @@ class FactorizedSolver:
     """
 
     reuse_analysis = True
+    refine_on_demand = True      # see POLISH_ABOVE; False keeps the two refinement steps PARDISO runs in every solve
 
     def __init__(self, kind=DirectSolvers.PARDISO):
 
@@ -142,10 +154,35 @@ class FactorizedSolver:
         self._A = None
         self._lu = None
         self._pardiso = pypardiso.PyPardisoSolver() if kind == DirectSolvers.PARDISO else None
+        self._light = False          # the current factorization needs no refinement: measured in its first solve
+        self._measured = True
+        if self._pardiso is not None and self.refine_on_demand:
+            for k, v in _ON_DEMAND.items():
+                self._pardiso.set_iparm(k, v)
+            self._measured = False
         self._retry = None           # PARDISO without the weighted matching, made only if a solve needs it (checked_pardiso)
         self._mode = 'default'       # which factorization of the current matrix is trusted: 'default' or 'retry'
         self._reused = False         # the current factorization uses the analysis of an earlier matrix
         self._reuse_trusted = False  # a full factorization did not improve on a reused analysis: residuals up to BROKEN_ABOVE pass
+
+    @property
+    def _polish(self):
+
+        """(residual above which a solve is refined, steps) for the current factorization."""
+
+        if not self.refine_on_demand:
+            return REFINE_ABOVE, 3            # PARDISO refines by itself
+        return (POLISH_ABOVE, 2) if self._light else (0.0, 2)
+
+    def _measure(self, A, b, x):
+
+        """After the first solve of a factorization: do its two refinement steps change the solution?"""
+
+        if self._measured or self._mode != 'default':
+            return
+        self._measured = True
+        size = np.linalg.norm(x)
+        self._light = bool(size > 0 and np.linalg.norm(x - self._pardiso.solve(A, b)) < LIGHT_BELOW * size)
 
     def _factorize_pardiso(self, A, previous):
 
@@ -165,7 +202,7 @@ class FactorizedSolver:
 
         """Solution with a reused analysis if its residual is good; otherwise None, with A factorized again in full."""
 
-        x, residual = _refined(self._pardiso, A, b, self._pardiso.solve(A, b))
+        x, residual = _refined(self._pardiso, A, b, self._pardiso.solve(A, b), *self._polish)
         if not residual > REFINE_ABOVE or (self._reuse_trusted and not residual > BROKEN_ABOVE):
             return x
 
@@ -191,6 +228,7 @@ class FactorizedSolver:
         if A is not self._A and not _same_sparse(A, self._A):
 
             self.n_factorizations += 1
+            self._light, self._measured = False, not self.refine_on_demand
             previous, self._A = self._A, A
 
             if self.kind == DirectSolvers.PARDISO:
@@ -208,8 +246,10 @@ class FactorizedSolver:
             if self._reused:
                 x = self._solve_reused(A, b)
                 if x is not None:
+                    self._measure(A, b, x)
                     return x
-            x, self._mode, self._retry = checked_pardiso(A, b, self._pardiso, self._retry)
+            x, self._mode, self._retry = checked_pardiso(A, b, self._pardiso, self._retry, True, *self._polish)
+            self._measure(A, b, x)
             return x
 
         return self._lu.solve(b)

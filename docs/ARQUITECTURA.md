@@ -194,6 +194,10 @@ El plan completo de fluidos está en [PLAN_FLUIDOS.md](PLAN_FLUIDOS.md).
   `FieldConvectionTerm` (`Physics.py`): convección monolítica por la velocidad calculada, con SUPG y bloques cruzados;
   `CoupledPhysics.setVelocity/setStabilization` omiten la parte de flujo (`computes_velocity = True`).
   `derived_fields` de `ff`: `shear_rate` y, con ley, `viscosity`.
+- **Residuo compilado (2026-11-13):** `FlowTerm.contribution(x, tangent=False)` delega en `Physics/FlowKernel.py`
+  (`CompiledFlowResidual`): parte local con `jax.numpy` compilada por configuración; `V @ x`, `Q @ σ` y el nivel anterior entran
+  como datos. La ruta numpy de `contribution` es la referencia (`FlowTerm.compiled = False`) y sigue dando la tangente: un cambio
+  en el residuo de `FlowTerm` hay que hacerlo en los dos sitios, y `Test/test_flow_kernel.py` los compara.
 - **Ya está (Etapa 13):** `Model(..., axisymmetric=True)` → `Discretization(axisymmetric=True)`: plano meridiano con
   `x = r`, `y = z` y el eje en `x = 0`. `detJw` y las medidas de faceta llevan el factor `r` (sin `2π`), así que todos los
   operadores escalares (calor, especies, Darcy, BC, convección) integran sobre el volumen de revolución sin cambios;

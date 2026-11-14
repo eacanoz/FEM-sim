@@ -800,7 +800,12 @@ class FlowTerm:
 
     The tangent is exact except for tau and tau_c, which depend on |u| and on mu and are kept frozen (the usual
     practice); 'picard' also leaves out the derivative of the convecting velocity and of the SUPG weight.
+
+    compiled: the residual without its tangent comes from the compiled kernel of FlowKernel.py (the same expressions with
+    jax.numpy); False keeps the numpy path below, its reference.
     """
+
+    compiled = True
 
     def __init__(self, system, flow, f, V=None, Q=None):
 
@@ -820,8 +825,10 @@ class FlowTerm:
         self.tau_state = None        # evaluate tau (|u| and mu) at this state instead of x (to test the tangent)
 
         self.law = None
+        self.viscosity_law = flow.viscosity_law      # the jax function itself, for the compiled residual
         if flow.viscosity_law is not None:
             self.law = _pointwise_viscosity(flow.viscosity_law, len(self.fields))
+        self._compiled = None
 
         layout = system.layout
         self.V = None
@@ -895,6 +902,13 @@ class FlowTerm:
     # ----- residual and tangent -----
 
     def contribution(self, x, tangent=True):
+
+        if not tangent and self.compiled and self.tau_state is None:
+            # The residual alone, which a modified Newton evaluates most: compiled (Source/Physics/FlowKernel.py)
+            if self._compiled is None:
+                from Source.Physics.FlowKernel import CompiledFlowResidual
+                self._compiled = CompiledFlowResidual(self)
+            return self._compiled(x), None
 
         disc, layout = self.system.disc, self.system.layout
         nel, ngp, nne, dim = disc.B.shape
