@@ -135,10 +135,19 @@ Criterio: mismo resultado a 1e-10 en `test_navier_stokes`, `test_non_newtonian`,
   **Dos intentos fallidos antes de este:** (1) decidir solo por el residuo rompió `test_continuation_in_weissenberg` y
   `test_sst_flat_plate_closes_its_residual` (el Couette viscoelástico a Wi = 4 tiene residuos de 1e-14 sin refinar y aun así
   lo necesita). (2) Apagar el refinamiento de PARDISO y hacerlo aquí con la misma factorización, **que es lo que entró en el
-  commit `641ad6b`**: en puntos de silla de Taylor–Hood grandes (rendija Q9 desde 82 mil incógnitas) la respuesta sin refinar
-  tiene residuo relativo 1 y ese refinamiento no la repara; Newton no convergía. Las suites no lo vieron (mallas pequeñas);
-  apareció al medir la rendija Taylor–Hood, y se corrigió el 2026-11-14. **Falta una prueba automática de ese caso** (tarda
-  ~15 s): hoy solo lo cubre el perfil manual.
+  commit `641ad6b`**: en puntos de silla de Taylor–Hood la respuesta sin refinar llega a tener residuo relativo 1, que ese
+  refinamiento no repara. Corregido el 2026-11-14 (`6a9de71`).
+- **Estancamiento de Newton en el piso de redondeo (2026-11-14, defecto anterior a esta revisión):** al buscar una prueba para
+  lo anterior apareció la causa de fondo. En la rendija Taylor–Hood con calor, el arranque newtoniano (lineal en u y p) se
+  resuelve en una iteración, pero las soluciones lineales del punto de silla dejan el residuo en 3e-9 del inicial, por encima
+  de la tolerancia relativa (1e-10). Newton seguía entonces con el paso mínimo de la búsqueda de línea (1/1024, una docena
+  de ensamblajes cada vez) hasta que un paso completo pasaba por azar: **de 2 a 175 iteraciones de una ejecución a otra** (PARDISO
+  en paralelo no es reproducible al redondeo), entre 5 y 50 s para 21 mil incógnitas. Con el código anterior a la revisión, igual
+  (3 a 24 en nueve ejecuciones). Era dentro de ese estancamiento donde el refinamiento de `641ad6b` no terminaba nunca; desde un
+  arranque limpio (`Type=linear`) aquel solver también convergía, más despacio (23 s frente a 9 con 83 mil incógnitas).
+  `newtonSolver` da ahora por convergido el caso en que la búsqueda de línea no encuentra descenso dos iteraciones seguidas con
+  un residuo ya por debajo de 1e-6 del inicial (o de 1e-7): 2 a 4 iteraciones en ocho ejecuciones.
+  `test_newton_stops_at_the_round_off_floor` lo cubre (sin el cambio falla dos de cada tres veces: 18 y 79 iteraciones).
 
 | Cavidad transitoria BDF2 (49 923 incógnitas, 40 pasos) | Tiempo |
 |---|---|
@@ -276,6 +285,7 @@ medido. La fase 1 de inyección (geometría desde CAD) puede ir en paralelo: no 
 
 - **2026-11-12:** revisión y perfiles; fase A, dos primeros cambios (análisis de PARDISO reutilizado, cinemática del flujo), que
   entraron en el commit `a0d5e6e` junto con la fase 1 de inyección.
+- **2026-11-14:** Newton se para en el piso de redondeo (el arranque Taylor–Hood tardaba de 2 a 175 iteraciones según la ejecución).
 - **2026-11-14:** fase B.2, tangente de `FlowTerm` por derivada automática (conducto 3D 36.9 → 24.4 s); corregido el refinamiento
   de PARDISO de `641ad6b`, que no convergía en Taylor–Hood grande.
 - **2026-11-13:** fase B.1, residuo compilado de `FlowTerm` y refinamiento de PARDISO a demanda: cavidad transitoria 42.2 → 18.7 s.

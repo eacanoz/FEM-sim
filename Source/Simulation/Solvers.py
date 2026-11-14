@@ -619,7 +619,9 @@ class modelSolver():
 
         Stops when ||R|| <= rtol * ||R0|| or ||R|| <= atol (scaled norms), or when a full Newton step moves the unknowns with
         an equation of their own by less than 1e-10 of the size of their field (System.negligible_update): a state that
-        starts near the solution is at the round-off floor of the residual already. The residual and the tangent come from
+        starts near the solution is at the round-off floor of the residual already. It also stops, as converged, when the
+        line search finds no descent in two consecutive iterations with a residual already below 1e-6 of the initial one
+        (or 1e-7): the floor of the linear solves, which the residual cannot cross. The residual and the tangent come from
         the model; trial states are written to the field, and the last accepted state is kept.
         """
 
@@ -658,6 +660,7 @@ class modelSolver():
         iteration = 0
         diverged = False
         settled = False
+        stalled = 0                    # consecutive iterations whose line search found no descent
 
         while norm_R > atol and norm_R > rtol * norm_R0 and iteration < max_iterations and not settled:
 
@@ -690,9 +693,17 @@ class modelSolver():
                 break
 
             settled = lam == 1.0 and system.negligible_update(x_try - x, x)  # what moved: a clipped dof asks for more, in vain
+            stalled = stalled + 1 if not norm_try < (1.0 - 1e-4 * lam) * norm_R else 0
             x, J, R, norm_R = x_try, J_try, R_try, norm_try
 
             sim_logger.info(f"| {iteration:^6} | {norm_R:^15.4e} | {norm_R / norm_R0:^15.4e} | {lam:^12.4f}")
+
+            if stalled >= 2 and (norm_R <= 1e-6 * norm_R0 or norm_R <= 1e-7):
+                # No step length lowers a residual that is already small, twice in a row: the residual is the round-off of the
+                # linear solves (Taylor-Hood saddle points leave 1e-9 relative, above rtol). Going on repeats the smallest
+                # step, with a dozen assemblies each, until one full step happens to pass: 2 to 175 iterations, run to run.
+                sim_logger.info("The residual stays at its round-off floor: no step lowers it. Taken as converged.")
+                settled = True
 
         sim_logger.info(separator)
 

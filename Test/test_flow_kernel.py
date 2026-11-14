@@ -227,11 +227,51 @@ def test_direct_solver_refines_on_demand():
         assert np.max(np.abs(answers[0] - answers[1])) <= 1e-12 * np.max(np.abs(answers[1]))
 
 
+def test_newton_stops_at_the_round_off_floor():
+
+    """A Newtonian melt in a Taylor-Hood slit die with convected heat: one Newton step solves it, but the linear solves of
+    the saddle point leave the residual at 1e-9 of the initial one, above the relative tolerance. Without the stagnation
+    test, Newton went on with the smallest step of the line search until a full one happened to pass: 2 to 175 iterations
+    from one run to the next (PARDISO in parallel is not reproducible to round-off). That stall also hid a refinement of the
+    direct solver that did not work on these matrices (commit 641ad6b)."""
+
+    H, L, T_in = 1.0e-3, 20.0e-3, 230.0
+    mu = float(CrossWLF(n=0.28, tau_star=2.5e4, D1=5.0e13, D2=263.15, A1=30.0, A2=51.6).zero_shear(T_in))     # a PP melt
+
+    def solve(kind):
+        mesh = Mesh()
+        mesh.generate2DMesh((L, H), (80, 16), QUAD, order=2)
+        model = Model(name='slit', dim=2, mesh=mesh, mat=material('PP', miu=mu, rho=750.0, Cp=2700.0, k=0.17), psc=[ff, ht])
+        fluid, heat = model.physics.fluid, model.physics.heat
+        inlet = mesh.boundary_edges(lambda x, y: x < 1e-12)
+        wall = mesh.boundary_edges(lambda x, y: y > H - 1e-12)
+        fluid.addBC_VelocityEdges(inlet, lambda x, y: (0.15 * (1 - (y / H) ** 2), 0.0))
+        fluid.addBC_SymmetryEdges(mesh.boundary_edges(lambda x, y: y < 1e-12))
+        fluid.addBC_NoSlipEdges(wall)
+        fluid.addBC_OutletEdges(mesh.boundary_edges(lambda x, y: x > L - 1e-12), 0.0)
+        heat.addBC_TemperatureEdges(inlet, T_in)
+        heat.addBC_TemperatureEdges(wall, T_in)
+        model.physics.setVelocity('u')
+        model.physics.setStabilization('SUPG')
+        model.physics.initField('T', T_in)
+        model.solverConfiguration(Study=StudyType.steady_state, Type=kind)
+        model.solve()
+        return model
+
+    reference = np.asarray(solve(ProblemType.linear).sol['u'])        # one Newton step from rest: the problem is linear in u, p
+
+    for _ in range(3):
+        model = solve(ProblemType.nonlinear)
+        assert model.nonlinear_converged and model.newton_iterations <= 4, model.newton_iterations
+        error = np.max(np.abs(np.asarray(model.sol['u']) - reference)) / np.max(np.abs(reference))
+        assert error < 1e-7, error
+
+
 if __name__ == "__main__":
     tests = [test_compiled_residual_on_equal_order_elements, test_compiled_residual_on_taylor_hood_elements,
              test_compiled_residual_in_3d, test_compiled_residual_with_a_viscosity_by_region,
              test_compiled_residual_is_faster, test_transient_with_the_compiled_residual_matches_numpy,
-             test_direct_solver_refines_on_demand]
+             test_direct_solver_refines_on_demand, test_newton_stops_at_the_round_off_floor]
     failed = 0
     for t in tests:
         try:

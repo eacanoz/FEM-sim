@@ -682,8 +682,13 @@ Lo que sigue pendiente:
   BDF2 (49 923 incógnitas) 42.2 → 20.8 s, estacionaria 20.2 → 16.2 s; conducto 3D hex27 con Cross 36.9 → 24.4 s; la rendija Q4
   con esfuerzo recuperado no cambia (dominan sus productos dispersos). `FactorizedSolver` mide el refinamiento de PARDISO en la
   primera solución de cada factorización y lo omite en las siguientes si no cambia la solución (`refine_on_demand`). **Defecto
-  corregido:** entre los commits `641ad6b` y el del 2026-11-14 ese refinamiento se hacía fuera de PARDISO, y en Taylor–Hood
-  grande (rendija Q9 desde 82 mil incógnitas) Newton no convergía; sin prueba automática todavía.
+  corregido:** entre los commits `641ad6b` y `6a9de71` ese refinamiento se hacía fuera de PARDISO y no reparaba las soluciones
+  de los puntos de silla de Taylor–Hood.
+- **Newton se para en el piso de redondeo (2026-11-14):** si la búsqueda de línea no encuentra descenso dos iteraciones seguidas
+  con un residuo ya por debajo de 1e-6 del inicial (o de 1e-7), se da por convergido. En Taylor–Hood las soluciones lineales
+  dejan el residuo en ~1e-9 relativo, por encima de la tolerancia, y Newton repetía el paso mínimo hasta que uno completo pasaba
+  por azar: la rendija Q9 con calor (21 mil incógnitas) tardaba de 2 a 175 iteraciones en su arranque newtoniano según la
+  ejecución (5 a 50 s); ahora 2 a 4. `Test/test_flow_kernel.py::test_newton_stops_at_the_round_off_floor`.
 - **Análisis de PARDISO reutilizado (2026-11-12, [PLAN_RENDIMIENTO_GPU_ML.md](PLAN_RENDIMIENTO_GPU_ML.md)):** con valores nuevos
   sobre el mismo patrón (cada tangente de Newton) solo se repite la factorización numérica; el análisis era 1.1 de 2.0 s con
   187 mil incógnitas de Q4 y 3.8 de 4.4 s de Q9. La primera solución con un análisis reutilizado se comprueba (residuo > 1e-10 tras
