@@ -285,6 +285,24 @@ Propuesta, de menos a más esfuerzo:
   Los 33 ejemplos y cuadernos versionados pasan a `examples/` (con `git mv`); `README` con instalación, uso y rutas al día. Los
   archivos sin versionar de la raíz quedan donde estaban. Hizo falta instalar `setuptools` en `.venv`.
 
+**Hecho el 2026-11-15 (E.4, monitores, sondas y puntos de control):** `Source/Simulation/Monitoring.py`.
+
+- `Model.solve(on_iteration=..., on_step=..., checkpoint=..., resume=...)`. `on_iteration(info)` se llama en cada iteración de
+  Newton estacionario, de la marcha pseudotransitoria y de Newton dentro de cada paso temporal (`info`: `kind`, `iteration`,
+  `residual`, `relative_residual`, `x`, y `step`/`time` en un paso). `on_step(info)` en cada paso aceptado y al final de un estudio
+  estacionario. Si un monitor devuelve `True` el cálculo se detiene: el estacionario conserva su estado actual
+  (`nonlinear_converged` es `False`) y el transitorio conserva los pasos hechos (si se detiene dentro de un Newton, ese paso se
+  descarta). Las iteraciones de Krylov de los solvers lineales no tienen monitor.
+- Sondas: `model.addProbe(nombre, campo, node=... | point=..., component=...)` (el nodo más cercano a `point`); se muestrean en
+  t = 0 y tras cada paso, o en cada iteración en un estudio estacionario. Resultados: `model.probe_times`,
+  `model.probe_values[nombre]`. Tabla de convergencia: `model.convergence` (una fila por iteración estacionaria o por paso).
+- Puntos de control: `checkpoint=ruta` o `(ruta, cada)` (10 pasos por defecto) escribe un `.npz` de forma atómica; `resume=ruta`
+  continúa un estudio transitorio (theta lineal, y los lazos no lineales: theta, BDF2 y paso adaptativo) comprobando esquema,
+  tiempo total, theta, número de pasos (paso fijo), número de incógnitas y versión. Las sondas ya registradas se restauran. Tras
+  reanudar se reconstruye la tangente (el Newton modificado la reutilizaba), así que el resultado coincide con el del cálculo
+  seguido a la tolerancia del Newton (probado a 1e-7; lineal a 1e-12).
+- `Test/test_monitoring.py`, 6 pruebas. Pendiente de E.4: `on_step` en el llenado Hele-Shaw (ya tenía el suyo) unificado con este.
+
 ## Físicas: robustez y especialización
 
 Lo que la revisión confirma como siguiente (ya inventariado en `ESTADO.md` y `PLAN_INYECCION.md`): orientación de fibras, molde y
@@ -298,6 +316,7 @@ medido. La fase 1 de inyección (geometría desde CAD) puede ir en paralelo: no 
 
 ## Avance
 
+- **2026-11-15:** fase E.4 (monitores, sondas, puntos de control y reanudación del transitorio).
 - **2026-11-14:** fase E.1 (`solve()` sin configuración, cadenas), E.2 (registro de la sesión) y E.3 (paquete `femsim`, `examples/`).
 - **2026-11-12:** revisión y perfiles; fase A, dos primeros cambios (análisis de PARDISO reutilizado, cinemática del flujo), que
   entraron en el commit `a0d5e6e` junto con la fase 1 de inyección.

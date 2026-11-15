@@ -17,6 +17,7 @@ from Source.enums import StudyType, ProblemType, SolverType, DirectSolvers, Iter
 from Source.logger_config import sim_logger
 from Source.Simulation.Discretization import Discretization
 from Source.Simulation.DofLayout import DofLayout
+from Source.Simulation.Monitoring import Monitor
 
 
 def _as_enum(enum_class, value, aliases=None):
@@ -76,6 +77,11 @@ class Model(object):
         self.sol = None
 
         self.timeVector = None
+
+        self.probes = {}             # see addProbe
+        self.probe_times = []        # results of the last solve()
+        self.probe_values = {}
+        self.convergence = []
 
         self._geometry = None      # Discretization, built on first use by the vectorized path
         self._layout = None        # DofLayout of the physics fields
@@ -270,9 +276,27 @@ class Model(object):
         }
 
 
-    def solve(self):
+    def addProbe(self, name, field, node=None, point=None, component=None):
 
-        """Solves the model based on the configured solver options."""
+        """Records a value during solve(): field at a node (index) or at the node nearest to point (coordinates), one component of
+        a vector field or all of them. Results after solve(): probe_times, probe_values[name] (see Source/Simulation/Monitoring.py)."""
+
+        if (node is None) == (point is None):
+            raise ValueError("Sonda: indique node o point (uno de los dos).")
+
+        if node is None:
+            coordinates = np.array([n.coor[:len(np.atleast_1d(point))] for n in self.mesh.NL], dtype=float)
+            node = int(np.argmin(np.linalg.norm(coordinates - np.asarray(point, dtype=float), axis=1)))
+
+        self.probes[name] = {'name': name, 'field': field, 'node': int(node), 'component': component}
+
+    def solve(self, on_iteration=None, on_step=None, checkpoint=None, resume=None):
+
+        """Solves the model based on the configured solver options.
+
+        on_iteration(info), on_step(info): monitors called by the solvers; returning True stops the solve. checkpoint=path or
+        (path, every): saves a restart file of a transient study every `every` steps (10 by default). resume=path: continues a
+        transient study from that file. Details in Source/Simulation/Monitoring.py."""
 
         self._system_cache = None  # boundary conditions and coefficients may have changed
 
@@ -309,8 +333,13 @@ class Model(object):
 
 
         solver = Solution.modelSolver(self)
+        solver.monitor = Monitor(self, on_step=on_step, on_iteration=on_iteration, checkpoint=checkpoint, resume=resume)
 
         solver.solve()
+
+        self.probe_times = solver.monitor.probe_times
+        self.probe_values = solver.monitor.probe_values
+        self.convergence = solver.monitor.convergence
 
         self.timeVector = solver.timeVector
         self.solver_iterations = solver.iterations   # Krylov iterations of every linear solve (empty with direct solvers)

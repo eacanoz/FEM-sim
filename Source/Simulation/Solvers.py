@@ -7,6 +7,7 @@ import scipy.sparse.linalg as spla
 from Source.Simulation.DirectSolver import FactorizedSolver, _same_sparse
 from Source.Simulation.IterativeSolver import IterativeSolver, build_preconditioner, saddle_point_preconditioner
 from Source.Simulation.SolverSelection import choose_options
+from Source.Simulation.Monitoring import Monitor
 from Source.enums import SolverType, StudyType, ProblemType, Preconditioners, DirectSolvers
 from Source.logger_config import sim_logger
 
@@ -33,6 +34,7 @@ class modelSolver():
         """Initializes the model solver with a reference to the model and sets up necessary attributes."""
 
         self.model = model
+        self.monitor = Monitor(model)          # monitors, probes and checkpoints (Model.solve replaces it)
 
         self.A = None
         self.b = None
@@ -261,8 +263,23 @@ class modelSolver():
         linear = self.model._system().is_linear
         S = (M + theta * dt * A).tocsc() if linear else None
 
+        first, done = 0, n_steps
+        if self.monitor.resume is not None:
+            data = self.monitor.load({'scheme': 'linear-theta', 'total_time': total_time, 'n_steps': n_steps, 'theta': theta})
+            first = int(data['step'])
+            x = data['x']
+            Y[:, :first + 1] = data['Y']
+            self.updateSolution(x)
+        else:
+            self.monitor.record(x, 0.0)
+
+        def checkpoint_state(step):
+            return lambda: {'scheme': np.array('linear-theta'), 'total_time': np.array(total_time), 'n_steps': np.array(n_steps),
+                            'theta': np.array(theta), 'step': np.array(step + 1), 'time': np.array((step + 1) * dt),
+                            'x': x, 'Y': Y[:, :step + 2]}
+
         clock = time.time()
-        for step in range(n_steps):
+        for step in range(first, n_steps):
 
             if not linear:
                 A, b = self.model.assembleGlobalSystem(self.solverOptions)
@@ -276,7 +293,15 @@ class modelSolver():
             Y[:, step + 1] = x
             self._report_progress(step, n_steps, dt, clock)
 
-        self._store_history(Y, total_time, n_steps)
+            if self.monitor.step({'kind': 'step', 'step': step + 1, 'time': (step + 1) * dt, 'dt': dt, 'x': x}, checkpoint_state(step)):
+                sim_logger.warning(f"Time loop stopped by the monitor at step {step + 1}, t = {(step + 1) * dt:.6g}.")
+                done = step + 1
+                break
+
+        if done == n_steps:
+            self._store_history(Y, total_time, n_steps)
+        else:
+            self._store_history(Y[:, :done + 1], done * dt, done, np.arange(done + 1) * dt)
 
     def _report_progress(self, step, n_steps, dt, clock):
 
@@ -394,8 +419,32 @@ class modelSolver():
             return all(np.abs(update[dofs[counted[dofs]]]).max(initial=0.0)
                        <= 1e-10 * max(np.abs(state[dofs]).max(), size, 1e-30) for dofs, size in zip(fields, sizes))
 
-        clock = time.time()
         step = 0
+        if self.monitor.resume is not None:
+            expected = {'scheme': 'nonlinear-' + scheme, 'total_time': float(total_time), 'theta': float(theta)}
+            if tolerance is None:
+                expected['n_steps'] = n_steps
+            data = self.monitor.load(expected)
+            step = int(data['step'])
+            times = [float(t) for t in data['times']]
+            history = list(data['history'].T)
+            x, x_prev, dt_prev, dt = data['x'].copy(), data['x_prev'].copy(), float(data['dt_prev']), float(data['dt'])
+            sizes = [float(size) for size in data['sizes']]
+            self.step_iterations = [int(n) for n in data['step_iterations']]
+            self.rejected_steps = int(data['rejected'])
+            self.updateSolution(x)
+        else:
+            self.monitor.record(x, 0.0)
+
+        def checkpoint_state():
+            return {'scheme': np.array('nonlinear-' + scheme), 'total_time': np.array(float(total_time)),
+                    'theta': np.array(float(theta)), 'n_steps': np.array(n_steps), 'step': np.array(step),
+                    'time': np.array(times[-1]), 'dt': np.array(dt_next), 'dt_prev': np.array(dt_prev), 'x': x,
+                    'x_prev': x_prev, 'times': np.array(times), 'history': np.column_stack(history),
+                    'sizes': np.array(sizes), 'rejected': np.array(self.rejected_steps),
+                    'step_iterations': np.array(self.step_iterations, dtype=int)}
+
+        clock = time.time()
         try:
             while (step < n_steps) if tolerance is None else (times[-1] < total_time * (1.0 - 1e-12)):
 
@@ -472,6 +521,10 @@ class modelSolver():
 
                 while norm > atol and norm > rtol * norm0 and iteration < max_iterations:
                     iteration += 1
+                    if self.monitor.iteration({'kind': 'step-newton', 'iteration': iteration, 'residual': norm,
+                                               'relative_residual': norm / norm0 if norm0 > 0 else 0.0,
+                                               'step': step + 1, 'time': t_new, 'x': x}):
+                        break
                     dx = self._solve_system(J, -F)
 
                     if not fresh:
@@ -504,6 +557,12 @@ class modelSolver():
                     fresh = not reuse
                     if fresh:
                         J, J_alpha, J_theta = step_tangent(x), alpha, th
+
+                if self.monitor.stopped:                                       # the monitor stopped a step in progress: it is dropped
+                    sim_logger.warning(f"Time loop stopped by the monitor inside step {step + 1}; the step is discarded.")
+                    x = x_n
+                    self.updateSolution(x)
+                    break
 
                 finite = np.isfinite(norm)
                 solved = finite and (norm <= atol or norm <= rtol * norm0 or settled)
@@ -561,6 +620,10 @@ class modelSolver():
                 elif step % 50 == 0:
                     sim_logger.info(f"Paso {step}: t = {t_new:.6g} de {total_time:.6g}, dt = {dt:.3g}, "
                                     f"{time.time() - clock:.1f} s")
+                if self.monitor.step({'kind': 'step', 'step': step, 'time': t_new, 'dt': dt, 'newton_iterations': iteration,
+                                      'x': x}, checkpoint_state):
+                    sim_logger.warning(f"Time loop stopped by the monitor at step {step}, t = {t_new:.6g}.")
+                    break
                 dt = dt_next
         finally:
             system.time = None
@@ -583,6 +646,9 @@ class modelSolver():
         self.sol = self._solve_system(self.A, self.b, guess=self.x0)
 
         self.updateSolution(self.sol)
+
+        self.monitor.record(self.sol, 0)
+        self.monitor.step({'kind': 'steady', 'x': self.sol})
 
 
     def nonlinearSolver(self):
@@ -698,6 +764,11 @@ class modelSolver():
 
             sim_logger.info(f"| {iteration:^6} | {norm_R:^15.4e} | {norm_R / norm_R0:^15.4e} | {lam:^12.4f}")
 
+            if self.monitor.iteration({'kind': 'newton', 'iteration': iteration, 'residual': norm_R,
+                                       'relative_residual': norm_R / norm_R0, 'x': x}):
+                sim_logger.warning("Newton stopped by the monitor.")
+                break
+
             if stalled >= 2 and (norm_R <= 1e-6 * norm_R0 or norm_R <= 1e-7):
                 # No step length lowers a residual that is already small, twice in a row: the residual is the round-off of the
                 # linear solves (Taylor-Hood saddle points leave 1e-9 relative, above rtol). Going on repeats the smallest
@@ -720,6 +791,7 @@ class modelSolver():
         self.newton_iterations = iteration
         self.x0 = x
         self.updateSolution(x)
+        self.monitor.step({'kind': 'steady', 'x': x, 'newton_iterations': iteration})
 
         return x
 
@@ -811,6 +883,11 @@ class modelSolver():
 
             sim_logger.info(f"| {iteration:^6} | ||R|| {norm_R:.4e} | ||R||/||R0|| {norm_R / norm_R0:.4e} | CFL {cfl:.3e}")
 
+            if self.monitor.iteration({'kind': 'pseudo-transient', 'iteration': iteration, 'residual': norm_R,
+                                       'relative_residual': norm_R / norm_R0, 'cfl': cfl, 'x': x}):
+                sim_logger.warning("Pseudo-transient march stopped by the monitor.")
+                break
+
         self.nonlinear_converged = bool(norm_R <= atol or norm_R <= rtol * norm_R0 or settled)
 
         if self.nonlinear_converged:
@@ -822,6 +899,7 @@ class modelSolver():
         self.newton_iterations = iteration
         self.x0 = x
         self.updateSolution(x)
+        self.monitor.step({'kind': 'steady', 'x': x, 'newton_iterations': iteration})
 
         return x
 

@@ -22,6 +22,10 @@ Los ejemplos están en [examples/](examples/) (ejecútelos desde cualquier carpe
 registro de la sesión se guarda en `Logs/` al primer mensaje; `femsim.logger_config.configure_logging(log_dir=..., console_level=...)`
 cambia la carpeta y el nivel de consola.
 
+Durante el cálculo: `model.solve(on_iteration=f, on_step=g)` llama a sus funciones en cada iteración o paso (devolver `True` detiene el
+cálculo), `model.addProbe('centro', 'T', point=(0.5, 0.5))` registra un valor (`model.probe_values`), y
+`model.solve(checkpoint='caso.npz')` guarda puntos de control del transitorio que `model.solve(resume='caso.npz')` continúa.
+
 > Documentación detallada:
 > - [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md): cómo está organizado el código y cómo extenderlo.
 > - [docs/ESTADO.md](docs/ESTADO.md): qué funciona, qué está validado, limitaciones y próximos pasos.
@@ -252,6 +256,7 @@ Las aristas se seleccionan con un predicado sobre su punto medio: `mesh.boundary
 | `examples/Example_2D_Transient.py` | Placa 2D con punto caliente, radiación y convección: transitorio no lineal, convergencia en el tiempo y gráficos |
 | `examples/Example_Reactive_Heat.py` | Reacción exotérmica acoplada con el calor: verificación frente a una EDO, barrido del calor de reacción y arranque transitorio |
 | `examples/Ejemplo_Fisicas_Acopladas.ipynb` | **Cuaderno guiado** del caso reactivo: monta el modelo paso a paso, explica cada función y parámetro, muestra qué ocurre dentro del solver (geometría, DOF, jacobiano, Newton), los resultados, la verificación y el transitorio |
+| `examples/Ejemplo_Monitores_Sondas_Checkpoints.ipynb` | **Cuaderno guiado** de los monitores (`on_iteration`, `on_step`), las sondas y los puntos de control: tabla de convergencia de Newton, parada desde fuera, interrupción y reanudación de un transitorio con el mismo resultado |
 | `2DFEM.py` | Generación de malla 2D (referencia de numeración) |
 | `examples/Example_Solver_Scaling.py` | Poisson 2D hasta 160 mil incógnitas: PARDISO frente a CG y CG+AMG, factorización reutilizada y exportación a ParaView |
 | `examples/Example_Gmsh_Geometry.py` | Cuarto de anillo (convergencia frente a la solución logarítmica) y placa con orificio, con mallas T3 de gmsh |
