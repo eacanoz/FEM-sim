@@ -7,6 +7,11 @@ from Source.enums import ElementType
 from Source.Simulation.Discretization import Discretization
 
 
+# Version of the geometry and the topology of every mesh: it grows whenever a node coordinate or the nodes of an element are assigned, so the
+# arrays that Mesh caches (coords, conn) are rebuilt after any change, however it was made (Model.moveNodes, `node.coor = ...` in a script).
+_VERSION = [0]
+
+
 class Mesh:
 
     def __init__(self):
@@ -17,6 +22,43 @@ class Mesh:
         self.boundaries = {}
         self.groups = {}     # name -> boundary facets (node tuples), from imported meshes
         self.regions = {}    # name -> element indices, from imported meshes
+
+    # ----- arrays of the mesh, built once from the objects -----
+
+    def _array_cache(self):
+
+        key = (id(self.NL), len(self.NL), id(self.EL), len(self.EL), _VERSION[0])
+        cached = self.__dict__.get('_arrays')
+
+        if cached is None or cached[0] != key:
+
+            try:
+                coords = np.array([node.coor for node in self.NL], dtype=float)
+            except ValueError:                                 # nodes with different numbers of coordinates: padded with zeros
+                width = max(len(node.coor) for node in self.NL)
+                coords = np.array([tuple(node.coor) + (0.0,) * (width - len(node.coor)) for node in self.NL], dtype=float)
+
+            conn = np.array([[node.id for node in element.nodes] for element in self.EL], dtype=np.int64)
+            coords.flags.writeable = False
+            conn.flags.writeable = False
+            cached = self._arrays = (key, coords, conn)
+
+        return cached
+
+    @property
+    def coords(self):
+
+        """Coordinates of the nodes (n_nodes, width) as a read-only array, built from the nodes once and kept until a coordinate, a node or an
+        element changes (a copy is needed to modify it: moveNodes to move the mesh)."""
+
+        return self._array_cache()[1]
+
+    @property
+    def conn(self):
+
+        """Connectivity (n_elements, nodes per element) of node ids, read-only, cached like coords."""
+
+        return self._array_cache()[2]
 
     def Generate_Mesh(self, PD, L, NoE, MeshType):
 
@@ -207,12 +249,10 @@ class Mesh:
         key = (id(self.EL), len(self.EL), element_type_of(self))
         cached = getattr(self, '_outer_facets', None)
         if cached is None or cached[0] != key:
-            conn = np.array([e.getNodesId() for e in self.EL], dtype=int)
-            cached = (key, outer_facets(conn, ELEMENTS[key[2]]))
+            cached = (key, outer_facets(np.array(self.conn), ELEMENTS[key[2]]))
             self._outer_facets = cached
 
-        width = max(len(node.coor) for node in self.NL)        # all the coordinates: a surface in space passes (x, y, z)
-        node_xy = np.array([tuple(node.coor) + (0.0,) * (width - len(node.coor)) for node in self.NL], dtype=float)
+        node_xy = np.array(self.coords)                         # all the coordinates: a surface in space passes (x, y, z)
         if not np.any(node_xy[:, ELEMENTS[key[2]].dim:] != 0.0):
             node_xy = node_xy[:, :ELEMENTS[key[2]].dim]
         return select_facets(cached[1], node_xy, selector)
@@ -397,7 +437,7 @@ class Mesh:
 
         import matplotlib.tri as mtri
 
-        xy = scale * np.array([node.coor[:2] for node in self.NL], dtype=float)
+        xy = scale * self.coords[:, :2]
         return mtri.Triangulation(xy[:, 0], xy[:, 1], self.plot_triangles())
 
     def getNoN(self):
@@ -463,11 +503,21 @@ class Node:
 
     def __init__(self, id=None, coor: tuple = None):
         self.id = id
-        self.coor = coor
+        self._coor = coor
+        _VERSION[0] += 1
         self.type = 'DoF'
         self.variable = {}
         self.BC = {}
 
+
+    @property
+    def coor(self):
+        return self._coor
+
+    @coor.setter
+    def coor(self, value):
+        self._coor = value
+        _VERSION[0] += 1                                  # the cached arrays of every mesh are stale
 
     def getVariable(self, psc):
 
@@ -481,7 +531,18 @@ class Node:
 class Element:
     def __init__(self, id: int =None, nodes: list = None):
         self.id = id
-        self.nodes = nodes
+        self._nodes = nodes
+        _VERSION[0] += 1
+
+    @property
+    def nodes(self):
+        return self._nodes
+
+    @nodes.setter
+    def nodes(self, value):
+        self._nodes = value
+        _VERSION[0] += 1
+
     def getLength(self):
         if len(self.nodes) != 2:
             raise ValueError("Element must have exactly two nodes to compute length.")

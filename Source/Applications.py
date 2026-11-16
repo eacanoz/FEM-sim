@@ -77,7 +77,7 @@ class SlitDie:
         self.outlet = mesh.boundary_edges(lambda x, y: x > self.L * (1 - 1e-12))
         axis = mesh.boundary_edges(lambda x, y: y < 1e-12 * self.H)
         wall = mesh.boundary_edges(lambda x, y: y > self.H * (1 - 1e-12))
-        self.xy = np.array([node.coor for node in mesh.NL])
+        self.xy = mesh.coords
 
         thermal = {'rho': _property(self.material, 'rho', rho), 'Cp': _property(self.material, 'Cp', Cp),
                    'k': _property(self.material, 'k', k)}
@@ -170,7 +170,7 @@ class CapillaryRheometer:
         self.RB, self.LB, self.RC, self.LC = (float(v) for v in (barrel_radius, barrel_length, capillary_radius, capillary_length))
 
         self.mesh = self._mesh(float(mesh_scale))
-        self.xy = np.array([node.coor for node in self.mesh.NL])
+        self.xy = self.mesh.coords
 
         self.model = Model(name='capillary', dim=2, mesh=self.mesh, mat=Material('melt', miu=rest_viscosity(self.law.law, self.T)),
                            psc=ff, axisymmetric=True)

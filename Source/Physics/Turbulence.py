@@ -90,7 +90,7 @@ def wall_distance(mesh, walls):
     triangles of the faces in 3D. Exact for straight (flat) walls; on a curved wall the error is that of its chords, O(h^2)."""
 
     if getattr(mesh, 'PD', 2) == 3:
-        xyz = np.array([node.coor[:3] for node in mesh.NL], dtype=float)
+        xyz = mesh.coords[:, :3]
         tris = np.array([[face[i] for i in tri] for face in walls for tri in _FACE_TRIANGLES[len(face)]], dtype=int)
         A, B, C = xyz[tris[:, 0]], xyz[tris[:, 1]], xyz[tris[:, 2]]
         d = np.zeros(len(xyz))
@@ -100,7 +100,7 @@ def wall_distance(mesh, walls):
         d[np.unique(np.concatenate([np.asarray(face) for face in walls]))] = 0.0
         return d
 
-    xy = np.array([node.coor[:2] for node in mesh.NL], dtype=float)
+    xy = mesh.coords[:, :2]
 
     # An edge of three nodes gives two segments, which follow a curved wall more closely
     a = np.array([xy[edge[i]] for edge in walls for i in range(len(edge) - 1)])
@@ -433,7 +433,7 @@ class sst(physics):
         """Wall value of omega at each wall node: 60 nu / (beta1 dy^2), dy the wall distance of its nearest neighbour."""
 
         wall_nodes = np.unique(np.ravel(self.walls))
-        conn = np.array([e.getNodesId() for e in mesh.EL], dtype=int)
+        conn = mesh.conn
         dy = np.full(len(d), np.inf)
         for element in conn:
             others = d[element][d[element] > 1e-14]

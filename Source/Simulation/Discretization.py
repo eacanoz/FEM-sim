@@ -109,9 +109,9 @@ class Discretization:
         self.n_nodes = mesh.getNoN()
         self.axisymmetric = bool(axisymmetric)
 
-        self.conn = np.array([e.getNodesId() for e in mesh.EL], dtype=int)
-        width = max(len(node.coor) for node in mesh.NL)
-        full = np.array([tuple(node.coor) + (0.0,) * (width - len(node.coor)) for node in mesh.NL], dtype=float)
+        self.conn = np.array(mesh.conn, dtype=int)
+        full = np.array(mesh.coords)
+        width = full.shape[1]
         # A surface in space (the midplane of a folded part): elements of lower dimension than the coordinates, which are not all in
         # the plane of the first ones. Gradients are then tangential, of `dim` = the dimension of space.
         self.manifold = width > self.dim and bool(np.any(full[:, self.dim:] != 0.0))

@@ -394,6 +394,27 @@ lineal con PARDISO. `Node`/`Element` solo se construyen en `Source/Pre_processin
   pasada, sin tocar la semántica; (2) generadores estructurados en numpy y `NL`/`EL` como vistas perezosas (`NodeView` con `id`, `coor`
   y `BC` disperso por nodo de contorno): 1 M de nodos pasaría de 2.8 s y 645 MB a ~0.3 s y ~60 MB; (3) la malla solo en arrays sin vista.
 
+**Hecho el 2026-11-16 (E.9, opción 1: arrays de la malla en caché):** `Mesh.coords` y `Mesh.conn` (`Source/Pre_processing/Mesh.py`).
+
+- Las coordenadas (n, d) y la conectividad (nel, nne) se construyen una vez desde los objetos y quedan en caché, de solo lectura. Se
+  reconstruyen solas tras cualquier cambio, hecho como se haga: un contador global se incrementa al asignar `node.coor` (`Node.coor`
+  pasó a propiedad: así valen `Model.moveNodes` y los `node.coor = ...` de los guiones y pruebas, que son muchos) o `element.nodes`, y la
+  clave de la caché incluye la identidad y la longitud de `NL` y `EL` (añadir nodos o elementos). Nodos con distinto número de
+  coordenadas se rellenan con ceros. Cambiar una lista `element.nodes` en el sitio (`nodes[i] = ...`) no se detecta: asignar la lista.
+- Leen ahora de ahí: `Discretization`, `boundary_facets`, `triangulation`, `VTK.grid_arrays`, `FluidFlow` (nodos de presión Taylor–Hood y
+  componente normal), `Turbulence` (distancia a la pared y omega de pared), `FreeSurface` (copia), `Applications` y `addProbe`.
+  `Discretization` conserva su propia copia de `conn`.
+- Medido contra la serie anterior (misma máquina; la primera lectura sigue pagando la conversión, la ganan las siguientes):
+
+| Malla | `boundary_edges` | Ensamblaje del sistema | Ahorro por solución lineal |
+|---|---|---|---|
+| 2D 400 mil nodos | 1.5 → 0.9 s | 2.9 → 2.1 s | 1.4 s (~15 %) |
+| 2D 1 M | 3.6 → 2.4 s | 6.4 → 5.2 s | 2.5 s (~12 %) |
+| 3D 130 mil | 0.66 → 0.51 s | 2.5 → 2.3 s | 0.4 s (~5 %) |
+
+  La discretización no cambia (paga la primera conversión) y la solución tampoco. La memoria sigue igual: la malla de objetos se conserva
+  (la opción 2, vistas perezosas, es la que la quita). Suite completa: 57 archivos de pruebas en verde. `Test/test_mesh_arrays.py`, 4 pruebas.
+
 ## Físicas: robustez y especialización
 
 Lo que la revisión confirma como siguiente (ya inventariado en `ESTADO.md` y `PLAN_INYECCION.md`): orientación de fibras, molde y
@@ -407,6 +428,7 @@ medido. La fase 1 de inyección (geometría desde CAD) puede ir en paralelo: no 
 
 ## Avance
 
+- **2026-11-16:** fase E.9 (medición del coste de la malla de objetos y caché de `coords`/`conn`).
 - **2026-11-16:** fase E.8 (informe HTML y visor pyvista opcional).
 - **2026-11-16:** fase E.7 (`SlitDie`, `CapillaryRheometer`, `InjectionCase` y sus tipos de caso).
 - **2026-11-16:** fase E.6 (archivo de caso TOML, línea de órdenes y barridos; tipo `slit_die`).

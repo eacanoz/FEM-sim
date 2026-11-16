@@ -42,7 +42,7 @@ class FreeSurface:
         self.history = []
 
     def _xy(self):
-        return np.array([node.coor[:2] for node in self.model.mesh.NL], dtype=float)
+        return np.array(self.model.mesh.coords[:, :2])           # a copy: the caller moves the points
 
     def height(self):
 

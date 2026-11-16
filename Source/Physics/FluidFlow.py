@@ -270,7 +270,7 @@ class ff(physics):
 
         element = ELEMENTS[element_type_of(mesh)]
         n_vertices = element.n_nodes - len(element.linear_subspace)
-        return sorted({n for element in mesh.EL for n in element.getNodesId()[:n_vertices]})
+        return np.unique(mesh.conn[:, :n_vertices]).tolist()
 
     # ----- weak form -----
 
@@ -482,7 +482,7 @@ class ff(physics):
         """Index of the axis normal to facets (edges in 2D, faces in 3D) that all lie on planes normal to one axis: the axis along
         which every node of a facet has the same coordinate."""
 
-        xy = np.array([n.coor[:self.dim] for n in self.modelRef.mesh.NL], dtype=float)
+        xy = self.modelRef.mesh.coords[:, :self.dim]
         components = set()
 
         for edge in edges:

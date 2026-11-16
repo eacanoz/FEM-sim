@@ -65,7 +65,7 @@ def mesh_dimension(mesh):
 
     """Number of coordinates of the nodes of a mesh (3 for 3D meshes and surfaces in space)."""
 
-    return len(mesh.NL[0].coor)
+    return mesh.coords.shape[1]
 
 
 def grid_arrays(mesh):
@@ -79,11 +79,11 @@ def grid_arrays(mesh):
     if element_type not in VTK_CELL:
         raise ValueError(f"Tipo de elemento sin equivalente VTK: {element_type}")
 
-    coords = np.array([node.coor for node in mesh.NL], dtype=float)
+    coords = mesh.coords
     points = np.zeros((len(coords), 3))
     points[:, :coords.shape[1]] = coords
 
-    conn = np.array([e.getNodesId() for e in mesh.EL], dtype=np.int64)
+    conn = np.array(mesh.conn)
     order = vtk_node_order(element_type)
     if order is not None:
         conn = conn[:, order]

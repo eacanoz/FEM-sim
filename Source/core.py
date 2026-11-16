@@ -285,7 +285,7 @@ class Model(object):
             raise ValueError("Sonda: indique node o point (uno de los dos).")
 
         if node is None:
-            coordinates = np.array([n.coor[:len(np.atleast_1d(point))] for n in self.mesh.NL], dtype=float)
+            coordinates = self.mesh.coords[:, :len(np.atleast_1d(point))]
             node = int(np.argmin(np.linalg.norm(coordinates - np.asarray(point, dtype=float), axis=1)))
 
         self.probes[name] = {'name': name, 'field': field, 'node': int(node), 'component': component}
