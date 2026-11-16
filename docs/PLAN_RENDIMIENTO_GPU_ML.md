@@ -372,6 +372,28 @@ Propuesta, de menos a más esfuerzo:
   quita media pieza con un plano por el centro (normal a y; `'x'`, `'z'` o `None` para la pieza entera) y la cara de corte da el campo
   interior; la barra de color pasó a vertical porque su título pisaba los números. `Test/test_viewer_report.py`, 6 pruebas.
 
+**Medido el 2026-11-16 (E.9, coste de la malla de objetos; sin cambios de código):** un proceso por caso, Q4 2D y hex8 3D, conducción
+lineal con PARDISO. `Node`/`Element` solo se construyen en `Source/Pre_processing/Mesh.py`; se leen en ~35 sitios (casi todos
+`np.array([n.coor for n in mesh.NL])` y `getNodesId`) y las condiciones se escriben en `node.BC` en ~20.
+
+| Malla | Nodos | Generar | Memoria de la malla | Objetos → arrays | Discretización | Solución | Pico de memoria |
+|---|---|---|---|---|---|---|---|
+| 2D Q4 | 100 mil | 0.24 s | 66 MB | 0.07 s | 0.38 s | 1.1 s | 0.55 GB |
+| 2D Q4 | 400 mil | 1.1 s | 259 MB | 0.45 s | 1.7 s | 3.4 s | 1.8 GB |
+| 2D Q4 | 1 M | 2.8 s | 645 MB | 1.0 s | 4.2 s | 7.3 s | 4.3 GB |
+| 3D hex8 | 130 mil | 1.5 s | 92 MB | 0.12 s | 1.4 s | 6.3 s | 2.4 GB |
+| 3D hex8 | 530 mil | 6.8 s | 373 MB | 0.78 s | 6.5 s | 76 s | 12.6 GB |
+
+- Los objetos cuestan ~650 B por nodo frente a 48 B de los arrays (13 veces), pero son el **3–15 % del pico de memoria**; en 2D son
+  el 10–20 % del tiempo de un problema lineal (generar más pasar los objetos a arrays, que se repite en `Discretization`, `boundary_facets`,
+  la exportación VTK y la turbulencia) y en 3D o en estudios no lineales y transitorios, donde la malla se construye una vez y se resuelve
+  muchas, bajan del 5 %. El bucle sobre `NL` para las condiciones de contorno es despreciable (0.02 s con 400 mil nodos).
+  El grueso del tiempo de preparación (einsum de la geometría, inversas, ensamblaje) no depende del modelo de objetos.
+- Conclusión: la malla de objetos **no es el cuello de botella**. Opciones, de menos a más: (1) guardar `mesh.coords` y `mesh.conn`
+  (arrays calculados una vez, invalidados por `moveNodes`) y que los ~10 sitios que los reconstruyen los lean: ahorra 0.1–1 s por
+  pasada, sin tocar la semántica; (2) generadores estructurados en numpy y `NL`/`EL` como vistas perezosas (`NodeView` con `id`, `coor`
+  y `BC` disperso por nodo de contorno): 1 M de nodos pasaría de 2.8 s y 645 MB a ~0.3 s y ~60 MB; (3) la malla solo en arrays sin vista.
+
 ## Físicas: robustez y especialización
 
 Lo que la revisión confirma como siguiente (ya inventariado en `ESTADO.md` y `PLAN_INYECCION.md`): orientación de fibras, molde y
