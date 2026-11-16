@@ -77,11 +77,13 @@ def _field_values(source, name, step):
 
 
 def show(source, field, step=None, warp=None, screenshot=None, off_screen=None, show_edges=False, cmap='viridis', title=None,
-         window_size=(900, 650)):
+         window_size=(900, 650), cut='auto'):
 
     """Draws a nodal field of a solved model (or of a filling) with pyvista. step: index of a transient solution (default the last).
     warp: name of a vector field of the model that displaces the points (scaled to a tenth of the size of the part). screenshot: path of a
-    PNG (implies off_screen). Returns the pyvista plotter."""
+    PNG (implies off_screen). cut: a solid (3D cells) shows only its skin, so by default ('auto') half of it is removed with a plane
+    through its centre normal to y and the field on the cut face is seen; 'x', 'y' or 'z' choose the normal, None or False show the
+    whole part. Returns the pyvista plotter."""
 
     pv = _pyvista()
 
@@ -102,8 +104,17 @@ def show(source, field, step=None, warp=None, screenshot=None, off_screen=None, 
     if off_screen is None:
         off_screen = screenshot is not None
 
+    if cut == 'auto':
+        cut = 'y' if _is_solid(mesh) else None
+    if cut:
+        if cut not in ('x', 'y', 'z'):
+            raise ValueError(f"cut: 'auto', 'x', 'y', 'z' o None, no {cut!r}.")
+        grid = grid.clip(normal=cut, origin=grid.center, invert=True)
+
     plotter = pv.Plotter(off_screen=off_screen, window_size=list(window_size))
-    plotter.add_mesh(grid, scalars=field, cmap=cmap, show_edges=show_edges, scalar_bar_args={'title': title or field})
+    plotter.add_mesh(grid, scalars=field, cmap=cmap, show_edges=show_edges,
+                     scalar_bar_args={'title': title or field, 'vertical': True, 'position_x': 0.88, 'position_y': 0.15,
+                                      'height': 0.7, 'width': 0.06})
     plotter.add_axes()
 
     if mesh_is_planar(grid):
@@ -116,6 +127,13 @@ def show(source, field, step=None, warp=None, screenshot=None, off_screen=None, 
         plotter.show()
 
     return plotter
+
+
+def _is_solid(mesh):
+
+    from Source.Post_processing.VTK import grid_arrays as arrays
+
+    return arrays(mesh)[2] in ('tet4', 'hex8', 'tet10', 'hex27')
 
 
 def mesh_is_planar(grid):

@@ -119,6 +119,57 @@ def test_cases_write_their_reports():
         assert 'Curva de viscosidad medida' in text and '<h2>Tabla de resultados</h2>' in text and 'eta_measured' in text
 
 
+def cube():
+    mesh = Mesh()
+    mesh.generate3DMesh((1.0, 1.0, 1.0), (6, 6, 6), ElementType.hexahedron)
+    model = Model(name='cubo', dim=3, mesh=mesh, mat=material('X', k=1.0, rho=1.0, Cp=1.0), psc=ht)
+    model.physics.Convection = False
+    model.physics.F_const = 10.0
+    model.physics.addBC_TemperatureEdges(mesh.boundary_edges(), 0.0)
+    model.physics.initField('T', 0.0)
+    model.solve()
+    return model
+
+
+def test_viewer_3d_cut_filling_and_report():
+    if not Viewer.available():
+        print("      (pyvista no esta instalado: omitida)")
+        return
+
+    model = cube()
+    with tempfile.TemporaryDirectory() as tmp:
+        sizes = {}
+        for cut in ('auto', None, 'x'):
+            png = os.path.join(tmp, f'{cut}.png')
+            Viewer.show(model, 'T', cut=cut, screenshot=png)
+            sizes[cut] = os.path.getsize(png)
+        assert min(sizes.values()) > 1000 and sizes['auto'] != sizes[None]          # the cut changes the picture
+
+        try:
+            Viewer.show(model, 'T', cut='w', screenshot=os.path.join(tmp, 'w.png'))
+        except ValueError as error:
+            assert "'auto'" in str(error)
+        else:
+            raise AssertionError("bad cut accepted")
+
+        from Source.Applications import InjectionCase
+        case = InjectionCase.plate(MELT, element_size=8e-3, fill_time=1.0, thermal=False)
+        case.run()
+        png = os.path.join(tmp, 'fill.png')
+        Viewer.show(case.filling, 'fill_time', screenshot=png)
+        assert os.path.getsize(png) > 1000
+        try:
+            Viewer.show(case.filling, 'nada', screenshot=png)
+        except KeyError:
+            pass
+        else:
+            raise AssertionError("unknown filling field")
+
+    report = Report('Cubo')
+    report.add_model(model)
+    assert 'Malla 3D' not in report.html() and report.html().count('data:image/png') == 1       # the 3D view, with pyvista
+
+
 def test_viewer_without_and_with_pyvista():
     model = plate()
     model.solve()
@@ -150,7 +201,8 @@ def test_viewer_without_and_with_pyvista():
 
 if __name__ == "__main__":
     tests = [test_grid_arrays_are_what_the_vtu_file_holds, test_report_is_one_self_contained_file,
-             test_report_of_a_steady_and_a_transient_model, test_cases_write_their_reports, test_viewer_without_and_with_pyvista]
+             test_report_of_a_steady_and_a_transient_model, test_cases_write_their_reports, test_viewer_without_and_with_pyvista,
+             test_viewer_3d_cut_filling_and_report]
     failed = 0
     for t in tests:
         try:

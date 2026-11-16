@@ -367,9 +367,10 @@ Propuesta, de menos a más esfuerzo:
   `.vtu`: `VTK.grid_arrays`, extraído de `write_vtu` sin cambiar su salida) y `show(modelo | llenado, campo, step, warp, screenshot)`.
   pyvista es **opcional** (`pip install femsim[view]`): sin él da un error que dice cómo instalarlo. En mallas 3D el informe usa
   `Viewer.show` para las vistas si pyvista está; si no, solo las estadísticas.
-- **No verificado:** pyvista no está instalado en `.venv`, así que `to_pyvista` y `show` (y las vistas 3D del informe) no se han
-  ejecutado, solo el aviso de que falta. Instalarlo (`pip install pyvista`) y correr `Test/test_viewer_report.py` activa esas pruebas
-  (construcción de la malla, captura PNG fuera de pantalla, campo desconocido). `Test/test_viewer_report.py`, 5 pruebas.
+- Verificado con pyvista 0.49.2 (2026-11-16): `to_pyvista`, capturas PNG fuera de pantalla, llenado (`fill_time`, `p`) y vistas 3D del
+  informe. Al mirar las imágenes, un sólido solo mostraba su piel (el núcleo caliente de un cubo era invisible): `show(..., cut='auto')`
+  quita media pieza con un plano por el centro (normal a y; `'x'`, `'z'` o `None` para la pieza entera) y la cara de corte da el campo
+  interior; la barra de color pasó a vertical porque su título pisaba los números. `Test/test_viewer_report.py`, 6 pruebas.
 
 ## Físicas: robustez y especialización
 
