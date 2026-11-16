@@ -24,8 +24,9 @@ A case file says WHAT to compute (a type of case, its material, geometry and pro
     [sweep]                                # optional: one run per combination
     flow_rate = [1e-5, 5e-5, 1e-4]
 
-Keys of [sweep] are the names of keys of any section (they must be unambiguous) or the full "section.key". A sweep writes
-<name>_sweep.csv; every run writes its own <name>[_i]_results.json with the resolved case and its results.
+Keys of [sweep] are the names of keys of any section (they must be unambiguous) or the full "section.key". Types: slit_die (flat slit die), capillary_rheometer
+(Bagley and Rabinowitsch) and injection (filling of a plate: isochrones, pressure, clamp force); see their classes below and
+Source/Applications.py. A sweep writes <name>_sweep.csv; every run writes its own <name>[_i]_results.json with the resolved case and its results.
 
 Types of case are registered with @case_type(name) on a class with `defaults` (section -> {key: default}; a key without default is
 required, written as REQUIRED) and a method run(params, output_dir) -> dict of results. Unknown sections or keys, wrong types and
@@ -288,17 +289,21 @@ def _write_sweep(path, results):
                             + [record['results'].get(key, '') for key in result_keys])
 
 
-# ----- types of case -----
+# ----- types of case (thin layers over Source/Applications.py) -----
+
+def _scalars(results):
+    return {key: (value.tolist() if isinstance(value, np.ndarray) else value) for key, value in results.items()}
+
 
 @case_type('slit_die')
-class SlitDie:
+class SlitDieCase:
 
-    """Melt in a flat slit die (the half of the slit by symmetry, as in examples/Example_Polymer_Slit_Die.py): a parabolic
-    profile of the given flow rate at the inlet, no slip at the wall, free outlet. Velocity, pressure and temperature are solved
-    together (viscous heating on request); the viscosity is the material's law (a material with a 'viscosity' section).
+    """Melt in a flat slit die, the half slit by symmetry (Applications.SlitDie, as in examples/Example_Polymer_Slit_Die.py): a parabolic
+    profile of the given flow rate at the inlet, no slip at the wall, free outlet; velocity, pressure and temperature together (viscous
+    heating on request); the viscosity is the material's law.
 
-    Results: pressure_drop [Pa] (mean inlet pressure, outlet at 0), T_max and T_outlet_mixed [°C], flow_in and flow_out [m2/s],
-    wall_shear_rate [1/s] (the apparent, Newtonian one: 3 q / H^2 for the flow rate q of the half slit), converged, newton_iterations."""
+    Results: pressure_drop [Pa], T_max and T_outlet_mixed [°C], flow_in and flow_out [m2/s], wall_shear_rate [1/s] (apparent, 3 q / H^2),
+    converged, newton_iterations."""
 
     defaults = {
         'material': {'file': REQUIRED, 'rho': None, 'Cp': None, 'k': None},
@@ -309,76 +314,90 @@ class SlitDie:
 
     def run(self, params, directory, stem):
 
-        from Source.Pre_processing.Mesh import Mesh
-        from Source.core import Model
-        from Source.Material import material
-        from Source.Physics.FluidFlow import ff
-        from Source.Physics.HeatTransfer import ht
-        from Source.enums import ElementType
+        from Source.Applications import SlitDie
 
         m, g, p = params['material'], params['geometry'], params['process']
-        mat = material.from_file(m['file'])
-        if getattr(mat, 'viscosity_law', None) is None:
-            raise ValueError(f"material {m['file']!r}: sin seccion 'viscosity'; el dado necesita una ley de viscosidad.")
-
-        thermal = {}
-        for key in ('rho', 'Cp', 'k'):
-            value = m[key] if m[key] is not None else getattr(mat, key, None)
-            if value is None:
-                raise ValueError(f"material {m['file']!r}: falta la propiedad {key!r} (en el archivo o en [material]).")
-            thermal[key] = float(value)
-
-        H, L, q = float(g['half_aperture']), float(g['length']), float(p['flow_rate'])
-        T_in = float(p['T_inlet'])
-        T_wall = T_in if p['T_wall'] is None else float(p['T_wall'])
-
-        mesh = Mesh()
-        mesh.generate2DMesh((L, H), (g['nx'], g['ny']), ElementType.quadrilateral)
-        inlet = mesh.boundary_edges(lambda x, y: x < 1e-12 * L)
-        outlet = mesh.boundary_edges(lambda x, y: x > L * (1 - 1e-12))
-        axis = mesh.boundary_edges(lambda x, y: y < 1e-12 * H)
-        wall = mesh.boundary_edges(lambda x, y: y > H * (1 - 1e-12))
-        xy = np.array([node.coor for node in mesh.NL])
-
-        mu0 = float(mat.viscosity_law.zero_shear(T_in)) if hasattr(mat.viscosity_law, 'zero_shear') else 1.0
-        model = Model(name=stem, dim=2, mesh=mesh, mat=material('melt', miu=mu0, **thermal), psc=[ff, ht])
-        fluid, heat = model.physics.fluid, model.physics.heat
-
-        u_max = 1.5 * q / H
-        fluid.addBC_VelocityEdges(inlet, lambda x, y: (u_max * (1 - (y / H) ** 2), 0.0))
-        fluid.addBC_SymmetryEdges(axis)
-        fluid.addBC_NoSlipEdges(wall)
-        fluid.addBC_OutletEdges(outlet, 0.0)
-        heat.addBC_TemperatureEdges(inlet, T_in)
-        heat.addBC_TemperatureEdges(wall, T_wall)
-        model.physics.setVelocity('u')
-        model.physics.setStabilization('SUPG')
-        model.physics.initField('T', T_in)
-
-        model.solverConfiguration(Study='steady', Type='nonlinear', Method='direct')
-        model.solve()                                                   # Newtonian (mu0): the starting point
-        fluid.setViscosityLaw(mat.viscosity_law)
-        fluid.setViscousHeating(bool(p['viscous_heating']))
-        model.solve()
-
-        nodes = np.unique(np.ravel(inlet))
-        outlet_column = np.abs(xy[:, 0] - L) < 1e-9 * L
-        order = np.argsort(xy[outlet_column, 1])
-        y = xy[outlet_column, 1][order]
-        u_out, T_out = model.sol['u'][outlet_column, 0][order], model.sol['T'][outlet_column][order]
-
-        results = {
-            'pressure_drop': float(model.sol['p'][nodes].mean()),
-            'T_max': float(model.sol['T'].max()),
-            'T_outlet_mixed': float(np.trapezoid(u_out * T_out, y) / np.trapezoid(u_out, y)),
-            'flow_in': float(-fluid.flowRate(inlet)),
-            'flow_out': float(fluid.flowRate(outlet)),
-            'wall_shear_rate': float(3.0 * q / H ** 2),
-            'converged': bool(model.nonlinear_converged),
-            'newton_iterations': int(model.newton_iterations),
-        }
+        die = SlitDie(m['file'], half_aperture=g['half_aperture'], length=g['length'], nx=g['nx'], ny=g['ny'], T_inlet=p['T_inlet'],
+                      T_wall=p['T_wall'], viscous_heating=p['viscous_heating'], rho=m['rho'], Cp=m['Cp'], k=m['k'])
+        results = die.solve(p['flow_rate'])
 
         if params['output']['vtk']:
-            results['vtk'] = model.exportVTK(os.path.join(directory, stem))
+            results['vtk'] = die.model.exportVTK(os.path.join(directory, stem))
+
+        return results
+
+
+@case_type('capillary_rheometer')
+class CapillaryRheometerCase:
+
+    """Simulated capillary rheometer (Applications.CapillaryRheometer): axisymmetric barrel and capillary, isothermal at T_inlet,
+    with the Bagley and Rabinowitsch corrections. The apparent shear rates of process.shear_rates run in increasing order (at least
+    three); mesh_scale multiplies the element sizes.
+
+    Results: the arrays gamma_apparent, tau_wall, dp_total, dp_entrance, n_prime, gamma_wall, eta_measured, eta_law, error and
+    newton_iterations (lists), and max_abs_error and entrance_loss_fraction_mean."""
+
+    defaults = {
+        'material': {'file': REQUIRED},
+        'geometry': {'barrel_radius': 4.75e-3, 'barrel_length': 8.0e-3, 'capillary_radius': 0.5e-3, 'capillary_length': 16.0e-3,
+                     'mesh_scale': 1.0},
+        'process': {'T': 230.0, 'shear_rates': [20.0, 60.0, 200.0, 600.0, 2000.0]},
+        'output': {'directory': '.', 'vtk': False},
+    }
+
+    def run(self, params, directory, stem):
+
+        from Source.Applications import CapillaryRheometer
+
+        g, p = params['geometry'], params['process']
+        rheometer = CapillaryRheometer(params['material']['file'], T=p['T'], mesh_scale=g['mesh_scale'],
+                                       **{k: g[k] for k in ('barrel_radius', 'barrel_length', 'capillary_radius', 'capillary_length')})
+        table = rheometer.measure(p['shear_rates'])
+
+        results = _scalars(table)
+        results['max_abs_error'] = float(np.max(np.abs(table['error'])))
+        results['entrance_loss_fraction_mean'] = float(np.mean(table['dp_entrance'] / table['dp_total']))
+
+        if params['output']['vtk']:
+            results['vtk'] = rheometer.model.exportVTK(os.path.join(directory, stem))
+
+        return results
+
+
+@case_type('injection')
+class InjectionCaseCase:
+
+    """Filling of a rectangular plate with the Hele-Shaw model (Applications.InjectionCase.plate): a gate at the middle of the edge
+    x = 0, constant flow rate (volume / fill_time), with the temperature across the gap if process.thermal. output.plot writes the
+    isochrones as <name>_isochrones.png.
+
+    Results: fill_time [s], gate_pressure_peak and gate_pressure_end [Pa], clamp_force_peak [N], short_shot, filled_fraction,
+    frozen_fraction_mean (thermal), steps."""
+
+    defaults = {
+        'material': {'file': REQUIRED, 'rho': None, 'Cp': None, 'k': None},
+        'geometry': {'length': 0.10, 'width': 0.06, 'thickness': 2.0e-3, 'gate_width': 0.01, 'element_size': 2.5e-3},
+        'process': {'fill_time': REQUIRED, 'T_melt': 230.0, 'T_mold': 50.0, 'thermal': True, 'htc': 5000.0, 'batch': 0.1},
+        'output': {'directory': '.', 'plot': False},
+    }
+
+    def run(self, params, directory, stem):
+
+        from Source.Applications import InjectionCase
+
+        m, g, p = params['material'], params['geometry'], params['process']
+        case = InjectionCase.plate(m['file'], fill_time=p['fill_time'], T_melt=p['T_melt'], T_mold=p['T_mold'], thermal=p['thermal'],
+                                   htc=p['htc'], batch=p['batch'], rho=m['rho'], Cp=m['Cp'], k=m['k'], **g)
+        results = case.run()
+
+        if params['output']['plot']:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+            ax = case.plot_isochrones()
+            path = os.path.join(directory, f"{stem}_isochrones.png")
+            ax.figure.savefig(path, dpi=120, bbox_inches='tight')
+            plt.close(ax.figure)
+            results['plot'] = path
 
         return results

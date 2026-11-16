@@ -1,0 +1,30 @@
+# Llenado de una placa con el modelo Hele-Shaw, con temperatura en el espesor y molde a 50 °C:
+#   python -m femsim examples/casos/llenado_placa.toml
+# El barrido del tiempo de llenado da la curva U de la presion de entrada (con calor, una inyeccion lenta paga la capa congelada).
+
+type = "injection"
+name = "llenado_placa"
+
+[material]
+file = "POLYFORT_FPP30GFC_K1079"
+
+[geometry]
+length = 0.10
+width = 0.06
+thickness = 2.0e-3
+gate_width = 0.01                     # entrada en el centro del borde x = 0
+element_size = 2.5e-3
+
+[process]
+fill_time = 1.0                       # [s], caudal constante = volumen / tiempo
+T_melt = 230.0
+T_mold = 50.0
+thermal = true
+htc = 5000.0                          # contacto con el molde [W/(m2 K)]
+
+[output]
+directory = "resultados_casos"
+plot = true                           # isocronas en <name>_isochrones.png
+
+[sweep]
+fill_time = [0.25, 0.5, 1.0, 2.0, 4.0]

@@ -32,8 +32,10 @@ variable de entorno `FEMSIM_MATERIALS`) o de una ruta, y da las propiedades y la
 
 Línea de órdenes: `python -m femsim examples/casos/dado_rendija.toml` resuelve un caso descrito en TOML (tipo, material, geometría,
 proceso, salidas y, opcionalmente, un `[sweep]` con listas de valores). `--set proceso.clave=valor` cambia un valor, `--jobs 4` reparte
-el barrido en procesos, `--dry-run` solo comprueba el archivo. Por ahora existe el tipo `slit_die` (dado de rendija); ver la cabecera de
-`Source/Cases.py` para el formato y cómo añadir tipos.
+el barrido en procesos, `--dry-run` solo comprueba el archivo. Tipos: `slit_die` (dado de rendija), `capillary_rheometer` (reómetro capilar con correcciones de Bagley y Rabinowitsch) e `injection`
+(llenado de una placa: isócronas, presión de entrada, fuerza de cierre). Detrás hay clases finas, usables directamente desde Python:
+`SlitDie`, `CapillaryRheometer`, `InjectionCase` (`Source/Applications.py`). Ejemplos en `examples/casos/`; formato y cómo añadir tipos
+en la cabecera de `Source/Cases.py`.
 
 > Documentación detallada:
 > - [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md): cómo está organizado el código y cómo extenderlo.

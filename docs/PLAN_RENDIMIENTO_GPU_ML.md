@@ -334,6 +334,28 @@ Propuesta, de menos a más esfuerzo:
 - **Pendiente:** los tipos `capillary_rheometer` e `injection` (llenado–empaque) entran con E.7, que construye las clases
   `CapillaryRheometer` e `InjectionCase`; el tipo de caso será una capa fina sobre ellas. `Test/test_cases.py`, 7 pruebas.
 
+**Hecho el 2026-11-16 (E.7, clases por aplicación y sus tipos de caso):** `Source/Applications.py`.
+
+- `SlitDie(material, ...)`: `.solve(q)` y `.curve(caudales)` (continuación en caudal, la curva del dado). El tipo de caso
+  `slit_die` pasa a ser una capa sobre esta clase.
+- `CapillaryRheometer(material, T, ...)`: malla de gmsh del barril y el capilar (tamaños relativos al radio del capilar,
+  `mesh_scale`), `.measure(tasas_aparentes)` con las correcciones de Bagley (pérdida de entrada) y Rabinowitsch y la viscosidad
+  medida frente a la ley. Es el flujo de `Example_Capillary_Rheometer.py` con la ley de la biblioteca a temperatura fija
+  (`Rheology.AtTemperature`, nueva). Tipo de caso `capillary_rheometer`.
+- `InjectionCase(material, malla, entrada, espesor, tiempo_de_llenado, ...)` y `InjectionCase.plate(...)`: llenado Hele-Shaw a caudal
+  constante, con temperatura en el espesor si `thermal`. `.run()` da tiempo de llenado, presión de entrada máxima y final, **fuerza
+  de cierre máxima** (integral de la presión sobre el área proyectada en cada paso; solo mallas planas), llenado corto, fracción
+  llena y congelada; `.isochrones(n)` y `.plot_isochrones()`. Tipo de caso `injection` (con `output.plot` guarda el PNG de las isócronas).
+- Validación: dado newtoniano contra `3 mu q L / H^3` (1 %); reómetro newtoniano (n' = 1, viscosidad recuperada a 3 %, pérdida de entrada
+  positiva y menor del 25 %) y con Cross–WLF (error por debajo del 6 % en una malla gruesa, 1.7 % con la del caso de ejemplo);
+  tira newtoniana llenada contra la solución cerrada (`p = 12 eta L^2 / (t h^2)` y `F = p L W / 2`, 3 %). Con molde frío aparece la
+  **curva U** (presión de entrada mínima hacia 0.5 s en la placa de ejemplo; a 4 s es 1.7 veces mayor por la capa congelada), como
+  en `Example_Filling_NonIsothermal.py`. Ejemplos: `examples/casos/reometro_capilar.toml` y `llenado_placa.toml`.
+- Pendiente de E.7: empaque y enfriamiento (`pack`) y la contracción en `InjectionCase`; piezas desde CAD (`from_dual_domain`) y
+  la red de alimentación (`addRunners`) solo por el modelo de `.filling`; fuerza de cierre en superficies plegadas (área proyectada).
+  El reómetro hace la corrección de Bagley por extrapolación del gradiente (la del ejemplo), no con varias relaciones L/D.
+  `Test/test_applications.py`, 5 pruebas.
+
 ## Físicas: robustez y especialización
 
 Lo que la revisión confirma como siguiente (ya inventariado en `ESTADO.md` y `PLAN_INYECCION.md`): orientación de fibras, molde y
@@ -347,6 +369,7 @@ medido. La fase 1 de inyección (geometría desde CAD) puede ir en paralelo: no 
 
 ## Avance
 
+- **2026-11-16:** fase E.7 (`SlitDie`, `CapillaryRheometer`, `InjectionCase` y sus tipos de caso).
 - **2026-11-16:** fase E.6 (archivo de caso TOML, línea de órdenes y barridos; tipo `slit_die`).
 - **2026-11-16:** fase E.5 (materiales en JSON y biblioteca).
 - **2026-11-15:** fase E.4 (monitores, sondas, puntos de control y reanudación del transitorio).

@@ -119,6 +119,18 @@ class CarreauYasuda(ViscosityLaw):
         return self.mu_inf + (self.mu0 - self.mu_inf) * (1.0 + lg_a) ** ((self.n - 1.0) / self.a)
 
 
+class AtTemperature(ViscosityLaw):
+
+    """Any law of temperature at a fixed temperature T [°C]: an isothermal flow without a temperature field (the capillary rheometer
+    with a Cross-WLF melt, for example). The law does not read a field."""
+
+    def __init__(self, law, T):
+        self.law, self.T = law, float(T)
+
+    def __call__(self, gamma2, T=0.0):
+        return self.law(gamma2, self.T)
+
+
 class Cross(ViscosityLaw):
 
     """mu = mu0 / (1 + (mu0 gamma_dot / tau_star)^(1 - n)): zero-shear plateau mu0, power law of index n beyond

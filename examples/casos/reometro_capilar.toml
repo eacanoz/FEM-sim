@@ -1,0 +1,23 @@
+# Reometro capilar simulado (barril + capilar axisimetricos, entrada plana) con correcciones de Bagley y Rabinowitsch:
+#   python -m femsim examples/casos/reometro_capilar.toml
+# La viscosidad "medida" debe recuperar la ley del material; mesh_scale = 1 es la malla del ejemplo, 2.5 una malla gruesa y rapida.
+
+type = "capillary_rheometer"
+name = "reometro_capilar"
+
+[material]
+file = "POLYFORT_FPP30GFC_K1079"
+
+[geometry]
+barrel_radius = 4.75e-3
+barrel_length = 8.0e-3
+capillary_radius = 0.5e-3
+capillary_length = 16.0e-3            # L/D = 16
+mesh_scale = 2.5
+
+[process]
+T = 230.0                             # [°C], isotermo
+shear_rates = [20.0, 60.0, 200.0, 600.0, 2000.0]     # tasas de corte aparentes [1/s]
+
+[output]
+directory = "resultados_casos"
