@@ -1,0 +1,28 @@
+# Dado de rendija plana (la mitad por simetria) con un fundido Cross-WLF. Ejecutar desde cualquier carpeta:
+#   python -m femsim examples/casos/dado_rendija.toml
+#   python -m femsim examples/casos/dado_rendija.toml --set process.flow_rate=2e-4 --output resultados
+# Los resultados (JSON, y CSV si hay [sweep]) van a la carpeta de [output].
+
+type = "slit_die"
+name = "dado_rendija"
+
+[material]
+file = "POLYFORT_FPP30GFC_K1079"      # biblioteca de materiales (Source/data/materials) o ruta de un JSON
+
+[geometry]
+half_aperture = 1.0e-3                # semiapertura [m]
+length = 20.0e-3                      # largo [m]
+nx = 60
+ny = 12
+
+[process]
+flow_rate = 1.0e-4                    # caudal por unidad de profundidad en la mitad de la rendija [m2/s]
+T_inlet = 230.0                       # [°C]
+viscous_heating = true
+
+[output]
+directory = "resultados_casos"
+vtk = false
+
+[sweep]                               # una ejecucion por valor: curva caudal - caida de presion
+flow_rate = [2.5e-5, 5.0e-5, 1.0e-4]

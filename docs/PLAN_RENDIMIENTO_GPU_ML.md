@@ -318,6 +318,22 @@ Propuesta, de menos a más esfuerzo:
 - Falta de E.5: térmicas dependientes de la temperatura (`rho Cp(T)`) y modos viscoelásticos en el formato; entran cuando haya
   leyes que los consuman. `Test/test_material_files.py`, 5 pruebas.
 
+**Hecho el 2026-11-16 (E.6, archivo de caso y línea de órdenes; primer tipo de caso):** `Source/Cases.py`, `Source/cli.py`.
+
+- `python -m femsim caso.toml [--set seccion.clave=valor] [--output DIR] [--jobs N] [--dry-run] [--quiet]` (también el
+  guion `femsim` de `pyproject.toml`, y `--list-types`). Un caso es `type`, `name` y secciones propias del tipo; `[sweep]` con listas
+  da una ejecución por combinación (producto cartesiano), en procesos con `--jobs` (la fase A.4 para barridos de proceso).
+  Cada ejecución escribe `<name>[_i]_results.json` con el caso resuelto y sus resultados, y un barrido `<name>_sweep.csv`.
+- Comprobación estricta: tipo, secciones y claves desconocidas, tipo del valor (un entero acepta `12.0`, no `12.5`), claves
+  obligatorias; los errores nombran el archivo y la clave. `--set` toma valores TOML (`2e-4`, `false`, `"texto"`, `[1, 2]`).
+- Los tipos se registran con `@case_type(nombre)` sobre una clase con `defaults` y `run(params, directorio, nombre)`. **Solo
+  existe `slit_die`** (dado de rendija, el modelo de `Example_Polymer_Slit_Die.py` con el material de la biblioteca: caída de
+  presión, T máxima y de mezcla a la salida, caudales, balance de caudal, velocidad de corte aparente, VTK opcional). Validado
+  contra la solución newtoniana (`dp = 3 mu q L / H^3`, 0.3 %) y por la monotonía de la curva del dado (adelgazamiento). Ejemplo:
+  `examples/casos/dado_rendija.toml`.
+- **Pendiente:** los tipos `capillary_rheometer` e `injection` (llenado–empaque) entran con E.7, que construye las clases
+  `CapillaryRheometer` e `InjectionCase`; el tipo de caso será una capa fina sobre ellas. `Test/test_cases.py`, 7 pruebas.
+
 ## Físicas: robustez y especialización
 
 Lo que la revisión confirma como siguiente (ya inventariado en `ESTADO.md` y `PLAN_INYECCION.md`): orientación de fibras, molde y
@@ -331,6 +347,7 @@ medido. La fase 1 de inyección (geometría desde CAD) puede ir en paralelo: no 
 
 ## Avance
 
+- **2026-11-16:** fase E.6 (archivo de caso TOML, línea de órdenes y barridos; tipo `slit_die`).
 - **2026-11-16:** fase E.5 (materiales en JSON y biblioteca).
 - **2026-11-15:** fase E.4 (monitores, sondas, puntos de control y reanudación del transitorio).
 - **2026-11-14:** fase E.1 (`solve()` sin configuración, cadenas), E.2 (registro de la sesión) y E.3 (paquete `femsim`, `examples/`).

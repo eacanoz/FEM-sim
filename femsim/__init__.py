@@ -6,6 +6,7 @@ equal whichever name imported them):
 """
 
 import importlib
+import os
 import importlib.abc
 import importlib.util
 import sys
@@ -13,7 +14,7 @@ import sys
 import Source
 
 __version__ = "0.1.0"
-__path__ = []          # a package whose submodules are found by the finder below
+__path__ = [os.path.dirname(os.path.abspath(__file__))]   # real files here (__main__); the rest by the finder below
 
 
 class _AliasLoader(importlib.abc.Loader):

@@ -30,6 +30,11 @@ Materiales: `material.from_file('POLYFORT_FPP30GFC_K1079')` lee un JSON de la bi
 variable de entorno `FEMSIM_MATERIALS`) o de una ruta, y da las propiedades y las leyes (`mat.viscosity_law`, `mat.pvt`,
 `mat.kinetics`) listas para el modelo; `mat.save(ruta)` escribe uno propio. Formato en la cabecera de `Source/Material.py`.
 
+Línea de órdenes: `python -m femsim examples/casos/dado_rendija.toml` resuelve un caso descrito en TOML (tipo, material, geometría,
+proceso, salidas y, opcionalmente, un `[sweep]` con listas de valores). `--set proceso.clave=valor` cambia un valor, `--jobs 4` reparte
+el barrido en procesos, `--dry-run` solo comprueba el archivo. Por ahora existe el tipo `slit_die` (dado de rendija); ver la cabecera de
+`Source/Cases.py` para el formato y cómo añadir tipos.
+
 > Documentación detallada:
 > - [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md): cómo está organizado el código y cómo extenderlo.
 > - [docs/ESTADO.md](docs/ESTADO.md): qué funciona, qué está validado, limitaciones y próximos pasos.

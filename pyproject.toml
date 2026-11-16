@@ -16,6 +16,9 @@ dependencies = [
     "pypardiso>=0.4.6",
 ]
 
+[project.scripts]
+femsim = "Source.cli:main"
+
 [project.optional-dependencies]
 amg = ["pyamg>=5.0"]
 mesh = ["gmsh>=4.12"]
