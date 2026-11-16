@@ -385,7 +385,7 @@ lineal con PARDISO. `Node`/`Element` solo se construyen en `Source/Pre_processin
 | 3D hex8 | 530 mil | 6.8 s | 373 MB | 0.78 s | 6.5 s | 76 s | 12.6 GB |
 
 - Los objetos cuestan ~650 B por nodo frente a 48 B de los arrays (13 veces), pero son el **3–15 % del pico de memoria**; en 2D son
-  el 10–20 % del tiempo de un problema lineal (generar más pasar los objetos a arrays, que se repite en `Discretization`, `boundary_facets`,
+  el 10–20 % del tiempo de un problema lineal (generar la malla y pasar los objetos a arrays, lo que se repite en `Discretization`, `boundary_facets`,
   la exportación VTK y la turbulencia) y en 3D o en estudios no lineales y transitorios, donde la malla se construye una vez y se resuelve
   muchas, bajan del 5 %. El bucle sobre `NL` para las condiciones de contorno es despreciable (0.02 s con 400 mil nodos).
   El grueso del tiempo de preparación (einsum de la geometría, inversas, ensamblaje) no depende del modelo de objetos.
