@@ -48,10 +48,12 @@ def flow_term(model):
 
 def compiled_matches(model, seed=5, tol=1e-12):
 
-    """The compiled residual of the FlowTerm against the numpy one: steady, in two time steps and at the old level."""
+    """The compiled residual and tangent of every term that has them (FlowTerm, FieldConvectionTerm) against the numpy ones:
+    steady, in two time steps and at the old level, with tau at the state and at another one."""
 
     system = model._system()
-    term = flow_term(model)
+    terms = [term for term in system._terms if hasattr(type(term), 'compiled')]
+    assert any(isinstance(term, FlowTerm) for term in terms)
     rng = np.random.default_rng(seed)
     x = rng.normal(scale=0.3, size=system.layout.ndof)
     old = x + rng.normal(scale=0.01, size=system.layout.ndof)
@@ -61,29 +63,33 @@ def compiled_matches(model, seed=5, tol=1e-12):
     try:
         for context in contexts:
             system.time = context
-            term.compiled = False
-            reference = term.contribution(x, tangent=False)[0]
-            term.compiled = True
-            fast = term.contribution(x, tangent=False)[0]
-            error = np.max(np.abs(fast - reference))
-            assert np.max(np.abs(reference)) > 0.0
-            assert error <= tol * max(1.0, np.max(np.abs(reference))), (context and sorted(context), error)
-
-            # The tangent, with tau at another state as the tests against finite differences use it, and at this one
-            for tau_state in (None, old):
-                term.tau_state = tau_state
+            for term in terms:
+                where = (type(term).__name__, context and sorted(context))
                 term.compiled = False
-                R_ref, J_ref = term.contribution(x)
+                reference = term.contribution(x, tangent=False)[0]
                 term.compiled = True
-                R_fast, J_fast = term.contribution(x)
-                size = max(1.0, abs(J_ref).max())
-                assert np.max(np.abs(R_fast - R_ref)) <= tol * max(1.0, np.max(np.abs(R_ref)))
-                assert abs(J_fast - J_ref).max() <= 1e-11 * size, (context and sorted(context), tau_state is None,
-                                                                    abs(J_fast - J_ref).max() / size)
+                fast = term.contribution(x, tangent=False)[0]
+                error = np.max(np.abs(fast - reference))
+                assert np.max(np.abs(reference)) > 0.0, where
+                assert error <= tol * max(1.0, np.max(np.abs(reference))), (where, error)
+
+                # The tangent, with tau at another state as the tests against finite differences use it, and at this one
+                for tau_state in (None, old):
+                    term.tau_state = tau_state
+                    term.compiled = False
+                    R_ref, J_ref = term.contribution(x)
+                    term.compiled = True
+                    R_fast, J_fast = term.contribution(x)
+                    size = max(1.0, abs(J_ref).max())
+                    assert np.max(np.abs(R_fast - R_ref)) <= tol * max(1.0, np.max(np.abs(R_ref))), where
+                    assert abs(J_fast - J_ref).max() <= 1e-11 * size, (where, tau_state is None,
+                                                                        abs(J_fast - J_ref).max() / size)
+                term.tau_state = None
     finally:
         system.time = None
-        term.compiled = True
-        term.tau_state = None
+        for term in terms:
+            term.compiled = True
+            term.tau_state = None
 
 
 def build(mesh, dim=2, law=None, inertia=True, heat=False, heating=False, buoyancy=False, axisymmetric=False, supg=False,
@@ -103,6 +109,10 @@ def build(mesh, dim=2, law=None, inertia=True, heat=False, heating=False, buoyan
         fluid.setStabilization('SUPG')
     if force is not None:
         fluid.setBodyForce(force)
+    if heat:                                                     # heat convected by the computed velocity, with SUPG
+        model.physics.heat.setVelocity('u')
+        model.physics.heat.setStabilization('SUPG')
+        model.physics.heat.F_const = 0.7
     return model
 
 
@@ -143,6 +153,23 @@ def test_compiled_residual_in_3d():
         compiled_matches(build(mesh_3d(element, order, n=2 if order == 1 else 1), dim=3, force=(0.1, 0.2, -0.3)))
         compiled_matches(build(mesh_3d(element, order, n=2 if order == 1 else 1), dim=3, law=carreau, heat=True, heating=True,
                                buoyancy=True))
+
+
+def test_compiled_convection_of_turbulence_fields():
+
+    """Spalart-Allmaras and k-omega SST: their transport uses FieldConvectionTerm without the diffusion in the SUPG residual."""
+
+    from Source.Physics.Turbulence import sa, sst
+    from Source.Physics.Physics import FieldConvectionTerm
+
+    for kind in (sa, sst):
+        mesh = mesh_2d(QUAD)
+        model = Model(name='t', dim=2, mesh=mesh, mat=material('X', miu=0.05, rho=1.0), psc=[ff, kind])
+        model.physics.fluid.setInertia(True)
+        model.physics.turbulence.setWalls(mesh.boundary_edges(lambda x, y: y < 1e-9))
+        model.physics.turbulence.coupleFlow()
+        assert any(isinstance(term, FieldConvectionTerm) for term in model._system()._terms)
+        compiled_matches(model)
 
 
 def test_compiled_residual_with_a_viscosity_by_region():
@@ -227,6 +254,25 @@ def test_direct_solver_refines_on_demand():
         assert np.max(np.abs(answers[0] - answers[1])) <= 1e-12 * np.max(np.abs(answers[1]))
 
 
+def test_threaded_sparse_product_is_the_same_matrix():
+
+    import Source.Simulation.SparseTools as tools
+
+    A = sp.random(3000, 2500, density=0.004, random_state=1, format='csr')
+    B = sp.random(2500, 1800, density=0.004, random_state=2, format='csr')
+    A[10:40] = 0.0                                               # empty rows, and blocks with very different sizes
+    A.eliminate_zeros()
+    reference = (A @ B).tocsr()
+    limit = tools.MIN_ENTRIES
+    tools.MIN_ENTRIES = 0
+    try:
+        product = tools.matmat(A, B)
+    finally:
+        tools.MIN_ENTRIES = limit
+    assert product.shape == reference.shape and product.nnz == reference.nnz
+    assert abs(product - reference).max() == 0.0
+
+
 def test_newton_stops_at_the_round_off_floor():
 
     """A Newtonian melt in a Taylor-Hood slit die with convected heat: one Newton step solves it, but the linear solves of
@@ -269,9 +315,11 @@ def test_newton_stops_at_the_round_off_floor():
 
 if __name__ == "__main__":
     tests = [test_compiled_residual_on_equal_order_elements, test_compiled_residual_on_taylor_hood_elements,
-             test_compiled_residual_in_3d, test_compiled_residual_with_a_viscosity_by_region,
+             test_compiled_residual_in_3d, test_compiled_convection_of_turbulence_fields,
+             test_compiled_residual_with_a_viscosity_by_region,
              test_compiled_residual_is_faster, test_transient_with_the_compiled_residual_matches_numpy,
-             test_direct_solver_refines_on_demand, test_newton_stops_at_the_round_off_floor]
+             test_direct_solver_refines_on_demand, test_threaded_sparse_product_is_the_same_matrix,
+             test_newton_stops_at_the_round_off_floor]
     failed = 0
     for t in tests:
         try:

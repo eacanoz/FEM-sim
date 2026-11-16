@@ -61,6 +61,13 @@ SUITES = [
     "Test/test_dual_domain.py",
     "Test/test_runners.py",
     "Test/test_flow_kernel.py",
+    "Test/test_interface.py",
+    "Test/test_monitoring.py",
+    "Test/test_material_files.py",
+    "Test/test_cases.py",
+    "Test/test_applications.py",
+    "Test/test_viewer_report.py",
+    "Test/test_mesh_arrays.py",
 ]
 
 

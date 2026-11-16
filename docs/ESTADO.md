@@ -684,6 +684,11 @@ Lo que sigue pendiente:
   primera solución de cada factorización y lo omite en las siguientes si no cambia la solución (`refine_on_demand`). **Defecto
   corregido:** entre los commits `641ad6b` y `6a9de71` ese refinamiento se hacía fuera de PARDISO y no reparaba las soluciones
   de los puntos de silla de Taylor–Hood.
+- **Convección de campos compilada y productos dispersos en hilos (2026-11-16, fase B.3):** `FieldConvectionTerm` (calor, especies
+  y turbulencia convectados) delega en `Source/Physics/FieldKernel.py`, residuo con `jax.numpy` y tangente por derivada
+  automática (`FieldConvectionTerm.compiled = False` deja numpy); los productos no locales de la tangente del flujo usan
+  `SparseTools.matmat` (bloques de filas en hilos, misma matriz). Rendija Cross–WLF con calor: 24.5 → 21.8 s (Q4) y 23.4 → 20.1 s
+  (Taylor–Hood), medidas el mismo día. `Test/test_flow_kernel.py` (10 pruebas).
 - **Newton se para en el piso de redondeo (2026-11-14):** si la búsqueda de línea no encuentra descenso dos iteraciones seguidas
   con un residuo ya por debajo de 1e-6 del inicial (o de 1e-7), se da por convergido. En Taylor–Hood las soluciones lineales
   dejan el residuo en ~1e-9 relativo, por encima de la tolerancia, y Newton repetía el paso mínimo hasta que uno completo pasaba

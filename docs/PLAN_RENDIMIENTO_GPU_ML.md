@@ -181,14 +181,34 @@ La rendija Q4 no gana: de los 1.6 s de cada tangente, lo que pesa son los produc
 (`Q @ dσ/dx`, `W @ d_divs`) y las sumas de matrices, no los núcleos. La cavidad transitoria queda en 20.8 s (18.7 s con el
 refinamiento defectuoso de `641ad6b`).
 
+**Hecho el 2026-11-16 (B.3, convección de campos y productos dispersos):**
+
+- `Source/Physics/FieldKernel.py`: residuo de `FieldConvectionTerm` (calor, especies y turbulencia convectados por la velocidad
+  calculada, con SUPG) con `jax.numpy` y tangente por derivada automática por elemento. τ sale de numpy (`ops.supg_tau`) y entra
+  como dato, igual que el nivel anterior. Sin opciones que cambien el código: una sola compilación por tipo de elemento.
+  `FieldConvectionTerm.compiled = False` deja la ruta numpy. Igual a numpy a 1e-12 (residuo) y 1e-11 (tangente) en calor 2D y
+  3D, Taylor–Hood (término de difusión en el residuo de SUPG), SA y SST.
+- `Source/Simulation/SparseTools.py`, `matmat(A, B)`: el producto disperso por bloques de filas en varios hilos (scipy suelta el
+  intérprete), la misma matriz entrada a entrada. `Q @ dσ/dx`: 0.53 → 0.26 s por tangente. Usado en los dos productos no locales
+  de la tangente del flujo.
+- Medido el mismo día y en el mismo estado de la máquina (que ese día iba un 10 % más lenta que el 14):
+
+| Caso | Antes de B.3 | Con B.3 |
+|---|---|---|
+| Rendija Cross–WLF + calor, Q4 | 24.5 s | 21.8 s |
+| Rendija Cross–WLF + calor, Taylor–Hood | 23.4 s | 20.1 s |
+| Cavidad estacionaria, conducto 3D, cavidad transitoria (sin calor) | 18.3, 26.8, 22.7 s | 18.0, 27.4, 23.6 s (ruido) |
+
+- De paso: las siete suites de la fase E no estaban en `run_tests.py` (corría 50 de 57); registradas.
+
 **Pendiente de la fase B:**
 
-1. Productos dispersos de la tangente con esfuerzo recuperado (`Q @ dσ/dx`: patrón simbólico una vez) y ensamblaje de patrón
-   fijo: es lo que domina ya la rendija Q4.
-2. `FieldConvectionTerm` (calor y especies convectados: 2.5 de 22 s en la rendija), `GradientLawTerm` (turbulencia) y
-   `ConformationTerm` (viscoelástico).
+1. Lo que queda en la rendija Q4 (21.8 s): PARDISO 8 s (de ellos 2.2 s son el análisis completo con que se comprueba una vez
+   el análisis reutilizado), los productos no locales 2 s, sumas y conversiones de matrices dispersas ~2.5 s (ensamblaje de
+   patrón fijo), el resto núcleos y Python.
+2. `GradientLawTerm` (turbulencia) y `ConformationTerm` (viscoelástico), todavía en numpy.
 3. Reunir y dispersar dentro del núcleo (índices fijos) para quitar las copias entre numpy y JAX.
-4. Retirar las derivadas a mano de `FlowTerm` cuando la ruta compilada lleve un tiempo en uso.
+4. Retirar las derivadas a mano de `FlowTerm` y `FieldConvectionTerm` cuando la ruta compilada lleve un tiempo en uso.
 
 ## Fase C: GPU (RTX 4060, 8 GB)
 
@@ -428,6 +448,7 @@ medido. La fase 1 de inyección (geometría desde CAD) puede ir en paralelo: no 
 
 ## Avance
 
+- **2026-11-16:** fase B.3, convección de campos compilada y productos dispersos en hilos (rendijas con calor −11 a −14 %).
 - **2026-11-16:** fase E.9 (medición del coste de la malla de objetos y caché de `coords`/`conn`).
 - **2026-11-16:** fase E.8 (informe HTML y visor pyvista opcional).
 - **2026-11-16:** fase E.7 (`SlitDie`, `CapillaryRheometer`, `InjectionCase` y sus tipos de caso).

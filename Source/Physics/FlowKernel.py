@@ -23,6 +23,8 @@ import jax
 jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 
+from Source.Simulation.SparseTools import matmat
+
 CHUNK_ENTRIES = 30_000_000      # entries of the element tangents evaluated at once (0.24 GB)
 
 
@@ -389,7 +391,7 @@ class CompiledFlowResidual:
                     dU, dF = functions['stress_tangent'](U[part], Fv[part], geo, self.mu_const[part])
                     dsig.append(np.asarray(dU)), dsigF.append(np.asarray(dF))
                 dsig, dsigF = np.concatenate(dsig), np.concatenate(dsigF)
-                d_divs = term.Q @ term._stress_tangent(dsig, [dsigF[..., i] for i in range(len(self.rF))], self.ru, self.rF)
+                d_divs = matmat(term.Q, term._stress_tangent(dsig, [dsigF[..., i] for i in range(len(self.rF))], self.ru, self.rF))
         elif term.V is not None:
             d_divs = term.V
 
@@ -408,6 +410,6 @@ class CompiledFlowResidual:
                 W = W + sp.coo_matrix((Wp.ravel(), (np.broadcast_to(self.rp[:, None, :, None], Wp.shape).ravel(),
                                                     np.broadcast_to(columns[:, :, None, :], Wp.shape).ravel())),
                                       shape=W.shape).tocsr()
-            J = J - W @ d_divs
+            J = J - matmat(W, d_divs)
 
         return R, J

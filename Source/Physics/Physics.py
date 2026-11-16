@@ -238,7 +238,12 @@ class FieldConvectionTerm:
     The tangent includes the coupling blocks d/du (convecting velocity and SUPG weight); tau is kept frozen. The SUPG
     residual has the convection, the diffusion k (on quadratic elements; zero inside linear ones), the source f of the equation
     and, in transient studies, m dphi/dt of the step (system.time); other sources (reactions, viscous heating) are left out of it.
+
+    compiled: residual and tangent come from Source/Physics/FieldKernel.py (the same residual with jax.numpy and its automatic
+    derivative); False keeps the numpy path below, their reference.
     """
+
+    compiled = True
 
     def __init__(self, system, field, velocity, c, k=None, f=None, supg=False, m=0.0, k_in_residual=True):
 
@@ -249,6 +254,7 @@ class FieldConvectionTerm:
         self.supg = supg
         self.k_in_residual = k_in_residual
         self.tau_state = None        # evaluate tau at this state instead of x (to test the tangent)
+        self._compiled = None
 
     def _diffusion_term(self, phi):
 
@@ -263,6 +269,12 @@ class FieldConvectionTerm:
         return np.einsum('egi,ei->eg', k_lap_N, np.asarray(phi, dtype=float)[disc.conn]), k_lap_N
 
     def contribution(self, x, tangent=True):
+
+        if self.compiled:
+            if self._compiled is None:
+                from Source.Physics.FieldKernel import CompiledFieldConvection
+                self._compiled = CompiledFieldConvection(self)
+            return self._compiled(x, tangent)
 
         disc, layout = self.system.disc, self.system.layout
         nel, ngp, nne, dim = disc.B.shape
