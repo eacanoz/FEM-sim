@@ -37,6 +37,11 @@ el barrido en procesos, `--dry-run` solo comprueba el archivo. Tipos: `slit_die`
 `SlitDie`, `CapillaryRheometer`, `InjectionCase` (`Source/Applications.py`). Ejemplos en `examples/casos/`; formato y cómo añadir tipos
 en la cabecera de `Source/Cases.py`.
 
+Informe y visor: `output.report = true` en un caso escribe `<nombre>_report.html` (un archivo autocontenido: parámetros, resultados,
+campos, convergencia, sondas), y `Report` (`Source/Post_processing/Report.py`) arma el mismo informe para cualquier modelo resuelto. Para
+mallas 3D y superficies, `pip install femsim[view]` instala pyvista y `Source/Post_processing/Viewer.py` da `show(modelo, 'T')` y
+`to_pyvista(malla, campos)`; sin él, `exportVTK` sigue sirviendo para ParaView.
+
 > Documentación detallada:
 > - [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md): cómo está organizado el código y cómo extenderlo.
 > - [docs/ESTADO.md](docs/ESTADO.md): qué funciona, qué está validado, limitaciones y próximos pasos.

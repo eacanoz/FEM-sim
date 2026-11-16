@@ -356,6 +356,21 @@ Propuesta, de menos a más esfuerzo:
   El reómetro hace la corrección de Bagley por extrapolación del gradiente (la del ejemplo), no con varias relaciones L/D.
   `Test/test_applications.py`, 5 pruebas.
 
+**Hecho el 2026-11-16 (E.8, visor pyvista opcional e informe HTML):**
+
+- `Source/Post_processing/Report.py`: `Report` escribe **un solo archivo HTML** autocontenido (figuras PNG incrustadas, sin recursos
+  externos, tema claro/oscuro): `add_text`, `add_table` (diccionario o filas), `add_figure` (matplotlib), `add_model(model)` (resumen,
+  estadísticas por campo, contornos en mallas 2D, curva de convergencia o iteraciones por paso, sondas) y `case_report` (parámetros y
+  resultados). Los tres tipos de caso lo escriben con `output.report = true` (`<nombre>_report.html`; el llenado añade isócronas, presión
+  de entrada y fuerza de cierre; el reómetro, la curva de viscosidad medida frente a la ley). Funciona sin dependencias nuevas.
+- `Source/Post_processing/Viewer.py`: `to_pyvista(mesh, campos)` (la malla como `UnstructuredGrid`, con los mismos arrays que el
+  `.vtu`: `VTK.grid_arrays`, extraído de `write_vtu` sin cambiar su salida) y `show(modelo | llenado, campo, step, warp, screenshot)`.
+  pyvista es **opcional** (`pip install femsim[view]`): sin él da un error que dice cómo instalarlo. En mallas 3D el informe usa
+  `Viewer.show` para las vistas si pyvista está; si no, solo las estadísticas.
+- **No verificado:** pyvista no está instalado en `.venv`, así que `to_pyvista` y `show` (y las vistas 3D del informe) no se han
+  ejecutado, solo el aviso de que falta. Instalarlo (`pip install pyvista`) y correr `Test/test_viewer_report.py` activa esas pruebas
+  (construcción de la malla, captura PNG fuera de pantalla, campo desconocido). `Test/test_viewer_report.py`, 5 pruebas.
+
 ## Físicas: robustez y especialización
 
 Lo que la revisión confirma como siguiente (ya inventariado en `ESTADO.md` y `PLAN_INYECCION.md`): orientación de fibras, molde y
@@ -369,6 +384,7 @@ medido. La fase 1 de inyección (geometría desde CAD) puede ir en paralelo: no 
 
 ## Avance
 
+- **2026-11-16:** fase E.8 (informe HTML y visor pyvista opcional).
 - **2026-11-16:** fase E.7 (`SlitDie`, `CapillaryRheometer`, `InjectionCase` y sus tipos de caso).
 - **2026-11-16:** fase E.6 (archivo de caso TOML, línea de órdenes y barridos; tipo `slit_die`).
 - **2026-11-16:** fase E.5 (materiales en JSON y biblioteca).

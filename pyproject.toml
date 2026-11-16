@@ -22,7 +22,8 @@ femsim = "Source.cli:main"
 [project.optional-dependencies]
 amg = ["pyamg>=5.0"]
 mesh = ["gmsh>=4.12"]
-all = ["pyamg>=5.0", "gmsh>=4.12"]
+view = ["pyvista>=0.43"]
+all = ["pyamg>=5.0", "gmsh>=4.12", "pyvista>=0.43"]
 
 [tool.setuptools.packages.find]
 include = ["Source*", "femsim*"]

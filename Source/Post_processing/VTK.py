@@ -61,11 +61,17 @@ def _array_xml(name, values, dtype, components=1, binary=False):
             f'{buffer.getvalue()}</DataArray>\n')
 
 
-def write_vtu(path, mesh, point_data=None, binary=None):
+def mesh_dimension(mesh):
 
-    """Writes the mesh and the nodal fields {name: (n_nodes,)} to a .vtu file. Returns the path.
+    """Number of coordinates of the nodes of a mesh (3 for 3D meshes and surfaces in space)."""
 
-    binary: base64-encoded arrays instead of ASCII text; None chooses binary for 3D meshes only."""
+    return len(mesh.NL[0].coor)
+
+
+def grid_arrays(mesh):
+
+    """(points (n, 3), connectivity (nel, nne) in VTK node order, element type name) of a mesh: what a VTK grid is made of (write_vtu,
+    and Source/Post_processing/Viewer.py for pyvista)."""
 
     from Source.Pre_processing.Elements import element_type_of
 
@@ -78,13 +84,23 @@ def write_vtu(path, mesh, point_data=None, binary=None):
     points[:, :coords.shape[1]] = coords
 
     conn = np.array([e.getNodesId() for e in mesh.EL], dtype=np.int64)
-    nel, nne = conn.shape
-
     order = vtk_node_order(element_type)
     if order is not None:
         conn = conn[:, order]
+
+    return points, conn, element_type
+
+
+def write_vtu(path, mesh, point_data=None, binary=None):
+
+    """Writes the mesh and the nodal fields {name: (n_nodes,)} to a .vtu file. Returns the path.
+
+    binary: base64-encoded arrays instead of ASCII text; None chooses binary for 3D meshes only."""
+
+    points, conn, element_type = grid_arrays(mesh)
+    nel, nne = conn.shape
     if binary is None:
-        binary = coords.shape[1] == 3
+        binary = mesh_dimension(mesh) == 3
 
     def array(name, values, dtype, components=1):
         return _array_xml(name, values, dtype, components, binary)

@@ -291,6 +291,21 @@ def _write_sweep(path, results):
 
 # ----- types of case (thin layers over Source/Applications.py) -----
 
+def _report(title, params, results):
+
+    from Source.Post_processing.Report import case_report
+    return case_report(title, {k: v for k, v in params.items()}, results)
+
+
+def _isochrones_figure(case):
+
+    import matplotlib.pyplot as plt
+
+    figure, ax = plt.subplots(figsize=(6.5, 4.2))
+    case.plot_isochrones(ax=ax)
+    return figure
+
+
 def _scalars(results):
     return {key: (value.tolist() if isinstance(value, np.ndarray) else value) for key, value in results.items()}
 
@@ -309,7 +324,7 @@ class SlitDieCase:
         'material': {'file': REQUIRED, 'rho': None, 'Cp': None, 'k': None},
         'geometry': {'half_aperture': 1.0e-3, 'length': 20.0e-3, 'nx': 80, 'ny': 16},
         'process': {'flow_rate': REQUIRED, 'T_inlet': 230.0, 'T_wall': None, 'viscous_heating': True},
-        'output': {'directory': '.', 'vtk': False},
+        'output': {'directory': '.', 'vtk': False, 'report': False},
     }
 
     def run(self, params, directory, stem):
@@ -323,6 +338,11 @@ class SlitDieCase:
 
         if params['output']['vtk']:
             results['vtk'] = die.model.exportVTK(os.path.join(directory, stem))
+
+        if params['output']['report']:
+            report = _report(f"Dado de rendija: {stem}", params, results)
+            report.add_model(die.model)
+            results['report'] = report.save(os.path.join(directory, f"{stem}_report.html"))
 
         return results
 
@@ -342,7 +362,7 @@ class CapillaryRheometerCase:
         'geometry': {'barrel_radius': 4.75e-3, 'barrel_length': 8.0e-3, 'capillary_radius': 0.5e-3, 'capillary_length': 16.0e-3,
                      'mesh_scale': 1.0},
         'process': {'T': 230.0, 'shear_rates': [20.0, 60.0, 200.0, 600.0, 2000.0]},
-        'output': {'directory': '.', 'vtk': False},
+        'output': {'directory': '.', 'vtk': False, 'report': False},
     }
 
     def run(self, params, directory, stem):
@@ -361,6 +381,21 @@ class CapillaryRheometerCase:
         if params['output']['vtk']:
             results['vtk'] = rheometer.model.exportVTK(os.path.join(directory, stem))
 
+        if params['output']['report']:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+
+            report = _report(f"Reometro capilar: {stem}", params, results)
+            figure, ax = plt.subplots(figsize=(6.5, 3.6))
+            ax.loglog(table['gamma_wall'], table['eta_law'], 'k-', label='ley del material')
+            ax.loglog(table['gamma_apparent'], table['tau_wall'] / table['gamma_apparent'], 's', mfc='none', label='aparente')
+            ax.loglog(table['gamma_wall'], table['eta_measured'], 'o', label='corregida (Rabinowitsch)')
+            ax.set_xlabel('tasa de corte [1/s]'); ax.set_ylabel('viscosidad [Pa s]'); ax.legend(); ax.grid(True, which='both', alpha=0.3)
+            report.add_figure('Curva de viscosidad medida', figure)
+            report.add_model(rheometer.model, fields=['p', 'viscosity'])
+            results['report'] = report.save(os.path.join(directory, f"{stem}_report.html"))
+
         return results
 
 
@@ -378,7 +413,7 @@ class InjectionCaseCase:
         'material': {'file': REQUIRED, 'rho': None, 'Cp': None, 'k': None},
         'geometry': {'length': 0.10, 'width': 0.06, 'thickness': 2.0e-3, 'gate_width': 0.01, 'element_size': 2.5e-3},
         'process': {'fill_time': REQUIRED, 'T_melt': 230.0, 'T_mold': 50.0, 'thermal': True, 'htc': 5000.0, 'batch': 0.1},
-        'output': {'directory': '.', 'plot': False},
+        'output': {'directory': '.', 'plot': False, 'report': False},
     }
 
     def run(self, params, directory, stem):
@@ -399,5 +434,23 @@ class InjectionCaseCase:
             ax.figure.savefig(path, dpi=120, bbox_inches='tight')
             plt.close(ax.figure)
             results['plot'] = path
+
+        if params['output']['report']:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+
+            report = _report(f"Llenado: {stem}", params, results)
+            report.add_figure('Isocronas del llenado', _isochrones_figure(case))
+
+            history = np.array(case.filling.history)
+            figure, (left, right) = plt.subplots(1, 2, figsize=(9, 3.2), constrained_layout=True)
+            left.plot(history[:, 0], history[:, 2] / 1e6); left.set_xlabel('t [s]'); left.set_ylabel('presion de entrada [MPa]')
+            clamp = np.array(case.clamp_history)
+            right.plot(clamp[:, 0], clamp[:, 1] / 1e3); right.set_xlabel('t [s]'); right.set_ylabel('fuerza de cierre [kN]')
+            for ax in (left, right):
+                ax.grid(alpha=0.3)
+            report.add_figure('Presion y fuerza de cierre', figure)
+            results['report'] = report.save(os.path.join(directory, f"{stem}_report.html"))
 
         return results
