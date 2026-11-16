@@ -1,0 +1,5 @@
+{
+  "name": "Sabic PP505P (cinetica de cristalizacion)",
+  "source": "Ajuste de Flash-DSC a 10 K/s de un iPP, Sabic PP505P (Ferrer Fabon et al., PAMM 22, e202200193, 2022). Solo la cinetica de Nakamura-Hoffman-Lauritzen: no incluye reologia ni pvT. Los ejemplos la usan con el POLYFORT FPP 30 GFC K1079, que es otro material (la fibra de vidrio acelera la cristalizacion).",
+  "kinetics": {"model": "NakamuraHoffman", "ln_inv_t_half0": 33.6, "Kg": 0.58e6, "U_star": 17200.0, "T_inf": 231.15, "Tm0": 467.15, "n": 3.0}
+}

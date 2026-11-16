@@ -26,6 +26,10 @@ Durante el cálculo: `model.solve(on_iteration=f, on_step=g)` llama a sus funcio
 cálculo), `model.addProbe('centro', 'T', point=(0.5, 0.5))` registra un valor (`model.probe_values`), y
 `model.solve(checkpoint='caso.npz')` guarda puntos de control del transitorio que `model.solve(resume='caso.npz')` continúa.
 
+Materiales: `material.from_file('POLYFORT_FPP30GFC_K1079')` lee un JSON de la biblioteca (`Source/data/materials/`, ampliable con la
+variable de entorno `FEMSIM_MATERIALS`) o de una ruta, y da las propiedades y las leyes (`mat.viscosity_law`, `mat.pvt`,
+`mat.kinetics`) listas para el modelo; `mat.save(ruta)` escribe uno propio. Formato en la cabecera de `Source/Material.py`.
+
 > Documentación detallada:
 > - [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md): cómo está organizado el código y cómo extenderlo.
 > - [docs/ESTADO.md](docs/ESTADO.md): qué funciona, qué está validado, limitaciones y próximos pasos.

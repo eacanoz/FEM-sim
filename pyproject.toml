@@ -23,3 +23,6 @@ all = ["pyamg>=5.0", "gmsh>=4.12"]
 
 [tool.setuptools.packages.find]
 include = ["Source*", "femsim*"]
+
+[tool.setuptools.package-data]
+Source = ["data/materials/*.json"]

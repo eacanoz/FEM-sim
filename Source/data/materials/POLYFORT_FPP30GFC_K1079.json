@@ -1,0 +1,9 @@
+{
+  "name": "POLYFORT FPP 30 GFC K1079",
+  "source": "Cross-WLF y Tait de dos dominios ajustados a los datos de este material (los valores de los ejemplos del repositorio, p. ej. Example_Packing_HeleShaw.py). rho es la densidad del fundido a 230 °C y presion cero segun ese Tait, Cp y k son los valores de trabajo de los ejemplos, no medidas de este grado: verificar antes de usarlos como dato de diseño.",
+  "properties": {"rho": 970.0, "Cp": 2000.0, "k": 0.22},
+  "viscosity": {"model": "CrossWLF", "n": 0.2619, "tau_star": 1.778e4, "D1": 4.378e17, "D2": 266.7, "A1": 39.22, "A2": 51.6, "gamma_min": 1e-2},
+  "pvt": {"model": "TaitPVT", "b1m": 1.006e-3, "b2m": 4.936e-7, "b3m": 7.989e7, "b4m": 3.53e-3,
+          "b1s": 9.073e-4, "b2s": 1.49e-7, "b3s": 2.601e8, "b4s": 2.353e-3,
+          "b5": 453.9, "b6": 1.709e-7, "b7": 1.009e-4, "b8": 4.788e-2, "b9": 1.553e-8}
+}

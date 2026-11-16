@@ -303,6 +303,21 @@ Propuesta, de menos a más esfuerzo:
   seguido a la tolerancia del Newton (probado a 1e-7; lineal a 1e-12).
 - `Test/test_monitoring.py`, 6 pruebas. Pendiente de E.4: `on_step` en el llenado Hele-Shaw (ya tenía el suyo) unificado con este.
 
+**Hecho el 2026-11-16 (E.5, base de materiales en JSON):** `Source/Material.py`.
+
+- `material.from_file(ruta o nombre)`, `material.from_dict`, `mat.save(ruta)`, `material.library()`. Un archivo tiene `name`,
+  `source` (de dónde salen los números), `properties` (números: `rho`, `k`, `Cp`...) y secciones `viscosity`, `pvt` y `kinetics`
+  con `model` = nombre de la clase (Newtonian, PowerLaw, CarreauYasuda, Cross, CrossWLF, Bingham, HerschelBulkley, Arrhenius y
+  Exponential con `law` anidada; TaitPVT; NakamuraHoffman) y el resto de claves como sus argumentos. El material expone
+  `viscosity_law`, `pvt` y `kinetics` (`None` si falta la sección) y las propiedades como atributos.
+- Biblioteca: `Source/data/materials/` más las carpetas de la variable de entorno `FEMSIM_MATERIALS`, que mandan. Los errores
+  (clave desconocida, modelo inexistente, argumento que sobra, JSON roto) nombran el archivo y la sección.
+- Contenido inicial, solo lo que ya estaba en los ejemplos y con su procedencia en `source`: `POLYFORT_FPP30GFC_K1079` (Cross–WLF
+  y Tait de ese grado; `rho`, `Cp` y `k` son valores de trabajo de los ejemplos, no medidas) y `Sabic_PP505P_cinetica` (solo la
+  cinética, que los ejemplos usan con otro material). No se añadieron datos de materiales que no estuvieran ya en el repositorio.
+- Falta de E.5: térmicas dependientes de la temperatura (`rho Cp(T)`) y modos viscoelásticos en el formato; entran cuando haya
+  leyes que los consuman. `Test/test_material_files.py`, 5 pruebas.
+
 ## Físicas: robustez y especialización
 
 Lo que la revisión confirma como siguiente (ya inventariado en `ESTADO.md` y `PLAN_INYECCION.md`): orientación de fibras, molde y
@@ -316,6 +331,7 @@ medido. La fase 1 de inyección (geometría desde CAD) puede ir en paralelo: no 
 
 ## Avance
 
+- **2026-11-16:** fase E.5 (materiales en JSON y biblioteca).
 - **2026-11-15:** fase E.4 (monitores, sondas, puntos de control y reanudación del transitorio).
 - **2026-11-14:** fase E.1 (`solve()` sin configuración, cadenas), E.2 (registro de la sesión) y E.3 (paquete `femsim`, `examples/`).
 - **2026-11-12:** revisión y perfiles; fase A, dos primeros cambios (análisis de PARDISO reutilizado, cinemática del flujo), que
