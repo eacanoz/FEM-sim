@@ -339,11 +339,36 @@ class HeleShawFilling:
 
         V = self._links
         A = abs(V).tocsr()
+        rows = np.repeat(np.arange(V.shape[0]), np.diff(A.indptr))
+        vals = D[A.indices]
         largest = np.zeros(V.shape[0])
-        np.maximum.at(largest, np.repeat(np.arange(V.shape[0]), np.diff(A.indptr)), D[A.indices])
+        np.maximum.at(largest, rows, vals)
         c = self.coupling * largest
         self._link_conductance = c
+        order = np.lexsort((vals, rows))                                  # the node that sets each link's largest diagonal
+        self._link_arg = A.indices[order[A.indptr[1:] - 1]]
         return (V.T @ sp.diags(c) @ V).tocsr()
+
+    def _link_tangent(self, p, dS_dp, active):
+
+        """The derivative of (V^T diag(c) V) p with respect to p that the tangent of the pressure needs, with c = coupling * D[arg] the
+        conductance of each link (D the diagonal of the in-plane stiffness, of the node arg that sets the largest): dc/dp = coupling dD[arg]/dp,
+        D_i = sum_e S_e sum_g w_g |B_gi|^2 and dS_e/dp_j = dS_dp[e, j] (the c of the Newton tangent). Without it, with c large (coupling 20),
+        the tangent of a front of a few nodes (a point gate on a face) is far off and Newton does not converge. Call after _connector_laplacian
+        of the same state. Returns a sparse (n, n)."""
+
+        disc = self.disc
+        n = len(self.xy)
+        Bsq = np.einsum('egia,egia->egi', disc.B, disc.B)
+        dgeom = np.einsum('eg,egi->ei', disc.detJw, Bsq) * active[:, None]           # dD_i / dS_e
+        nn = disc.conn.shape[1]
+        rows = np.repeat(disc.conn, nn, axis=1).ravel()
+        cols = np.tile(disc.conn, (1, nn)).ravel()
+        vals = (dgeom[:, :, None] * dS_dp[:, None, :]).ravel()
+        dD = sp.csr_matrix((vals, (rows, cols)), shape=(n, n))
+        V = self._links
+        Vp = V @ p
+        return (V.T @ sp.diags(Vp * self.coupling) @ dD[self._link_arg]).tocsr()
 
     def _set_links(self, filled):
 
@@ -660,6 +685,8 @@ class HeleShawFilling:
             a = np.einsum('eg,egia,ega->ei', disc.detJw, B, gp) * active[:, None]
             c = np.einsum('eg,ega,egja->ej', dS / np.maximum(G, 1e-300), gp, B)
             J = A + _scatter(disc, np.einsum('ei,ej->eij', a, c))
+            if self.connectors is not None:
+                J = J + self._link_tangent(p, c, active)
             dp = np.zeros_like(p)
             dp[free] = spla.spsolve(J[free][:, free].tocsc(), -R[free])
             if not np.all(np.isfinite(dp)):
@@ -742,7 +769,10 @@ class HeleShawFilling:
                 break
             a = np.einsum('eg,egia,ega->ei', disc.detJw, B, gp) * active[:, None]
             c = np.einsum('eg,ega,egja->ej', dS / np.maximum(G, 1e-300), gp, B)
-            J = cavity(S) + sp.block_diag((_scatter(disc, np.einsum('ei,ej->eij', a, c)), sp.csr_matrix((nr, nr))), format='csr') + Jt
+            Jc = _scatter(disc, np.einsum('ei,ej->eij', a, c))
+            if self.connectors is not None:
+                Jc = Jc + self._link_tangent(p[:n], c, active)
+            J = cavity(S) + sp.block_diag((Jc, sp.csr_matrix((nr, nr))), format='csr') + Jt
             dp = np.zeros(N)
             dp[free] = spla.spsolve(J[free][:, free].tocsc(), -Rv[free])
             if not np.all(np.isfinite(dp)):

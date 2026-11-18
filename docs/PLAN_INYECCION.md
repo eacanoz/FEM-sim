@@ -101,7 +101,7 @@ de viscosidad de 10⁴ no fue fiable), inyección asistida por gas o agua, sobre
   volumen de control de la exacta, también con la entrada en una sola piel; no isoterma igual a la superficie media de los mismos
   triángulos (+0.23 %); la caja como STEP (`Example_Filling_Box_STEP.py`) frente a su superficie media: presión −3 %, capa congelada
   31.9 frente a 32.5 %, tiempos de llenado iguales a 0.01 s. `Test/test_dual_domain.py` (6). **Sin hacer:** compresible y empaque con
-  enlaces, entradas puntuales en una cara, enlaces en esquinas de 90° y raíces de nervios, y piezas gruesas.
+  enlaces, enlaces en esquinas de 90° y raíces de nervios, y piezas gruesas.
 - **Fase 2 hecha en parte (2026-11-12): sistema de alimentación con canal caliente.** `Source/Physics/Runners.py`: fluidez de un tubo
   circular (exacta newtoniana y ley de potencia) y la red (`RunnerSystem`: tramos, entrada de la máquina, entradas puntuales o en abanico);
   `HeleShawFilling.addRunners`: una sola presión con la cavidad, Newton con la tangente de los tubos y búsqueda lineal, el frente corre por
@@ -109,6 +109,19 @@ de viscosidad de 10⁴ no fue fiable), inyección asistida por gas o agua, sobre
   5e-16, molde de familia a 0.6 % del balance de caudales y su desequilibrio al cambiar el diámetro de una rama; `Example_Family_Mold.py`
   equilibra dos placas estrechando la rama de la pequeña (2.77 mm). `Test/test_runners.py` (6). **Sin hacer:** el canal frío (capa
   congelada en el radio), el compresible y el empaque a través de la red (los rechaza), secciones no circulares.
+- **Prueba con una pieza real (2026-11-13): `Ejemplo_Llenado_Carcasa_Canal_Frio.ipynb`.** Carcasa de mando de ABS (60 × 150 × 12.5 mm, 22 040 mm³)
+  con canal frío simple (bebedero de 6 mm × 40 mm y entrada de 3 mm × 1.5 mm), frente a la simulación `002` de Cadmould (entrada lateral, 16.35 cm³/s).
+  El `.SLDPRT` no se lee: la geometría sale de la malla `*.cfe` de Cadmould (superficie cerrada con espesores; 22 740 triángulos), que se entrega a
+  `DualDomain` con las caras recuperadas por ángulo de arista (25°): 14 pieles, 20 593 triángulos, 11 183 nodos, espesor igual al de Cadmould (mediana 1.000),
+  cavidad 21.40 cm³ (−2.9 %). Sin canal: tiempo por volumen igual (0.6 %), presión de entrada 0.79 a 0.88 de la de Cadmould, fuerza de cierre en y
+  0.71 a 0.77, temperatura del frente 180.6 a 215.1 °C (Cadmould 183.2 a 215.7). Canal frío: +4.26 MPa constantes (la caída exacta de los dos tubos, 4.28),
+  +0.063 s; su capa congelada (0.03 mm por pared) sube 0.1 MPa, y con 0.5 mm, 2.5 MPa. **Descubierto:** (1) una entrada puntual en una cara con el
+  acoplamiento por defecto de `from_dual_domain` (20) no convergía al empezar (Newton sin la derivada de los enlaces): **corregido** (2026-11-13) con
+  `HeleShawFilling._link_tangent` (derivada de c = coupling·max D respecto de p, en los dos Newton; frente a diferencias finitas 6e-7; pieza real: 6 a 8
+  iteraciones por paso con 20, frente a 10-14 con 1; `Test/test_dual_domain.py::test_link_tangent` y `test_point_gate_on_a_face`); **pero** con 20, 35 de 610 pasos (42 de 617 con canal) agotan las 50 iteraciones de Newton (4 hacia el 33 % del llenado, el resto después del 86 %; el residuo se
+  queda en 3e-5 y la tangente de los enlaces sí coincide con diferencias finitas): causa sin encontrar; presión suave, −2 % frente a acoplamiento 1; (2) escalón de
+  presión de 4.8 MPa en 1.3 ms al 96 % del llenado, sin explicar, que Cadmould no tiene. Cada llenado tarda 15 a 25 min (11 183 nodos); la caché está
+  en `resultados_vtk/`. **Sin hacer:** derivada de los enlaces en la tangente, `D3` en la viscosidad Hele-Shaw, STEP de la pieza, casos `001` y `006`.
 
 ## Primeros pasos de la nueva sesión
 

@@ -21,6 +21,8 @@ from Source.Pre_processing.DualDomain import DualDomain
 from Source.Pre_processing.Mesh import Mesh
 from Source.Physics.HeleShaw import HeleShawFilling
 from Source.Physics.Rheology import CrossWLF, TaitPVT
+from Source.Physics.Runners import RunnerSystem
+import scipy.sparse as sp
 
 START = time.perf_counter()
 L, W, H, Q, MU = 0.1, 0.02, 0.002, 1e-6, 1000.0
@@ -184,6 +186,74 @@ def test_strip_thermal():
     assert abs(dp) < 0.02 and d_frozen < 0.1 + 1e-9 and d_T < 2.0 and growth < 1e-10
 
 
+def test_link_tangent():
+
+    """The tangent of the links (HeleShawFilling._link_tangent): d/dp of (V^T diag(c) V) p, c = coupling * the largest in-plane diagonal of the
+    link's nodes, against central differences of the same product at a shear-thinning front of a solid strip (isothermal Cross-WLF), with the
+    stiffness S(|grad p|) re-evaluated at each p."""
+
+    dd = solid(lambda occ: occ.addBox(0, 0, 0, L, W, H), 4e-3)
+    fill = HeleShawFilling.from_dual_domain(dd, LAW, T=230.0)
+    fill.addGate(dd.mesh.boundary_facets(lambda x, y, z: x < 1e-9), Q)
+    fill.fill(0.3 * L * W * H / Q, progress=False)
+    import Source.Simulation.Operators as ops
+    from Source.Physics.HeleShaw import _scatter
+    disc = fill.disc
+    filled = fill.fill_factor >= 1.0
+    active = np.any(filled[disc.conn], axis=1)
+    fill._set_links(filled)
+    p0 = np.where(filled, fill.p, 0.0)
+    rng = np.random.default_rng(1)
+
+    def product(p):
+        G = np.linalg.norm(disc.gradient(p), axis=-1)
+        S, dS = fill._element_fluidity(G, derivative=True, active=active)
+        K = _scatter(disc, ops.diffusion(disc, S * active[:, None]))
+        Kc = fill._connector_laplacian(K.diagonal())
+        gp = disc.gradient(p)
+        c = np.einsum('eg,ega,egja->ej', dS / np.maximum(G, 1e-300), gp, disc.B)
+        return Kc @ p, Kc, c
+
+    _, Kc, c = product(p0)
+    J = Kc + fill._link_tangent(p0, c, active)
+    d = rng.standard_normal(len(p0)) * np.abs(p0).max() * 1e-2
+    h = 1e-4
+    fd = (product(p0 + h * d)[0] - product(p0 - h * d)[0]) / (2 * h)
+    err = np.linalg.norm(J @ d - fd) / np.linalg.norm(fd)
+    err_old = np.linalg.norm(Kc @ d - fd) / np.linalg.norm(fd)
+    note(f"{len(fill.xy)} nodes, {int(filled.sum())} filled: tangent of the links against central differences {err:.1e} (without the "
+         f"derivative of c: {err_old:.1e})")
+    assert err < 1e-4 and err_old > 10 * err
+
+
+def test_point_gate_on_a_face():
+
+    """A point gate on a skin face (a tube from the nozzle to one node of the bottom skin, which has no edge gate) of a solid strip with
+    shear-thinning melt and the default link coupling (20): the front starts from a single node, where the tangent without the links
+    did not converge. It fills the strip, with the melt volume as Q t (the tube holds a little of it) and the two skins at one pressure."""
+
+    dd = solid(lambda occ: occ.addBox(0, 0, 0, L, W, H), 4e-3)
+    fill = HeleShawFilling.from_dual_domain(dd, LAW, T=230.0)
+    fill.setThermal(**THERMAL)
+    rs = RunnerSystem()
+    point = (0.5 * L, 0.5 * W, 0.0)
+    inlet = rs.addNode((point[0], point[1], -2e-3))
+    end = rs.addSegment(inlet, (point[0], point[1], -1e-3), 6e-3)
+    rs.addGate(end, point, 6e-3, 1e-3)
+    rs.setInlet(inlet, Q)
+    fill.addRunners(rs)
+    fill.fill(progress=False, batch=0.1)
+    its = max(h[3] for h in fill.history)
+    bottom = fill.xy[:, 2] < 1e-9
+    top_xy = {tuple(np.round(p[:2], 9)): k for k, p in zip(np.flatnonzero(~bottom), fill.xy[~bottom])}
+    pairs = [(i, top_xy[tuple(np.round(fill.xy[i, :2], 9))]) for i in np.flatnonzero(bottom) if tuple(np.round(fill.xy[i, :2], 9)) in top_xy]
+    dp = max(abs(fill.p[i] - fill.p[j]) for i, j in pairs) / fill.p.max()
+    note(f"{len(fill.xy)} nodes, {len(fill.history)} steps, at most {its} Newton iterations; filled to {fill.time:.3f} s "
+         f"(Q t = volume at {fill.volume.sum() / Q:.3f} s); pressure across the wall {dp:.1e}")
+    assert not fill.short_shot and np.all(fill.fill_factor >= 1.0) and its < 40
+    assert abs(fill.time - fill.volume.sum() / Q) / (fill.volume.sum() / Q) < 0.02 and dp < 0.1
+
+
 def test_packing_refused():
 
     """The links are in the incompressible filling only: the compressible filling and the packing of a dual domain refuse to run."""
@@ -202,7 +272,7 @@ def test_packing_refused():
 
 
 if __name__ == "__main__":
-    tests = [test_plate_from_step, test_wedge_thickness, test_rib_thickness, test_strip_filling, test_strip_thermal, test_packing_refused]
+    tests = [test_plate_from_step, test_wedge_thickness, test_rib_thickness, test_strip_filling, test_strip_thermal, test_link_tangent, test_point_gate_on_a_face, test_packing_refused]
     failed = 0
     for t in tests:
         note(f"start {t.__name__}")
